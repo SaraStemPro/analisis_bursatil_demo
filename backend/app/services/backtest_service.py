@@ -1,0 +1,819 @@
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from uuid import UUID
+
+import pandas as pd
+import yfinance as yf
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from ..models.backtest_run import BacktestRun
+from ..models.backtest_trade import BacktestTrade
+from ..models.strategy import Strategy
+from ..schemas.backtest import (
+    BacktestCompareResponse,
+    BacktestMetrics,
+    BacktestRunRequest,
+    BacktestRunResponse,
+    BacktestRunSummary,
+    BacktestTradeResponse,
+    ConditionGroup,
+    ConditionOperand,
+    EquityPoint,
+    StrategyCreateRequest,
+    StrategyResponse,
+    StrategyRules,
+    StrategyUpdateRequest,
+)
+from ..schemas.common import Comparator, ConditionOperandType
+from ..services import indicator_service
+
+
+# ──────────────────────────────────────
+# Estrategias predefinidas (templates)
+# ──────────────────────────────────────
+
+TEMPLATES: list[dict] = [
+    {
+        "name": "Cruce Dorado",
+        "description": "Compra cuando SMA 50 cruza por encima de SMA 200. Vende cuando cruza por debajo.",
+        "rules": {
+            "entry": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "SMA", "params": {"length": 50}},
+                    "comparator": "crosses_above",
+                    "right": {"type": "indicator", "name": "SMA", "params": {"length": 200}},
+                }],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "SMA", "params": {"length": 50}},
+                    "comparator": "crosses_below",
+                    "right": {"type": "indicator", "name": "SMA", "params": {"length": 200}},
+                }],
+            },
+            "risk_management": {"stop_loss_pct": 10, "take_profit_pct": 25, "position_size_pct": 100},
+        },
+    },
+    {
+        "name": "Cruce de Muerte",
+        "description": "Inversa del Cruce Dorado. Compra cuando SMA 50 cruza por debajo de SMA 200 (posición corta conceptual).",
+        "rules": {
+            "entry": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "SMA", "params": {"length": 50}},
+                    "comparator": "crosses_below",
+                    "right": {"type": "indicator", "name": "SMA", "params": {"length": 200}},
+                }],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "SMA", "params": {"length": 50}},
+                    "comparator": "crosses_above",
+                    "right": {"type": "indicator", "name": "SMA", "params": {"length": 200}},
+                }],
+            },
+            "risk_management": {"stop_loss_pct": 10, "take_profit_pct": 25, "position_size_pct": 100},
+        },
+    },
+    {
+        "name": "RSI Reversión a la Media",
+        "description": "Compra cuando RSI(14) < 30 (sobreventa). Vende cuando RSI(14) > 70 (sobrecompra).",
+        "rules": {
+            "entry": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "RSI", "params": {"length": 14}},
+                    "comparator": "less_than",
+                    "right": {"type": "value", "value": 30},
+                }],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "RSI", "params": {"length": 14}},
+                    "comparator": "greater_than",
+                    "right": {"type": "value", "value": 70},
+                }],
+            },
+            "risk_management": {"stop_loss_pct": 5, "take_profit_pct": 15, "position_size_pct": 100},
+        },
+    },
+    {
+        "name": "MACD Signal",
+        "description": "Compra cuando línea MACD cruza por encima de Signal. Vende cuando cruza por debajo.",
+        "rules": {
+            "entry": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "MACD", "params": {"fast": 12, "slow": 26, "signal": 9}},
+                    "comparator": "crosses_above",
+                    "right": {"type": "value", "value": 0},
+                }],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "MACD", "params": {"fast": 12, "slow": 26, "signal": 9}},
+                    "comparator": "crosses_below",
+                    "right": {"type": "value", "value": 0},
+                }],
+            },
+            "risk_management": {"stop_loss_pct": 5, "take_profit_pct": 15, "position_size_pct": 100},
+        },
+    },
+    {
+        "name": "Bollinger Bounce",
+        "description": "Compra cuando el precio toca la banda inferior de Bollinger. Vende en la banda superior.",
+        "rules": {
+            "entry": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "price", "field": "close"},
+                    "comparator": "less_than",
+                    "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2}},
+                }],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "price", "field": "close"},
+                    "comparator": "greater_than",
+                    "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2}},
+                }],
+            },
+            "risk_management": {"stop_loss_pct": 3, "take_profit_pct": 10, "position_size_pct": 100},
+        },
+    },
+    {
+        "name": "EMA Momentum",
+        "description": "Compra cuando precio cruza por encima de EMA 20 y RSI > 50. Vende cuando precio cruza por debajo de EMA 20.",
+        "rules": {
+            "entry": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "comparator": "crosses_above",
+                        "right": {"type": "indicator", "name": "EMA", "params": {"length": 20}},
+                    },
+                    {
+                        "left": {"type": "indicator", "name": "RSI", "params": {"length": 14}},
+                        "comparator": "greater_than",
+                        "right": {"type": "value", "value": 50},
+                    },
+                ],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [{
+                    "left": {"type": "price", "field": "close"},
+                    "comparator": "crosses_below",
+                    "right": {"type": "indicator", "name": "EMA", "params": {"length": 20}},
+                }],
+            },
+            "risk_management": {"stop_loss_pct": 5, "take_profit_pct": 15, "position_size_pct": 100},
+        },
+    },
+]
+
+
+# ──────────────────────────────────────
+# CRUD Estrategias
+# ──────────────────────────────────────
+
+def get_templates() -> list[StrategyResponse]:
+    now = datetime.now(timezone.utc)
+    return [
+        StrategyResponse(
+            id=UUID(int=i),
+            name=t["name"],
+            description=t["description"],
+            is_template=True,
+            rules=StrategyRules(**t["rules"]),
+            created_at=now,
+            updated_at=now,
+        )
+        for i, t in enumerate(TEMPLATES)
+    ]
+
+
+def get_user_strategies(db: Session, user_id: str) -> list[StrategyResponse]:
+    strategies = (
+        db.query(Strategy)
+        .filter(Strategy.user_id == user_id, Strategy.is_template == False)
+        .order_by(Strategy.created_at.desc())
+        .all()
+    )
+    return [_strategy_to_response(s) for s in strategies]
+
+
+def create_strategy(db: Session, user_id: str, body: StrategyCreateRequest) -> StrategyResponse:
+    strategy = Strategy(
+        user_id=user_id,
+        name=body.name,
+        description=body.description,
+        is_template=False,
+        rules=body.rules.model_dump(),
+    )
+    db.add(strategy)
+    db.commit()
+    db.refresh(strategy)
+    return _strategy_to_response(strategy)
+
+
+def get_strategy(db: Session, user_id: str, strategy_id: str) -> StrategyResponse:
+    # Primero buscar en templates
+    for i, t in enumerate(TEMPLATES):
+        if str(UUID(int=i)) == strategy_id:
+            now = datetime.now(timezone.utc)
+            return StrategyResponse(
+                id=UUID(int=i),
+                name=t["name"],
+                description=t["description"],
+                is_template=True,
+                rules=StrategyRules(**t["rules"]),
+                created_at=now,
+                updated_at=now,
+            )
+
+    strategy = (
+        db.query(Strategy)
+        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id)
+        .first()
+    )
+    if not strategy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
+    return _strategy_to_response(strategy)
+
+
+def update_strategy(db: Session, user_id: str, strategy_id: str, body: StrategyUpdateRequest) -> StrategyResponse:
+    strategy = (
+        db.query(Strategy)
+        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id, Strategy.is_template == False)
+        .first()
+    )
+    if not strategy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
+
+    if body.name is not None:
+        strategy.name = body.name
+    if body.description is not None:
+        strategy.description = body.description
+    if body.rules is not None:
+        strategy.rules = body.rules.model_dump()
+
+    db.commit()
+    db.refresh(strategy)
+    return _strategy_to_response(strategy)
+
+
+def delete_strategy(db: Session, user_id: str, strategy_id: str) -> None:
+    strategy = (
+        db.query(Strategy)
+        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id, Strategy.is_template == False)
+        .first()
+    )
+    if not strategy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
+    db.delete(strategy)
+    db.commit()
+
+
+# ──────────────────────────────────────
+# Motor de Backtesting
+# ──────────────────────────────────────
+
+def run_backtest(db: Session, user_id: str, body: BacktestRunRequest) -> BacktestRunResponse:
+    # Obtener reglas de la estrategia
+    strategy_id = str(body.strategy_id)
+    strategy_resp = get_strategy(db, user_id, strategy_id)
+    rules = strategy_resp.rules
+
+    # Crear registro del run
+    run = BacktestRun(
+        user_id=user_id,
+        strategy_id=strategy_id,
+        ticker=body.ticker.upper(),
+        start_date=body.start_date,
+        end_date=body.end_date,
+        initial_capital=body.initial_capital,
+        commission_pct=body.commission_pct,
+        status="running",
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    try:
+        # Descargar datos
+        tk = yf.Ticker(body.ticker)
+        df = tk.history(start=body.start_date.isoformat(), end=body.end_date.isoformat(), interval="1d")
+
+        if df.empty:
+            raise ValueError(f"Sin datos para {body.ticker} en el rango indicado")
+
+        # Calcular indicadores necesarios
+        indicator_data = _compute_all_indicators(df, rules)
+
+        # Ejecutar simulación
+        trades, equity_curve = _simulate(
+            df=df,
+            rules=rules,
+            indicator_data=indicator_data,
+            initial_capital=float(body.initial_capital),
+            commission_pct=float(body.commission_pct),
+            position_size_pct=rules.risk_management.position_size_pct,
+        )
+
+        # Guardar trades
+        db_trades = []
+        for t in trades:
+            bt = BacktestTrade(
+                run_id=run.id,
+                type=t["type"],
+                entry_date=t["entry_date"],
+                entry_price=Decimal(str(round(t["entry_price"], 2))),
+                exit_date=t.get("exit_date"),
+                exit_price=Decimal(str(round(t["exit_price"], 2))) if t.get("exit_price") else None,
+                quantity=Decimal(str(round(t["quantity"], 4))),
+                pnl=Decimal(str(round(t["pnl"], 2))) if t.get("pnl") is not None else None,
+                pnl_pct=Decimal(str(round(t["pnl_pct"], 4))) if t.get("pnl_pct") is not None else None,
+                exit_reason=t.get("exit_reason"),
+                duration_days=t.get("duration_days"),
+            )
+            db.add(bt)
+            db_trades.append(bt)
+
+        # Calcular métricas
+        metrics = _calculate_metrics(trades, equity_curve, float(body.initial_capital), df)
+
+        # Actualizar run
+        run.status = "completed"
+        run.metrics = metrics.model_dump()
+        run.equity_curve = [{"date": e.date.isoformat(), "equity": e.equity} for e in equity_curve]
+        run.completed_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(run)
+
+        return _run_to_response(run, db_trades, metrics, equity_curve)
+
+    except Exception as e:
+        run.status = "failed"
+        run.error_message = str(e)
+        run.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+def get_runs(db: Session, user_id: str) -> list[BacktestRunSummary]:
+    runs = (
+        db.query(BacktestRun)
+        .filter(BacktestRun.user_id == user_id)
+        .order_by(BacktestRun.created_at.desc())
+        .all()
+    )
+    results = []
+    for r in runs:
+        strategy = db.query(Strategy).filter(Strategy.id == r.strategy_id).first()
+        strategy_name = strategy.name if strategy else _get_template_name(r.strategy_id)
+        metrics = r.metrics or {}
+        results.append(BacktestRunSummary(
+            id=r.id,
+            strategy_id=r.strategy_id,
+            strategy_name=strategy_name,
+            ticker=r.ticker,
+            start_date=r.start_date,
+            end_date=r.end_date,
+            status=r.status,
+            total_return_pct=metrics.get("total_return_pct"),
+            total_trades=metrics.get("total_trades"),
+            created_at=r.created_at,
+        ))
+    return results
+
+
+def get_run(db: Session, user_id: str, run_id: str) -> BacktestRunResponse:
+    run = db.query(BacktestRun).filter(BacktestRun.id == run_id, BacktestRun.user_id == user_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backtest no encontrado")
+
+    trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == run.id).all()
+    metrics = BacktestMetrics(**run.metrics) if run.metrics else None
+    equity = [EquityPoint(date=date.fromisoformat(e["date"]), equity=e["equity"]) for e in (run.equity_curve or [])]
+
+    return _run_to_response(run, trades, metrics, equity)
+
+
+def get_run_trades(db: Session, user_id: str, run_id: str) -> list[BacktestTradeResponse]:
+    run = db.query(BacktestRun).filter(BacktestRun.id == run_id, BacktestRun.user_id == user_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backtest no encontrado")
+
+    trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == run.id).all()
+    return [_trade_to_response(t) for t in trades]
+
+
+def delete_run(db: Session, user_id: str, run_id: str) -> None:
+    run = db.query(BacktestRun).filter(BacktestRun.id == run_id, BacktestRun.user_id == user_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backtest no encontrado")
+    db.query(BacktestTrade).filter(BacktestTrade.run_id == run.id).delete()
+    db.delete(run)
+    db.commit()
+
+
+def compare_runs(db: Session, user_id: str, run_ids: list[UUID]) -> BacktestCompareResponse:
+    runs = []
+    for rid in run_ids:
+        run_resp = get_run(db, user_id, str(rid))
+        runs.append(run_resp)
+    return BacktestCompareResponse(runs=runs)
+
+
+# ──────────────────────────────────────
+# Motor de simulación interno
+# ──────────────────────────────────────
+
+def _compute_all_indicators(df: pd.DataFrame, rules: StrategyRules) -> dict[str, pd.Series]:
+    """Calcula todos los indicadores referenciados en las reglas."""
+    import pandas_ta as ta
+
+    needed = set()
+    for group in [rules.entry, rules.exit]:
+        for cond in group.conditions:
+            for operand in [cond.left, cond.right]:
+                if operand.type == ConditionOperandType.indicator and operand.name:
+                    key = f"{operand.name}_{_params_key(operand.params or {})}"
+                    needed.add((operand.name.upper(), operand.params or {}, key))
+            if cond.right_upper and cond.right_upper.type == ConditionOperandType.indicator:
+                key = f"{cond.right_upper.name}_{_params_key(cond.right_upper.params or {})}"
+                needed.add((cond.right_upper.name.upper(), cond.right_upper.params or {}, key))
+
+    data = {}
+    for name, params, key in needed:
+        if name == "SMA":
+            data[key] = ta.sma(df["Close"], length=int(params.get("length", 20)))
+        elif name == "EMA":
+            data[key] = ta.ema(df["Close"], length=int(params.get("length", 20)))
+        elif name == "RSI":
+            data[key] = ta.rsi(df["Close"], length=int(params.get("length", 14)))
+        elif name == "MACD":
+            result = ta.macd(df["Close"], fast=int(params.get("fast", 12)), slow=int(params.get("slow", 26)), signal=int(params.get("signal", 9)))
+            data[key] = result.iloc[:, 0]  # MACD line
+            data[f"{key}_signal"] = result.iloc[:, 2]  # Signal line
+        elif name == "BBANDS":
+            result = ta.bbands(df["Close"], length=int(params.get("length", 20)), std=float(params.get("std", 2.0)))
+            data[f"{key}_lower"] = result.iloc[:, 0]
+            data[f"{key}_mid"] = result.iloc[:, 1]
+            data[f"{key}_upper"] = result.iloc[:, 2]
+        elif name == "STOCH":
+            result = ta.stoch(df["High"], df["Low"], df["Close"], k=int(params.get("k", 14)), d=int(params.get("d", 3)))
+            data[key] = result.iloc[:, 0]
+        elif name == "ATR":
+            data[key] = ta.atr(df["High"], df["Low"], df["Close"], length=int(params.get("length", 14)))
+        elif name == "OBV":
+            data[key] = ta.obv(df["Close"], df["Volume"])
+        elif name == "VWAP":
+            data[key] = ta.vwap(df["High"], df["Low"], df["Close"], df["Volume"])
+
+    return data
+
+
+def _get_operand_value(operand: ConditionOperand, i: int, df: pd.DataFrame, indicator_data: dict) -> float | None:
+    """Obtiene el valor numérico de un operando en el índice i."""
+    if operand.type == ConditionOperandType.value:
+        return operand.value
+    elif operand.type == ConditionOperandType.price:
+        field_map = {"open": "Open", "high": "High", "low": "Low", "close": "Close"}
+        col = field_map.get(operand.field.value, "Close") if operand.field else "Close"
+        return float(df.iloc[i][col])
+    elif operand.type == ConditionOperandType.volume:
+        return float(df.iloc[i]["Volume"])
+    elif operand.type == ConditionOperandType.indicator:
+        key = f"{operand.name}_{_params_key(operand.params or {})}"
+        name = operand.name.upper() if operand.name else ""
+        # Para BBANDS, en entry usamos lower, en exit usamos upper
+        if name == "BBANDS" and f"{key}_lower" in indicator_data:
+            # Por defecto devolvemos lower (para comparaciones genéricas el contexto decide)
+            series = indicator_data.get(f"{key}_lower")
+        else:
+            series = indicator_data.get(key)
+        if series is None:
+            return None
+        val = series.iloc[i]
+        return None if pd.isna(val) else float(val)
+    return None
+
+
+def _get_operand_value_for_exit(operand: ConditionOperand, i: int, df: pd.DataFrame, indicator_data: dict) -> float | None:
+    """Igual que _get_operand_value pero para BBANDS usa la banda superior."""
+    if operand.type == ConditionOperandType.indicator and operand.name and operand.name.upper() == "BBANDS":
+        key = f"{operand.name}_{_params_key(operand.params or {})}"
+        series = indicator_data.get(f"{key}_upper")
+        if series is None:
+            return None
+        val = series.iloc[i]
+        return None if pd.isna(val) else float(val)
+    return _get_operand_value(operand, i, df, indicator_data)
+
+
+def _evaluate_condition(cond, i: int, df: pd.DataFrame, indicator_data: dict, is_exit: bool = False) -> bool:
+    """Evalúa una condición en el índice i."""
+    get_val = _get_operand_value_for_exit if is_exit else _get_operand_value
+
+    left_val = get_val(cond.left, i, df, indicator_data)
+    right_val = get_val(cond.right, i, df, indicator_data)
+
+    if left_val is None or right_val is None:
+        return False
+
+    comp = cond.comparator
+
+    if comp == Comparator.greater_than:
+        return left_val > right_val
+    elif comp == Comparator.less_than:
+        return left_val < right_val
+    elif comp in (Comparator.crosses_above, Comparator.crosses_below):
+        if i < 1:
+            return False
+        prev_left = get_val(cond.left, i - 1, df, indicator_data)
+        prev_right = get_val(cond.right, i - 1, df, indicator_data)
+        if prev_left is None or prev_right is None:
+            return False
+        if comp == Comparator.crosses_above:
+            return prev_left <= prev_right and left_val > right_val
+        else:
+            return prev_left >= prev_right and left_val < right_val
+    elif comp == Comparator.between:
+        upper_val = get_val(cond.right_upper, i, df, indicator_data) if cond.right_upper else None
+        if upper_val is None:
+            return False
+        return right_val <= left_val <= upper_val
+    elif comp == Comparator.outside:
+        upper_val = get_val(cond.right_upper, i, df, indicator_data) if cond.right_upper else None
+        if upper_val is None:
+            return False
+        return left_val < right_val or left_val > upper_val
+
+    return False
+
+
+def _evaluate_group(group: ConditionGroup, i: int, df: pd.DataFrame, indicator_data: dict, is_exit: bool = False) -> bool:
+    """Evalúa un grupo de condiciones con operador AND/OR."""
+    results = [_evaluate_condition(c, i, df, indicator_data, is_exit) for c in group.conditions]
+    if group.operator.value == "AND":
+        return all(results)
+    return any(results)
+
+
+def _simulate(
+    df: pd.DataFrame,
+    rules: StrategyRules,
+    indicator_data: dict,
+    initial_capital: float,
+    commission_pct: float,
+    position_size_pct: float,
+) -> tuple[list[dict], list[EquityPoint]]:
+    """Ejecuta la simulación de backtesting."""
+    capital = initial_capital
+    position = None  # {"entry_date", "entry_price", "quantity"}
+    trades = []
+    equity_curve = []
+
+    stop_loss_pct = rules.risk_management.stop_loss_pct
+    take_profit_pct = rules.risk_management.take_profit_pct
+
+    for i in range(len(df)):
+        row = df.iloc[i]
+        current_date = df.index[i].to_pydatetime()
+        close = float(row["Close"])
+
+        if position is None:
+            # Sin posición: evaluar entrada
+            if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
+                invest = capital * (position_size_pct / 100)
+                commission = invest * (commission_pct / 100)
+                quantity = (invest - commission) / close
+                if quantity > 0:
+                    position = {
+                        "entry_date": current_date,
+                        "entry_price": close,
+                        "quantity": quantity,
+                        "commission_in": commission,
+                    }
+                    capital -= invest
+        else:
+            # Con posición: evaluar salida
+            pnl_pct_current = (close - position["entry_price"]) / position["entry_price"] * 100
+            exit_reason = None
+
+            if stop_loss_pct and pnl_pct_current <= -stop_loss_pct:
+                exit_reason = "stop_loss"
+            elif take_profit_pct and pnl_pct_current >= take_profit_pct:
+                exit_reason = "take_profit"
+            elif _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+                exit_reason = "signal"
+
+            if exit_reason:
+                revenue = position["quantity"] * close
+                commission = revenue * (commission_pct / 100)
+                capital += revenue - commission
+
+                pnl = (close - position["entry_price"]) * position["quantity"] - position["commission_in"] - commission
+                duration = (current_date - position["entry_date"]).days
+
+                trades.append({
+                    "type": "buy",
+                    "entry_date": position["entry_date"],
+                    "entry_price": position["entry_price"],
+                    "exit_date": current_date,
+                    "exit_price": close,
+                    "quantity": position["quantity"],
+                    "pnl": pnl,
+                    "pnl_pct": (close - position["entry_price"]) / position["entry_price"] * 100,
+                    "exit_reason": exit_reason,
+                    "duration_days": duration,
+                })
+                position = None
+
+        # Calcular equity
+        pos_value = position["quantity"] * close if position else 0
+        equity = capital + pos_value
+        equity_curve.append(EquityPoint(date=current_date.date(), equity=round(equity, 2)))
+
+    # Si queda posición abierta al final, cerrarla
+    if position:
+        close = float(df.iloc[-1]["Close"])
+        current_date = df.index[-1].to_pydatetime()
+        revenue = position["quantity"] * close
+        commission = revenue * (commission_pct / 100)
+        capital += revenue - commission
+        pnl = (close - position["entry_price"]) * position["quantity"] - position["commission_in"] - commission
+
+        trades.append({
+            "type": "buy",
+            "entry_date": position["entry_date"],
+            "entry_price": position["entry_price"],
+            "exit_date": current_date,
+            "exit_price": close,
+            "quantity": position["quantity"],
+            "pnl": pnl,
+            "pnl_pct": (close - position["entry_price"]) / position["entry_price"] * 100,
+            "exit_reason": "signal",
+            "duration_days": (current_date - position["entry_date"]).days,
+        })
+
+    return trades, equity_curve
+
+
+def _calculate_metrics(
+    trades: list[dict],
+    equity_curve: list[EquityPoint],
+    initial_capital: float,
+    df: pd.DataFrame,
+) -> BacktestMetrics:
+    """Calcula métricas de rendimiento del backtest."""
+    if not equity_curve:
+        return BacktestMetrics(
+            total_return=0, total_return_pct=0, max_drawdown=0, max_drawdown_pct=0,
+            win_rate=0, total_trades=0,
+        )
+
+    final_equity = equity_curve[-1].equity
+    total_return = final_equity - initial_capital
+    total_return_pct = total_return / initial_capital * 100
+
+    # Annualized return
+    days = (equity_curve[-1].date - equity_curve[0].date).days
+    annualized = ((final_equity / initial_capital) ** (365 / days) - 1) * 100 if days > 0 else None
+
+    # Sharpe ratio (simplificado, daily returns)
+    equities = [e.equity for e in equity_curve]
+    daily_returns = [(equities[i] - equities[i - 1]) / equities[i - 1] for i in range(1, len(equities)) if equities[i - 1] != 0]
+    if daily_returns and len(daily_returns) > 1:
+        import statistics
+        mean_r = statistics.mean(daily_returns)
+        std_r = statistics.stdev(daily_returns)
+        sharpe = (mean_r / std_r) * (252 ** 0.5) if std_r > 0 else None
+    else:
+        sharpe = None
+
+    # Max drawdown
+    peak = 0
+    max_dd = 0
+    for e in equities:
+        if e > peak:
+            peak = e
+        dd = peak - e
+        if dd > max_dd:
+            max_dd = dd
+    max_dd_pct = max_dd / peak * 100 if peak > 0 else 0
+
+    # Trade stats
+    pnls = [t["pnl"] for t in trades]
+    winners = [p for p in pnls if p > 0]
+    losers = [p for p in pnls if p <= 0]
+    win_rate = len(winners) / len(pnls) * 100 if pnls else 0
+
+    gross_profit = sum(winners) if winners else 0
+    gross_loss = abs(sum(losers)) if losers else 0
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
+
+    durations = [t["duration_days"] for t in trades if t.get("duration_days") is not None]
+
+    # Buy & hold benchmark
+    first_close = float(df.iloc[0]["Close"])
+    last_close = float(df.iloc[-1]["Close"])
+    bh_return_pct = (last_close - first_close) / first_close * 100
+
+    return BacktestMetrics(
+        total_return=round(total_return, 2),
+        total_return_pct=round(total_return_pct, 2),
+        annualized_return_pct=round(annualized, 2) if annualized is not None else None,
+        sharpe_ratio=round(sharpe, 2) if sharpe is not None else None,
+        max_drawdown=round(max_dd, 2),
+        max_drawdown_pct=round(max_dd_pct, 2),
+        win_rate=round(win_rate, 2),
+        profit_factor=round(profit_factor, 2) if profit_factor is not None else None,
+        total_trades=len(trades),
+        avg_trade_duration_days=round(sum(durations) / len(durations), 1) if durations else None,
+        best_trade_pnl=round(max(pnls), 2) if pnls else None,
+        worst_trade_pnl=round(min(pnls), 2) if pnls else None,
+        buy_and_hold_return_pct=round(bh_return_pct, 2),
+    )
+
+
+# ──────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────
+
+def _params_key(params: dict) -> str:
+    return "_".join(f"{k}{v}" for k, v in sorted(params.items()))
+
+
+def _get_template_name(strategy_id: str) -> str:
+    for i, t in enumerate(TEMPLATES):
+        if str(UUID(int=i)) == strategy_id:
+            return t["name"]
+    return "Desconocida"
+
+
+def _strategy_to_response(s: Strategy) -> StrategyResponse:
+    return StrategyResponse(
+        id=s.id,
+        user_id=s.user_id,
+        name=s.name,
+        description=s.description,
+        is_template=s.is_template,
+        rules=StrategyRules(**s.rules),
+        created_at=s.created_at,
+        updated_at=s.updated_at,
+    )
+
+
+def _trade_to_response(t: BacktestTrade) -> BacktestTradeResponse:
+    return BacktestTradeResponse(
+        id=t.id,
+        type=t.type,
+        entry_date=t.entry_date,
+        entry_price=t.entry_price,
+        exit_date=t.exit_date,
+        exit_price=t.exit_price,
+        quantity=t.quantity,
+        pnl=t.pnl,
+        pnl_pct=t.pnl_pct,
+        exit_reason=t.exit_reason,
+        duration_days=t.duration_days,
+    )
+
+
+def _run_to_response(
+    run: BacktestRun,
+    trades: list,
+    metrics: BacktestMetrics | None,
+    equity_curve: list[EquityPoint],
+) -> BacktestRunResponse:
+    trade_responses = [_trade_to_response(t) if isinstance(t, BacktestTrade) else t for t in trades]
+    return BacktestRunResponse(
+        id=run.id,
+        user_id=run.user_id,
+        strategy_id=run.strategy_id,
+        ticker=run.ticker,
+        start_date=run.start_date,
+        end_date=run.end_date,
+        initial_capital=run.initial_capital,
+        commission_pct=run.commission_pct,
+        status=run.status,
+        metrics=metrics,
+        equity_curve=equity_curve,
+        trades=trade_responses,
+        error_message=run.error_message,
+        created_at=run.created_at,
+        completed_at=run.completed_at,
+    )

@@ -1,0 +1,299 @@
+// --- Enums ---
+export type UserRole = 'student' | 'professor' | 'admin'
+export type OrderType = 'buy' | 'sell'
+export type OrderStatus = 'open' | 'closed' | 'cancelled'
+export type BacktestStatus = 'running' | 'completed' | 'failed'
+export type ExitReason = 'signal' | 'stop_loss' | 'take_profit'
+export type Comparator = 'greater_than' | 'less_than' | 'crosses_above' | 'crosses_below' | 'between' | 'outside'
+export type LogicalOperator = 'AND' | 'OR'
+export type ConditionOperandType = 'indicator' | 'price' | 'volume' | 'value'
+export type PriceField = 'open' | 'high' | 'low' | 'close'
+
+// --- Auth ---
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  course_id: string | null
+  created_at: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+}
+
+// --- Market ---
+export interface TickerSearchResult {
+  symbol: string
+  name: string
+  exchange: string
+  type: string
+}
+
+export interface Quote {
+  symbol: string
+  name: string
+  price: number
+  change: number
+  change_percent: number
+  currency: string
+  market_state: string
+  exchange: string
+}
+
+export interface OHLCV {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface HistoryResponse {
+  symbol: string
+  period: string
+  interval: string
+  data: OHLCV[]
+}
+
+// --- Indicators ---
+export interface IndicatorParam {
+  name: string
+  type: string
+  default: number
+  min: number | null
+  max: number | null
+}
+
+export interface IndicatorDefinition {
+  name: string
+  display_name: string
+  category: string
+  overlay: boolean
+  params: IndicatorParam[]
+}
+
+export interface IndicatorRequest {
+  name: string
+  params: Record<string, number>
+}
+
+export interface IndicatorSeries {
+  name: string
+  params: Record<string, number>
+  data: Record<string, (number | null)[]>
+}
+
+export interface CalculateResponse {
+  ticker: string
+  period: string
+  interval: string
+  indicators: IndicatorSeries[]
+}
+
+export interface Preset {
+  id: string
+  name: string
+  indicators: IndicatorRequest[]
+  created_at: string
+}
+
+// --- Demo ---
+export interface Position {
+  ticker: string
+  quantity: number
+  avg_price: number
+  current_price: number
+  pnl: number
+  pnl_pct: number
+}
+
+export interface Portfolio {
+  id: string
+  balance: number
+  initial_balance: number
+  total_value: number
+  total_pnl: number
+  total_pnl_pct: number
+  positions: Position[]
+  created_at: string
+}
+
+export interface Order {
+  id: string
+  ticker: string
+  type: OrderType
+  quantity: number
+  price: number
+  stop_loss: number | null
+  take_profit: number | null
+  status: OrderStatus
+  pnl: number | null
+  created_at: string
+  closed_at: string | null
+}
+
+export interface Performance {
+  total_return: number
+  total_return_pct: number
+  sharpe_ratio: number | null
+  max_drawdown: number
+  max_drawdown_pct: number
+  win_rate: number
+  total_trades: number
+  profitable_trades: number
+  losing_trades: number
+  best_trade_pnl: number | null
+  worst_trade_pnl: number | null
+  avg_trade_duration_days: number | null
+}
+
+// --- Tutor ---
+export interface Source {
+  document_id: string
+  filename: string
+  page: number | null
+  chunk_text: string
+}
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  sources: Source[] | null
+  created_at: string
+}
+
+export interface ChatResponse {
+  conversation_id: string
+  message: Message
+}
+
+export interface Conversation {
+  id: string
+  created_at: string
+  last_message: string | null
+  message_count: number
+}
+
+export interface Document {
+  id: string
+  filename: string
+  course_id: string
+  uploaded_by: string
+  processed: boolean
+  uploaded_at: string
+}
+
+// --- Backtest ---
+export interface ConditionOperand {
+  type: ConditionOperandType
+  name?: string
+  params?: Record<string, number>
+  field?: PriceField
+  value?: number
+}
+
+export interface Condition {
+  left: ConditionOperand
+  comparator: Comparator
+  right: ConditionOperand
+  right_upper?: ConditionOperand
+}
+
+export interface ConditionGroup {
+  operator: LogicalOperator
+  conditions: Condition[]
+}
+
+export interface RiskManagement {
+  stop_loss_pct: number | null
+  take_profit_pct: number | null
+  position_size_pct: number
+}
+
+export interface StrategyRules {
+  entry: ConditionGroup
+  exit: ConditionGroup
+  risk_management: RiskManagement
+}
+
+export interface Strategy {
+  id: string
+  user_id: string | null
+  name: string
+  description: string | null
+  is_template: boolean
+  rules: StrategyRules
+  created_at: string
+  updated_at: string
+}
+
+export interface BacktestMetrics {
+  total_return: number
+  total_return_pct: number
+  annualized_return_pct: number | null
+  sharpe_ratio: number | null
+  max_drawdown: number
+  max_drawdown_pct: number
+  win_rate: number
+  profit_factor: number | null
+  total_trades: number
+  avg_trade_duration_days: number | null
+  best_trade_pnl: number | null
+  worst_trade_pnl: number | null
+  buy_and_hold_return_pct: number | null
+}
+
+export interface EquityPoint {
+  date: string
+  equity: number
+}
+
+export interface BacktestTrade {
+  id: string
+  type: OrderType
+  entry_date: string
+  entry_price: number
+  exit_date: string | null
+  exit_price: number | null
+  quantity: number
+  pnl: number | null
+  pnl_pct: number | null
+  exit_reason: ExitReason | null
+  duration_days: number | null
+}
+
+export interface BacktestRun {
+  id: string
+  user_id: string
+  strategy_id: string
+  ticker: string
+  start_date: string
+  end_date: string
+  initial_capital: number
+  commission_pct: number
+  status: BacktestStatus
+  metrics: BacktestMetrics | null
+  equity_curve: EquityPoint[] | null
+  trades: BacktestTrade[] | null
+  error_message: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface BacktestRunSummary {
+  id: string
+  strategy_id: string
+  strategy_name: string
+  ticker: string
+  start_date: string
+  end_date: string
+  status: BacktestStatus
+  total_return_pct: number | null
+  total_trades: number | null
+  created_at: string
+}

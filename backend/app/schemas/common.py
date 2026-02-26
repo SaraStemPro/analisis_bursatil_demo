@@ -1,0 +1,63 @@
+from enum import Enum
+
+
+class UserRole(str, Enum):
+    student = "student"
+    professor = "professor"
+    admin = "admin"
+
+
+class OrderType(str, Enum):
+    buy = "buy"
+    sell = "sell"
+
+
+class OrderStatus(str, Enum):
+    open = "open"
+    closed = "closed"
+    cancelled = "cancelled"
+
+
+class MessageRole(str, Enum):
+    user = "user"
+    assistant = "assistant"
+
+
+class BacktestStatus(str, Enum):
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class ExitReason(str, Enum):
+    signal = "signal"
+    stop_loss = "stop_loss"
+    take_profit = "take_profit"
+
+
+class Comparator(str, Enum):
+    greater_than = "greater_than"
+    less_than = "less_than"
+    crosses_above = "crosses_above"
+    crosses_below = "crosses_below"
+    between = "between"
+    outside = "outside"
+
+
+class LogicalOperator(str, Enum):
+    AND = "AND"
+    OR = "OR"
+
+
+class ConditionOperandType(str, Enum):
+    indicator = "indicator"
+    price = "price"
+    volume = "volume"
+    value = "value"
+
+
+class PriceField(str, Enum):
+    open = "open"
+    high = "high"
+    low = "low"
+    close = "close"
