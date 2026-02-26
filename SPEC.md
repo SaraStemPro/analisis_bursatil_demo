@@ -154,6 +154,22 @@ GET  /api/tutor/documents                → listar PDFs subidos
 GET  /api/tutor/faq                      → preguntas frecuentes (solo profesor)
 ```
 
+### 4.5 Autenticación y Usuarios
+
+**Requisitos**:
+- Login con email + contraseña
+- Roles: estudiante, profesor, admin
+- JWT para sesiones
+- El profesor crea invitaciones o códigos de acceso para sus alumnos
+
+**Endpoints**:
+```
+POST /api/auth/register                  → registro con código de invitación
+POST /api/auth/login                     → → JWT token
+GET  /api/auth/me                        → perfil del usuario actual
+POST /api/auth/invite                    → crear código de invitación (solo profesor)
+```
+
 ### 4.6 Backtesting de Estrategias
 
 **Objetivo**: Permitir al estudiante definir estrategias de trading basadas en indicadores técnicos, probarlas contra datos históricos y evaluar su rendimiento. El módulo sigue un enfoque pedagógico progresivo: explorar → construir → evaluar.
@@ -311,22 +327,6 @@ DELETE /api/backtest/runs/{id}               → eliminar resultado de backtest
 
 # Comparación
 POST   /api/backtest/compare                  → comparar backtests {run_ids: [id1, id2, id3]} → métricas lado a lado
-```
-
-### 4.5 Autenticación y Usuarios
-
-**Requisitos**:
-- Login con email + contraseña
-- Roles: estudiante, profesor, admin
-- JWT para sesiones
-- El profesor crea invitaciones o códigos de acceso para sus alumnos
-
-**Endpoints**:
-```
-POST /api/auth/register                  → registro con código de invitación
-POST /api/auth/login                     → → JWT token
-GET  /api/auth/me                        → perfil del usuario actual
-POST /api/auth/invite                    → crear código de invitación (solo profesor)
 ```
 
 ---
