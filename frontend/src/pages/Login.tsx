@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../context/auth-store'
 
 export default function Login() {
   const { login, register } = useAuthStore()
+  const navigate = useNavigate()
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,6 +24,7 @@ export default function Login() {
       } else {
         await login(email, password)
       }
+      navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
