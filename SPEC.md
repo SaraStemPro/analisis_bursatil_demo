@@ -154,6 +154,165 @@ GET  /api/tutor/documents                → listar PDFs subidos
 GET  /api/tutor/faq                      → preguntas frecuentes (solo profesor)
 ```
 
+### 4.6 Backtesting de Estrategias
+
+**Objetivo**: Permitir al estudiante definir estrategias de trading basadas en indicadores técnicos, probarlas contra datos históricos y evaluar su rendimiento. El módulo sigue un enfoque pedagógico progresivo: explorar → construir → evaluar.
+
+#### 4.6.1 Estrategias Predefinidas (Explorar)
+
+El alumno dispone de un catálogo de estrategias clásicas listas para ejecutar. Sirven como punto de partida para entender qué es un backtest y cómo funcionan las reglas de entrada/salida.
+
+| Estrategia | Entrada | Salida |
+|-----------|---------|--------|
+| **Cruce Dorado** | SMA 50 cruza por encima de SMA 200 | SMA 50 cruza por debajo de SMA 200 |
+| **Cruce de Muerte** (inversa) | SMA 50 cruza por debajo de SMA 200 | SMA 50 cruza por encima de SMA 200 |
+| **RSI Reversión a la Media** | RSI(14) < 30 | RSI(14) > 70 |
+| **MACD Signal** | Línea MACD cruza por encima de Signal | Línea MACD cruza por debajo de Signal |
+| **Bollinger Bounce** | Precio toca banda inferior de Bollinger | Precio toca banda superior de Bollinger |
+| **EMA Momentum** | Precio cruza por encima de EMA 20 Y RSI(14) > 50 | Precio cruza por debajo de EMA 20 |
+
+Cada estrategia predefinida incluye:
+- Descripción en lenguaje natural de la lógica
+- Referencia al material teórico (enlace a sección relevante de los PDFs del profesor si existe)
+- Parámetros editables (el alumno puede modificar períodos, umbrales, etc. antes de ejecutar)
+
+#### 4.6.2 Constructor Visual de Estrategias (Construir)
+
+Interfaz visual donde el alumno define su propia estrategia sin escribir código, combinando indicadores del catálogo (módulo 4.2) con condiciones lógicas.
+
+**Estructura de una estrategia**:
+```
+Estrategia
+├── Nombre y descripción
+├── Condiciones de ENTRADA (cuándo comprar)
+│   ├── Condición 1: [Indicador] [Comparador] [Valor o Indicador]
+│   ├── Condición 2: ...
+│   └── Operador lógico entre condiciones: AND / OR
+├── Condiciones de SALIDA (cuándo vender)
+│   ├── Condición 1: [Indicador] [Comparador] [Valor o Indicador]
+│   ├── Condición 2: ...
+│   └── Operador lógico entre condiciones: AND / OR
+└── Gestión de riesgo
+    ├── Stop-Loss: % máximo de pérdida por operación
+    ├── Take-Profit: % objetivo de ganancia por operación
+    └── Tamaño de posición: % del capital por operación
+```
+
+**Tipos de comparadores disponibles**:
+
+| Comparador | Ejemplo |
+|-----------|---------|
+| `mayor_que` | RSI(14) > 70 |
+| `menor_que` | RSI(14) < 30 |
+| `cruza_por_encima` | Precio cruza por encima de EMA(20) |
+| `cruza_por_debajo` | SMA(50) cruza por debajo de SMA(200) |
+| `entre` | RSI(14) entre 40 y 60 |
+| `fuera_de` | Precio fuera de Bandas de Bollinger |
+
+**Elementos referenciables en condiciones**:
+- Cualquier indicador del catálogo (4.2) con sus parámetros
+- Precio: apertura, cierre, máximo, mínimo
+- Volumen
+
+**Formato JSON de una estrategia** (cómo se almacena):
+```json
+{
+  "entry": {
+    "operator": "AND",
+    "conditions": [
+      {
+        "left": {"type": "indicator", "name": "RSI", "params": {"period": 14}},
+        "comparator": "less_than",
+        "right": {"type": "value", "value": 30}
+      },
+      {
+        "left": {"type": "price", "field": "close"},
+        "comparator": "crosses_above",
+        "right": {"type": "indicator", "name": "EMA", "params": {"period": 20}}
+      }
+    ]
+  },
+  "exit": {
+    "operator": "OR",
+    "conditions": [
+      {
+        "left": {"type": "indicator", "name": "RSI", "params": {"period": 14}},
+        "comparator": "greater_than",
+        "right": {"type": "value", "value": 70}
+      }
+    ]
+  },
+  "risk_management": {
+    "stop_loss_pct": 5.0,
+    "take_profit_pct": 10.0,
+    "position_size_pct": 10.0
+  }
+}
+```
+
+#### 4.6.3 Ejecución y Resultados (Evaluar)
+
+Al ejecutar un backtest, el sistema procesa la estrategia contra los datos históricos del ticker seleccionado y genera un informe completo.
+
+**Parámetros de ejecución**:
+- Ticker (o lista de tickers para probar en varios activos)
+- Rango de fechas (inicio y fin)
+- Capital inicial (por defecto: 100.000 €, coherente con el modo demo)
+- Comisión por operación (configurable, por defecto: 0.1%)
+
+**Métricas de rendimiento** (mostradas en el informe):
+
+| Métrica | Descripción |
+|---------|-------------|
+| Rentabilidad total (%) | Ganancia/pérdida neta sobre capital inicial |
+| Rentabilidad anualizada (%) | Rentabilidad ajustada a base anual |
+| Ratio de Sharpe | Rentabilidad ajustada al riesgo |
+| Máximo Drawdown (%) | Mayor caída desde un pico al siguiente valle |
+| Win Rate (%) | Porcentaje de operaciones ganadoras |
+| Profit Factor | Ganancias brutas / Pérdidas brutas |
+| Nº total de operaciones | Cantidad de trades ejecutados |
+| Duración media de operación | Tiempo medio que se mantiene una posición |
+| Mejor / Peor operación | P&L de la mejor y peor trade |
+| Benchmark vs Buy & Hold | Comparación con simplemente comprar y mantener |
+
+**Visualizaciones**:
+- **Curva de equity**: Evolución del capital a lo largo del tiempo, superpuesta con Buy & Hold como referencia
+- **Operaciones sobre gráfico**: Las señales de compra/venta marcadas directamente sobre el gráfico de velas del activo (reutiliza el gráfico del módulo 4.1)
+- **Distribución de P&L**: Histograma con la distribución de ganancias/pérdidas por operación
+- **Drawdown**: Gráfico del drawdown a lo largo del tiempo
+- **Tabla de operaciones**: Lista detallada de cada trade con fecha entrada, fecha salida, precio entrada, precio salida, P&L, duración
+
+**Comparación de estrategias**: El alumno puede seleccionar hasta 3 backtests ejecutados previamente y comparar sus métricas en una tabla lado a lado.
+
+#### 4.6.4 Integración con el Tutor IA
+
+El tutor IA (módulo 4.4) se integra con el backtesting:
+- **Explicación de resultados**: Al finalizar un backtest, el alumno puede pedir al tutor que interprete los resultados ("¿Por qué mi drawdown es tan alto?", "¿Cómo puedo mejorar el ratio de Sharpe?")
+- **Sugerencias contextuales**: El tutor sugiere preguntas relevantes basándose en los resultados del backtest (ej: si el win rate es bajo, sugiere "¿Qué técnicas existen para filtrar señales falsas?")
+- **Referencia teórica**: Las métricas del informe enlazan con las explicaciones del tutor basadas en los PDFs del profesor
+
+#### 4.6.5 Endpoints
+
+```
+# Estrategias
+GET    /api/backtest/strategies/templates     → catálogo de estrategias predefinidas
+GET    /api/backtest/strategies               → estrategias propias del usuario
+POST   /api/backtest/strategies               → crear estrategia {name, description, rules}
+GET    /api/backtest/strategies/{id}          → detalle de una estrategia
+PUT    /api/backtest/strategies/{id}          → actualizar estrategia
+DELETE /api/backtest/strategies/{id}          → eliminar estrategia
+
+# Ejecución
+POST   /api/backtest/run                      → ejecutar backtest {strategy_id, ticker, start_date, end_date, initial_capital, commission_pct}
+GET    /api/backtest/runs                     → historial de backtests del usuario
+GET    /api/backtest/runs/{id}               → resultado completo de un backtest (métricas + trades)
+GET    /api/backtest/runs/{id}/trades        → lista de operaciones del backtest
+DELETE /api/backtest/runs/{id}               → eliminar resultado de backtest
+
+# Comparación
+POST   /api/backtest/compare                  → comparar backtests {run_ids: [id1, id2, id3]} → métricas lado a lado
+```
+
 ### 4.5 Autenticación y Usuarios
 
 **Requisitos**:
@@ -239,6 +398,46 @@ IndicatorPreset
 ├── name: string
 ├── indicators: JSON  ([{name, params}])
 └── created_at: datetime
+
+Strategy (Backtesting)
+├── id: UUID
+├── user_id: FK → User
+├── name: string
+├── description: string?
+├── is_template: boolean              ← true para estrategias predefinidas
+├── rules: JSON                       ← {entry, exit, risk_management}
+├── created_at: datetime
+└── updated_at: datetime
+
+BacktestRun
+├── id: UUID
+├── user_id: FK → User
+├── strategy_id: FK → Strategy
+├── ticker: string
+├── start_date: date
+├── end_date: date
+├── initial_capital: decimal
+├── commission_pct: decimal
+├── metrics: JSON                     ← {total_return, sharpe, max_drawdown, win_rate, profit_factor, ...}
+├── equity_curve: JSON                ← [{date, equity}]
+├── status: enum(running, completed, failed)
+├── error_message: string?
+├── created_at: datetime
+└── completed_at: datetime?
+
+BacktestTrade
+├── id: UUID
+├── run_id: FK → BacktestRun
+├── type: enum(buy, sell)
+├── entry_date: datetime
+├── entry_price: decimal
+├── exit_date: datetime?
+├── exit_price: decimal?
+├── quantity: decimal
+├── pnl: decimal?
+├── pnl_pct: decimal?
+├── exit_reason: enum(signal, stop_loss, take_profit)
+└── duration_days: integer?
 ```
 
 ---
@@ -261,19 +460,24 @@ analisis_bursatil_demo/
 │   │   │   ├── order.py
 │   │   │   ├── document.py
 │   │   │   ├── conversation.py
-│   │   │   └── indicator_preset.py
+│   │   │   ├── indicator_preset.py
+│   │   │   ├── strategy.py
+│   │   │   ├── backtest_run.py
+│   │   │   └── backtest_trade.py
 │   │   ├── schemas/                 ← Pydantic schemas (request/response)
 │   │   ├── routers/                 ← endpoints por módulo
 │   │   │   ├── auth.py
 │   │   │   ├── market.py
 │   │   │   ├── indicators.py
 │   │   │   ├── demo.py
-│   │   │   └── tutor.py
+│   │   │   ├── tutor.py
+│   │   │   └── backtest.py
 │   │   ├── services/                ← lógica de negocio
 │   │   │   ├── market_service.py
 │   │   │   ├── indicator_service.py
 │   │   │   ├── demo_service.py
-│   │   │   └── tutor_service.py
+│   │   │   ├── tutor_service.py
+│   │   │   └── backtest_service.py  ← motor de backtesting
 │   │   └── utils/
 │   │       ├── auth.py              ← JWT, hashing
 │   │       └── pdf_processor.py     ← extracción + chunking de PDFs
@@ -293,12 +497,21 @@ analisis_bursatil_demo/
 │   │   │   ├── indicators/          ← panel de selección de indicadores
 │   │   │   ├── demo/                ← portfolio, órdenes
 │   │   │   ├── tutor/               ← chat IA
+│   │   │   ├── backtest/            ← constructor de estrategias, resultados
+│   │   │   │   ├── StrategyBuilder.tsx    ← constructor visual de reglas
+│   │   │   │   ├── ConditionRow.tsx       ← fila de condición (indicador + comparador + valor)
+│   │   │   │   ├── BacktestResults.tsx    ← informe de resultados
+│   │   │   │   ├── EquityCurve.tsx        ← gráfico de curva de equity
+│   │   │   │   ├── TradesTable.tsx        ← tabla de operaciones
+│   │   │   │   ├── MetricsCard.tsx        ← tarjeta de métricas
+│   │   │   │   └── StrategyComparison.tsx ← comparación lado a lado
 │   │   │   └── layout/              ← navbar, sidebar, footer
 │   │   ├── pages/
 │   │   │   ├── Dashboard.tsx
 │   │   │   ├── Charts.tsx
 │   │   │   ├── Demo.tsx
 │   │   │   ├── Tutor.tsx
+│   │   │   ├── Backtest.tsx          ← página principal de backtesting
 │   │   │   ├── Login.tsx
 │   │   │   └── Profile.tsx
 │   │   ├── hooks/
@@ -363,8 +576,9 @@ analisis_bursatil_demo/
 | 2 | Gráficos | Candlestick interactivo con datos de yfinance |
 | 3 | Indicadores | Catálogo completo con panel configurable |
 | 4 | Modo Demo | Paper trading con portfolio virtual |
-| 5 | Tutor IA | RAG sobre PDFs, chat funcional |
-| 6 | Pulido | UI/UX, ranking, preguntas frecuentes, deploy |
+| 5 | Backtesting | Motor de backtesting, constructor visual, estrategias predefinidas |
+| 6 | Tutor IA | RAG sobre PDFs, chat funcional, integración con backtesting |
+| 7 | Pulido | UI/UX, ranking, preguntas frecuentes, deploy |
 
 ---
 
@@ -373,6 +587,10 @@ analisis_bursatil_demo/
 - [ ] Un estudiante puede buscar una acción, ver su gráfico de velas y activar indicadores
 - [ ] Un estudiante puede practicar compra/venta con dinero ficticio y ver su rendimiento
 - [ ] Un estudiante puede hacer preguntas y recibir respuestas basadas en los PDFs del profesor
+- [ ] Un estudiante puede ejecutar una estrategia predefinida sobre un ticker y ver el informe de resultados
+- [ ] Un estudiante puede construir su propia estrategia combinando indicadores y condiciones sin escribir código
+- [ ] Un estudiante puede comparar los resultados de distintas estrategias lado a lado
+- [ ] Un estudiante puede pedir al tutor IA que interprete los resultados de su backtest
 - [ ] Un profesor puede subir PDFs y ver las preguntas frecuentes de sus alumnos
 - [ ] La aplicación funciona en móvil y escritorio (responsive)
 - [ ] Los datos bursátiles son reales y actualizados (Yahoo Finance)
