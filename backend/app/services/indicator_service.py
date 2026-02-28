@@ -1,5 +1,6 @@
+import numpy as np
+import pandas as pd
 import yfinance as yf
-import pandas_ta as ta
 from fastapi import HTTPException, status
 
 from ..schemas.indicators import (
@@ -94,6 +95,71 @@ def get_catalog() -> CatalogResponse:
     return CatalogResponse(indicators=CATALOG)
 
 
+# --- Pure pandas/numpy indicator calculations ---
+
+def _sma(series: pd.Series, length: int) -> pd.Series:
+    return series.rolling(window=length).mean()
+
+
+def _ema(series: pd.Series, length: int) -> pd.Series:
+    return series.ewm(span=length, adjust=False).mean()
+
+
+def _macd(series: pd.Series, fast: int, slow: int, signal: int) -> pd.DataFrame:
+    ema_fast = _ema(series, fast)
+    ema_slow = _ema(series, slow)
+    macd_line = ema_fast - ema_slow
+    signal_line = _ema(macd_line, signal)
+    histogram = macd_line - signal_line
+    return pd.DataFrame({"macd": macd_line, "signal": signal_line, "histogram": histogram})
+
+
+def _rsi(series: pd.Series, length: int) -> pd.Series:
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = (-delta).where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1.0 / length, min_periods=length, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1.0 / length, min_periods=length, adjust=False).mean()
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _stoch(high: pd.Series, low: pd.Series, close: pd.Series, k: int, d: int) -> pd.DataFrame:
+    lowest_low = low.rolling(window=k).min()
+    highest_high = high.rolling(window=k).max()
+    stoch_k = 100.0 * (close - lowest_low) / (highest_high - lowest_low)
+    stoch_d = stoch_k.rolling(window=d).mean()
+    return pd.DataFrame({"stochk": stoch_k, "stochd": stoch_d})
+
+
+def _bbands(series: pd.Series, length: int, std: float) -> pd.DataFrame:
+    mid = series.rolling(window=length).mean()
+    std_dev = series.rolling(window=length).std()
+    upper = mid + std * std_dev
+    lower = mid - std * std_dev
+    return pd.DataFrame({"bbu": upper, "bbm": mid, "bbl": lower})
+
+
+def _atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int) -> pd.Series:
+    prev_close = close.shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    return tr.ewm(alpha=1.0 / length, min_periods=length, adjust=False).mean()
+
+
+def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
+    sign = np.sign(close.diff()).fillna(0)
+    return (sign * volume).cumsum()
+
+
+def _vwap(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series) -> pd.Series:
+    typical_price = (high + low + close) / 3.0
+    return (typical_price * volume).cumsum() / volume.cumsum()
+
+
 def _compute_indicator(df, ind: IndicatorRequest) -> IndicatorSeries:
     """Calcula un indicador sobre un DataFrame OHLCV y devuelve sus series."""
     name = ind.name.upper()
@@ -109,55 +175,52 @@ def _compute_indicator(df, ind: IndicatorRequest) -> IndicatorSeries:
 
     if name == "SMA":
         length = int(params.get("length", 20))
-        result = ta.sma(df["Close"], length=length)
+        result = _sma(df["Close"], length)
         series_data["sma"] = _series_to_list(result)
 
     elif name == "EMA":
         length = int(params.get("length", 20))
-        result = ta.ema(df["Close"], length=length)
+        result = _ema(df["Close"], length)
         series_data["ema"] = _series_to_list(result)
 
     elif name == "MACD":
         fast = int(params.get("fast", 12))
         slow = int(params.get("slow", 26))
         signal = int(params.get("signal", 9))
-        result = ta.macd(df["Close"], fast=fast, slow=slow, signal=signal)
+        result = _macd(df["Close"], fast, slow, signal)
         for col in result.columns:
-            key = col.split("_")[0].lower()
-            series_data[key] = _series_to_list(result[col])
+            series_data[col] = _series_to_list(result[col])
 
     elif name == "RSI":
         length = int(params.get("length", 14))
-        result = ta.rsi(df["Close"], length=length)
+        result = _rsi(df["Close"], length)
         series_data["rsi"] = _series_to_list(result)
 
     elif name == "STOCH":
         k = int(params.get("k", 14))
         d = int(params.get("d", 3))
-        result = ta.stoch(df["High"], df["Low"], df["Close"], k=k, d=d)
+        result = _stoch(df["High"], df["Low"], df["Close"], k, d)
         for col in result.columns:
-            key = col.split("_")[0].lower()
-            series_data[key] = _series_to_list(result[col])
+            series_data[col] = _series_to_list(result[col])
 
     elif name == "BBANDS":
         length = int(params.get("length", 20))
         std = float(params.get("std", 2.0))
-        result = ta.bbands(df["Close"], length=length, std=std)
+        result = _bbands(df["Close"], length, std)
         for col in result.columns:
-            key = col.split("_")[0].lower()
-            series_data[key] = _series_to_list(result[col])
+            series_data[col] = _series_to_list(result[col])
 
     elif name == "ATR":
         length = int(params.get("length", 14))
-        result = ta.atr(df["High"], df["Low"], df["Close"], length=length)
+        result = _atr(df["High"], df["Low"], df["Close"], length)
         series_data["atr"] = _series_to_list(result)
 
     elif name == "OBV":
-        result = ta.obv(df["Close"], df["Volume"])
+        result = _obv(df["Close"], df["Volume"])
         series_data["obv"] = _series_to_list(result)
 
     elif name == "VWAP":
-        result = ta.vwap(df["High"], df["Low"], df["Close"], df["Volume"])
+        result = _vwap(df["High"], df["Low"], df["Close"], df["Volume"])
         series_data["vwap"] = _series_to_list(result)
 
     return IndicatorSeries(name=ind.name, params=ind.params, data=series_data)
