@@ -79,8 +79,9 @@ backend/app/schemas/
 8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
    - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott) con Primitives API
    - Preview en vivo mientras se dibuja
-   - Detección de patrones de velas (envolvente + marubozu)
+   - Detección de patrones de velas: envolvente (EA/EB), marubozu (MA/MB), long line (LLA/LLB)
    - Indicadores overlay + oscilador con editor de parámetros
+   - Soporte intradiario (1m, 5m, 15m, 1h) con timestamps Unix + validación período/intervalo
 9. Pulido (UI/UX, ranking, deploy)
 
 ## API — 34 rutas implementadas

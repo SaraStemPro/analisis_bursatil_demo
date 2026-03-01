@@ -5,3 +5,5 @@ Muestra el estado completo del proyecto:
 4. Lista los archivos creados en backend/ y frontend/
 5. Verifica si hay cambios sin commitear (git status)
 6. Resume qué falta por hacer en la siguiente fase
+7. Verifica que las skills (.claude/commands/) están actualizadas con el estado actual del código
+8. Comprueba que el frontend compila (npx tsc --noEmit)

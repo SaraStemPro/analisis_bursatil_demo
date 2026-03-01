@@ -15,6 +15,17 @@ import { Search, Settings2, X, CandlestickChart } from 'lucide-react'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
 const ALL_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
+const INTRADAY_INTERVALS = new Set(['1m', '5m', '15m', '30m', '1h'])
+
+/** Convert ISO date string to lightweight-charts Time value.
+ *  For intraday intervals: Unix timestamp (seconds).
+ *  For daily+: 'YYYY-MM-DD' string. */
+function toChartTime(dateStr: string, currentInterval: string): Time {
+  if (INTRADAY_INTERVALS.has(currentInterval)) {
+    return Math.floor(new Date(dateStr).getTime() / 1000) as unknown as Time
+  }
+  return dateStr.split('T')[0] as unknown as Time
+}
 
 // Yahoo Finance max period (days) per intraday interval
 const MAX_PERIOD_DAYS: Record<string, number> = { '1m': 7, '5m': 60, '15m': 60, '1h': 730 }
@@ -236,11 +247,11 @@ export default function Charts() {
     chartInstanceRef.current = chart
     candleSeriesRef.current = candleSeries as ISeriesApi<SeriesType, Time>
 
-    const dates = history.data.map((d) => d.date.split('T')[0])
+    const times = history.data.map((d) => toChartTime(d.date, interval))
 
     candleSeries.setData(
       history.data.map((d) => ({
-        time: d.date.split('T')[0],
+        time: toChartTime(d.date, interval),
         open: d.open, high: d.high, low: d.low, close: d.close,
       }))
     )
@@ -252,7 +263,7 @@ export default function Charts() {
     chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
     volumeSeries.setData(
       history.data.map((d) => ({
-        time: d.date.split('T')[0],
+        time: toChartTime(d.date, interval),
         value: d.volume,
         color: d.close >= d.open ? '#10b98140' : '#ef444440',
       }))
@@ -275,8 +286,8 @@ export default function Charts() {
             priceScaleId: 'right',
           })
           const lineData = values
-            .map((v, i) => (v !== null ? { time: dates[i], value: v } : null))
-            .filter(Boolean) as { time: string; value: number }[]
+            .map((v, i) => (v !== null ? { time: times[i], value: v } : null))
+            .filter(Boolean) as { time: Time; value: number }[]
           lineSeries.setData(lineData)
         })
       })
@@ -310,7 +321,7 @@ export default function Charts() {
     if (showPatterns && history.data.length >= 2) {
       const patterns = detectPatterns(history.data)
       const markers = patterns.map((p) => ({
-        time: p.date.split('T')[0] as unknown as Time,
+        time: toChartTime(p.date, interval),
         position: p.position,
         shape: (p.position === 'belowBar' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
         color: p.color,
@@ -336,7 +347,7 @@ export default function Charts() {
       drawingManagerRef.current.detach()
       chart.remove()
     }
-  }, [history, indicatorData, showPatterns, getIndicatorDef, handleChartClick, handleChartDblClick])
+  }, [history, indicatorData, interval, showPatterns, getIndicatorDef, handleChartClick, handleChartDblClick])
 
   // Oscillator chart (RSI, MACD, STOCH, ATR, OBV)
   const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
@@ -356,7 +367,7 @@ export default function Charts() {
       rightPriceScale: { borderColor: '#334155' },
     })
 
-    const dates = history.data.map((d) => d.date.split('T')[0])
+    const oscTimes = history.data.map((d) => toChartTime(d.date, interval))
     let colorIdx = 0
 
     oscillatorIndicators.forEach((ind) => {
@@ -370,8 +381,8 @@ export default function Charts() {
             title: `${ind.name} ${seriesKey}`,
           })
           const histData = values
-            .map((v, i) => (v !== null ? { time: dates[i], value: v, color: v >= 0 ? '#10b981' : '#ef4444' } : null))
-            .filter(Boolean) as { time: string; value: number; color: string }[]
+            .map((v, i) => (v !== null ? { time: oscTimes[i], value: v, color: v >= 0 ? '#10b981' : '#ef4444' } : null))
+            .filter(Boolean) as { time: Time; value: number; color: string }[]
           histSeries.setData(histData)
         } else {
           const lineSeries = chart.addSeries(LineSeries, {
@@ -380,8 +391,8 @@ export default function Charts() {
             title: `${ind.name} ${seriesKey}`,
           })
           const lineData = values
-            .map((v, i) => (v !== null ? { time: dates[i], value: v } : null))
-            .filter(Boolean) as { time: string; value: number }[]
+            .map((v, i) => (v !== null ? { time: oscTimes[i], value: v } : null))
+            .filter(Boolean) as { time: Time; value: number }[]
           lineSeries.setData(lineData)
         }
       })
@@ -507,15 +518,24 @@ export default function Charts() {
           </button>
         ))}
         <span className="text-slate-600 mx-1">|</span>
-        {validIntervals(period).map((i) => (
-          <button
-            key={i}
-            onClick={() => setInterval(i)}
-            className={`px-3 py-1 rounded text-sm ${interval === i ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-          >
-            {i}
-          </button>
-        ))}
+        {ALL_INTERVALS.map((i) => {
+          const valid = validIntervals(period).includes(i)
+          return (
+            <button
+              key={i}
+              onClick={() => valid && setInterval(i)}
+              disabled={!valid}
+              title={!valid ? `Reduce el período para usar ${i}` : undefined}
+              className={`px-3 py-1 rounded text-sm ${
+                interval === i ? 'bg-blue-600 text-white'
+                : valid ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                : 'bg-slate-900 text-slate-600 cursor-not-allowed'
+              }`}
+            >
+              {i}
+            </button>
+          )
+        })}
       </div>
 
       {/* Patterns toggle */}
