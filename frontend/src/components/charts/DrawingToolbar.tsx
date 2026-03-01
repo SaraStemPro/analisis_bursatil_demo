@@ -1,4 +1,4 @@
-import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Trash2, X } from 'lucide-react'
+import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Trash2, X, Move } from 'lucide-react'
 import { useDrawingStore } from '../../context/drawing-store'
 import type { DrawingToolType } from '../../types/drawings'
 
@@ -23,6 +23,8 @@ export default function DrawingToolbar() {
     activeTool, selectTool, pendingPoints, selectedId,
     removeDrawing, clearAll, drawings, resetInteraction,
     elliottWaveType, setElliottWaveType,
+    arrowDirection, setArrowDirection,
+    moveMode, setMoveMode,
   } = useDrawingStore()
 
   return (
@@ -47,16 +49,20 @@ export default function DrawingToolbar() {
       {activeTool === 'arrow' && (
         <div className="flex flex-col gap-0.5 border-t border-slate-700 pt-1 mt-1">
           <button
-            onClick={() => {/* direction handled in Charts.tsx via arrowDirection state */}}
+            onClick={() => setArrowDirection('up')}
             title="Flecha arriba"
-            className="p-1.5 text-emerald-400 hover:bg-slate-800 rounded"
+            className={`p-1.5 rounded transition-colors ${
+              arrowDirection === 'up' ? 'bg-emerald-900 text-emerald-400' : 'text-slate-500 hover:bg-slate-800'
+            }`}
           >
             <ArrowUp size={14} />
           </button>
           <button
-            onClick={() => {}}
+            onClick={() => setArrowDirection('down')}
             title="Flecha abajo"
-            className="p-1.5 text-red-400 hover:bg-slate-800 rounded"
+            className={`p-1.5 rounded transition-colors ${
+              arrowDirection === 'down' ? 'bg-red-900 text-red-400' : 'text-slate-500 hover:bg-slate-800'
+            }`}
           >
             <ArrowDown size={14} />
           </button>
@@ -83,6 +89,19 @@ export default function DrawingToolbar() {
 
       {/* Divider */}
       <div className="border-t border-slate-700 my-1" />
+
+      {/* Move selected drawing */}
+      {selectedId && (
+        <button
+          onClick={() => setMoveMode(!moveMode)}
+          title="Mover dibujo"
+          className={`p-2 rounded transition-colors ${
+            moveMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <Move size={18} />
+        </button>
+      )}
 
       {/* Delete selected */}
       {selectedId && (
@@ -128,6 +147,13 @@ export default function DrawingToolbar() {
               {pendingPoints.length} pts
             </p>
           )}
+        </div>
+      )}
+      {moveMode && (
+        <div className="mt-1 px-1">
+          <p className="text-[9px] text-blue-400 leading-tight text-center">
+            Click para mover
+          </p>
         </div>
       )}
     </div>

@@ -23,6 +23,8 @@ interface DrawingStore {
   pendingPoints: DrawingPoint[]
   selectedId: string | null
   elliottWaveType: 'impulse' | 'corrective'
+  arrowDirection: 'up' | 'down'
+  moveMode: boolean
 
   setTicker: (ticker: string) => void
   addDrawing: (drawing: Drawing) => void
@@ -34,6 +36,8 @@ interface DrawingStore {
   resetInteraction: () => void
   selectDrawing: (id: string | null) => void
   setElliottWaveType: (type: 'impulse' | 'corrective') => void
+  setArrowDirection: (dir: 'up' | 'down') => void
+  setMoveMode: (mode: boolean) => void
 }
 
 export const useDrawingStore = create<DrawingStore>((set, get) => ({
@@ -43,6 +47,8 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   pendingPoints: [],
   selectedId: null,
   elliottWaveType: 'impulse',
+  arrowDirection: 'up',
+  moveMode: false,
 
   setTicker: (ticker) => {
     set({ ticker, drawings: load(ticker), selectedId: null })
@@ -84,14 +90,22 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   },
 
   resetInteraction: () => {
-    set({ activeTool: null, pendingPoints: [], selectedId: null })
+    set({ activeTool: null, pendingPoints: [], selectedId: null, moveMode: false })
   },
 
   selectDrawing: (id) => {
-    set({ selectedId: id, activeTool: null })
+    set({ selectedId: id, activeTool: null, moveMode: false })
   },
 
   setElliottWaveType: (type) => {
     set({ elliottWaveType: type })
+  },
+
+  setArrowDirection: (dir) => {
+    set({ arrowDirection: dir })
+  },
+
+  setMoveMode: (mode) => {
+    set({ moveMode: mode })
   },
 }))

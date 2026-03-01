@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts'
-import type { ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams } from 'lightweight-charts'
 import { market, indicators } from '../api'
 import type { IndicatorDefinition, IndicatorRequest } from '../types'
 import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing } from '../types/drawings'
@@ -54,27 +54,27 @@ export default function Charts() {
   const [activeIndicators, setActiveIndicators] = useState<IndicatorRequest[]>([])
   const [indicatorColors, setIndicatorColors] = useState<Record<string, string>>({})
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
-  const [arrowDirection, setArrowDirection] = useState<'up' | 'down'>('up')
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
-  const [dragging, setDragging] = useState<{ id: string; pointIdx: number } | null>(null)
 
   const [showPatterns, setShowPatterns] = useState(false)
 
   const chartRef = useRef<HTMLDivElement>(null)
   const oscChartRef = useRef<HTMLDivElement>(null)
-  const chartInstanceRef = useRef<ReturnType<typeof createChart> | null>(null)
+  const chartInstanceRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null)
   const drawingManagerRef = useRef(new DrawingManager())
   const previewRef = useRef(new PreviewPrimitive())
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  // Stable refs for chart event handlers — prevents chart recreation on state changes
+  const handleChartClickRef = useRef<(params: MouseEventParams<Time>) => void>(() => {})
+  const handleChartDblClickRef = useRef<() => void>(() => {})
 
   // Drawing store
-  const drawingStore = useDrawingStore()
   const {
-    drawings, activeTool, selectedId,
-    setTicker: setDrawingTicker, addDrawing, updateDrawing, addPendingPoint,
-    resetInteraction, selectDrawing, removeDrawing, elliottWaveType,
-  } = drawingStore
+    drawings, activeTool, selectedId, moveMode,
+    setTicker: setDrawingTicker,
+    resetInteraction, removeDrawing,
+  } = useDrawingStore()
 
   // Sync ticker with drawing store
   useEffect(() => { setDrawingTicker(ticker) }, [ticker, setDrawingTicker])
@@ -132,9 +132,10 @@ export default function Charts() {
     [indicatorColors],
   )
 
-  // Finalize drawing helper
+  // Finalize drawing helper — reads arrowDirection/elliottWaveType from store at call time
   const finalizeDrawing = useCallback((points: DrawingPoint[], toolType: string) => {
-    const color = DRAWING_COLORS[drawings.length % DRAWING_COLORS.length]
+    const store = useDrawingStore.getState()
+    const color = DRAWING_COLORS[store.drawings.length % DRAWING_COLORS.length]
     const id = crypto.randomUUID()
 
     let drawing: Drawing
@@ -143,7 +144,7 @@ export default function Charts() {
         drawing = { id, type: 'trendline', points, color, visible: true, lineWidth: 2 } as TrendlineDrawing
         break
       case 'arrow':
-        drawing = { id, type: 'arrow', points, color, visible: true, direction: arrowDirection } as ArrowDrawing
+        drawing = { id, type: 'arrow', points, color, visible: true, direction: store.arrowDirection } as ArrowDrawing
         break
       case 'text':
         return // text finalization handled separately after text input
@@ -151,43 +152,64 @@ export default function Charts() {
         drawing = { id, type: 'fibonacci', points, color, visible: true, levels: FIB_LEVELS } as FibonacciDrawing
         break
       case 'elliott': {
-        const labels = elliottWaveType === 'impulse' ? IMPULSE_LABELS : CORRECTIVE_LABELS
-        drawing = { id, type: 'elliott', points, color, visible: true, waveType: elliottWaveType, labels: labels.slice(0, points.length) } as ElliottWaveDrawing
+        const labels = store.elliottWaveType === 'impulse' ? IMPULSE_LABELS : CORRECTIVE_LABELS
+        drawing = { id, type: 'elliott', points, color, visible: true, waveType: store.elliottWaveType, labels: labels.slice(0, points.length) } as ElliottWaveDrawing
         break
       }
       default:
         return
     }
-    addDrawing(drawing)
+    store.addDrawing(drawing)
     previewRef.current.clear()
-  }, [drawings.length, arrowDirection, elliottWaveType, addDrawing])
+  }, [])
 
-  // Handle chart click for drawing
+  // Handle chart click for drawing — reads all state from store to avoid stale closures
   const handleChartClick = useCallback((params: MouseEventParams<Time>) => {
-    // If dragging, ignore clicks (mouseup handles drag end)
-    if (dragging) return
-
     const store = useDrawingStore.getState()
+
+    // Get coordinates helper
+    const getPoint = (): DrawingPoint | null => {
+      if (!params.point || !candleSeriesRef.current) return null
+      const time = params.time as string | undefined
+      if (!time) return null
+      const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
+      if (price === null) return null
+      return { time, price: price as number }
+    }
+
+    // Move mode: move the selected drawing to the clicked position
+    if (store.moveMode && store.selectedId) {
+      const newPoint = getPoint()
+      if (!newPoint) return
+      const drawing = store.drawings.find((d) => d.id === store.selectedId)
+      if (!drawing) return
+
+      if (drawing.points.length === 1) {
+        store.updateDrawing(drawing.id, [newPoint])
+      } else {
+        const oldFirst = drawing.points[0]
+        const dtMs = new Date(newPoint.time).getTime() - new Date(oldFirst.time).getTime()
+        const dp = newPoint.price - oldFirst.price
+        const newPoints = drawing.points.map((p) => ({
+          time: new Date(new Date(p.time).getTime() + dtMs).toISOString(),
+          price: p.price + dp,
+        }))
+        store.updateDrawing(drawing.id, newPoints)
+      }
+      store.setMoveMode(false)
+      return
+    }
 
     // If no tool active, check for hit-test selection
     if (!store.activeTool) {
       const hoveredId = params.hoveredObjectId as string | undefined
-      if (hoveredId) {
-        selectDrawing(hoveredId)
-      } else {
-        selectDrawing(null)
-      }
+      store.selectDrawing(hoveredId ?? null)
       return
     }
 
-    // Get coordinates
-    if (!params.point || !candleSeriesRef.current) return
-    const time = params.time as string | undefined
-    if (!time) return
-    const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
-    if (price === null) return
-
-    const point: DrawingPoint = { time, price: price as number }
+    // Get coordinates for drawing tools
+    const point = getPoint()
+    if (!point) return
 
     // For text tool, show input overlay
     if (store.activeTool === 'text') {
@@ -197,22 +219,26 @@ export default function Charts() {
     }
 
     const newPending = [...store.pendingPoints, point]
-    addPendingPoint(point)
+    store.addPendingPoint(point)
 
     const required = requiredPoints(store.activeTool)
     if (required !== null && newPending.length >= required) {
       finalizeDrawing(newPending, store.activeTool)
     }
-  }, [dragging, selectDrawing, addPendingPoint, finalizeDrawing])
+  }, [finalizeDrawing])
 
   // Handle double-click for Elliott wave completion
-  const handleChartDblClick = useCallback((_params: MouseEventParams<Time>) => {
+  const handleChartDblClick = useCallback(() => {
     const store = useDrawingStore.getState()
     if (store.activeTool === 'elliott' && store.pendingPoints.length >= 3) {
       finalizeDrawing(store.pendingPoints, 'elliott')
       previewRef.current.clear()
     }
   }, [finalizeDrawing])
+
+  // Keep callback refs current (avoids chart recreation on every state change)
+  useEffect(() => { handleChartClickRef.current = handleChartClick }, [handleChartClick])
+  useEffect(() => { handleChartDblClickRef.current = handleChartDblClick }, [handleChartDblClick])
 
   // Finalize text drawing
   const finalizeText = (text: string) => {
@@ -221,7 +247,8 @@ export default function Charts() {
       resetInteraction()
       return
     }
-    const color = DRAWING_COLORS[drawings.length % DRAWING_COLORS.length]
+    const store = useDrawingStore.getState()
+    const color = DRAWING_COLORS[store.drawings.length % DRAWING_COLORS.length]
     const drawing: TextDrawing = {
       id: crypto.randomUUID(),
       type: 'text',
@@ -231,60 +258,9 @@ export default function Charts() {
       text: text.trim(),
       fontSize: 13,
     }
-    addDrawing(drawing)
+    store.addDrawing(drawing)
     setTextInput({ show: false, point: null })
   }
-
-  // Drag-to-move: convert pixel coords to time/price
-  const pixelToPoint = useCallback((clientX: number, clientY: number): DrawingPoint | null => {
-    if (!chartRef.current || !chartInstanceRef.current || !candleSeriesRef.current) return null
-    const rect = chartRef.current.getBoundingClientRect()
-    const x = clientX - rect.left
-    const y = clientY - rect.top
-    const time = chartInstanceRef.current.timeScale().coordinateToTime(x)
-    const price = candleSeriesRef.current.coordinateToPrice(y)
-    if (time === null || price === null) return null
-    return { time: time as unknown as string, price: price as number }
-  }, [])
-
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    const store = useDrawingStore.getState()
-    if (store.activeTool || !store.selectedId) return
-    const drawing = store.drawings.find((d) => d.id === store.selectedId)
-    if (!drawing) return
-    // Start drag on point 0 (move the whole drawing)
-    e.preventDefault()
-    setDragging({ id: drawing.id, pointIdx: 0 })
-  }, [])
-
-  const handleDragMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return
-    const newPoint = pixelToPoint(e.clientX, e.clientY)
-    if (!newPoint) return
-
-    const store = useDrawingStore.getState()
-    const drawing = store.drawings.find((d) => d.id === dragging.id)
-    if (!drawing) return
-
-    if (drawing.points.length === 1) {
-      // Single-point drawing (arrow, text): move to new position
-      updateDrawing(dragging.id, [newPoint])
-    } else {
-      // Multi-point drawing: compute delta from first point and apply to all
-      const oldFirst = drawing.points[0]
-      const dt = new Date(newPoint.time).getTime() - new Date(oldFirst.time).getTime()
-      const dp = newPoint.price - oldFirst.price
-      const newPoints = drawing.points.map((p) => ({
-        time: new Date(new Date(p.time).getTime() + dt).toISOString(),
-        price: p.price + dp,
-      }))
-      updateDrawing(dragging.id, newPoints)
-    }
-  }, [dragging, pixelToPoint, updateDrawing])
-
-  const handleDragEnd = useCallback(() => {
-    if (dragging) setDragging(null)
-  }, [dragging])
 
   // Main chart with candles + overlay indicators + drawings
   useEffect(() => {
@@ -364,9 +340,11 @@ export default function Charts() {
     // Attach preview primitive
     seriesRef.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
 
-    // Drawing click handlers
-    chart.subscribeClick(handleChartClick)
-    chart.subscribeDblClick(handleChartDblClick)
+    // Drawing click handlers — use refs for stable subscriptions
+    const onChartClick = (params: MouseEventParams<Time>) => handleChartClickRef.current(params)
+    const onChartDblClick = () => handleChartDblClickRef.current()
+    chart.subscribeClick(onChartClick)
+    chart.subscribeDblClick(onChartDblClick)
 
     // Crosshair move for live preview
     const handleCrosshairMove = (params: MouseEventParams<Time>) => {
@@ -410,7 +388,8 @@ export default function Charts() {
       drawingManagerRef.current.detach()
       chart.remove()
     }
-  }, [history, indicatorData, interval, showPatterns, getIndicatorDef, getIndicatorColor, handleChartClick, handleChartDblClick])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history, indicatorData, interval, showPatterns, getIndicatorDef, getIndicatorColor])
 
   // Oscillator chart (RSI, MACD, STOCH, ATR, OBV)
   const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
@@ -547,23 +526,6 @@ export default function Charts() {
           </div>
         )}
 
-        {/* Arrow direction toggle */}
-        {activeTool === 'arrow' && (
-          <div className="flex gap-1 items-center">
-            <button
-              onClick={() => setArrowDirection('up')}
-              className={`px-2 py-1 rounded text-xs ${arrowDirection === 'up' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
-            >
-              Arriba
-            </button>
-            <button
-              onClick={() => setArrowDirection('down')}
-              className={`px-2 py-1 rounded text-xs ${arrowDirection === 'down' ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400'}`}
-            >
-              Abajo
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Period + Interval selectors */}
@@ -625,11 +587,7 @@ export default function Charts() {
         <div className="flex-1 relative">
           <div
             ref={chartRef}
-            className={`bg-slate-900 rounded-lg border border-slate-700 ${activeTool ? 'cursor-crosshair' : selectedId ? 'cursor-grab' : ''} ${dragging ? '!cursor-grabbing' : ''}`}
-            onMouseDown={handleDragStart}
-            onMouseMove={handleDragMove}
-            onMouseUp={handleDragEnd}
-            onMouseLeave={handleDragEnd}
+            className={`bg-slate-900 rounded-lg border border-slate-700 ${activeTool ? 'cursor-crosshair' : moveMode ? 'cursor-move' : ''}`}
           />
           {/* Text input overlay */}
           {textInput.show && (
