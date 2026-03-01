@@ -56,6 +56,7 @@ export default function Charts() {
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
   const [arrowDirection, setArrowDirection] = useState<'up' | 'down'>('up')
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
+  const [dragging, setDragging] = useState<{ id: string; pointIdx: number } | null>(null)
 
   const [showPatterns, setShowPatterns] = useState(false)
 
@@ -71,7 +72,7 @@ export default function Charts() {
   const drawingStore = useDrawingStore()
   const {
     drawings, activeTool, selectedId,
-    setTicker: setDrawingTicker, addDrawing, addPendingPoint,
+    setTicker: setDrawingTicker, addDrawing, updateDrawing, addPendingPoint,
     resetInteraction, selectDrawing, removeDrawing, elliottWaveType,
   } = drawingStore
 
@@ -163,6 +164,9 @@ export default function Charts() {
 
   // Handle chart click for drawing
   const handleChartClick = useCallback((params: MouseEventParams<Time>) => {
+    // If dragging, ignore clicks (mouseup handles drag end)
+    if (dragging) return
+
     const store = useDrawingStore.getState()
 
     // If no tool active, check for hit-test selection
@@ -199,7 +203,7 @@ export default function Charts() {
     if (required !== null && newPending.length >= required) {
       finalizeDrawing(newPending, store.activeTool)
     }
-  }, [selectDrawing, addPendingPoint, finalizeDrawing])
+  }, [dragging, selectDrawing, addPendingPoint, finalizeDrawing])
 
   // Handle double-click for Elliott wave completion
   const handleChartDblClick = useCallback((_params: MouseEventParams<Time>) => {
@@ -230,6 +234,57 @@ export default function Charts() {
     addDrawing(drawing)
     setTextInput({ show: false, point: null })
   }
+
+  // Drag-to-move: convert pixel coords to time/price
+  const pixelToPoint = useCallback((clientX: number, clientY: number): DrawingPoint | null => {
+    if (!chartRef.current || !chartInstanceRef.current || !candleSeriesRef.current) return null
+    const rect = chartRef.current.getBoundingClientRect()
+    const x = clientX - rect.left
+    const y = clientY - rect.top
+    const time = chartInstanceRef.current.timeScale().coordinateToTime(x)
+    const price = candleSeriesRef.current.coordinateToPrice(y)
+    if (time === null || price === null) return null
+    return { time: time as unknown as string, price: price as number }
+  }, [])
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    const store = useDrawingStore.getState()
+    if (store.activeTool || !store.selectedId) return
+    const drawing = store.drawings.find((d) => d.id === store.selectedId)
+    if (!drawing) return
+    // Start drag on point 0 (move the whole drawing)
+    e.preventDefault()
+    setDragging({ id: drawing.id, pointIdx: 0 })
+  }, [])
+
+  const handleDragMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging) return
+    const newPoint = pixelToPoint(e.clientX, e.clientY)
+    if (!newPoint) return
+
+    const store = useDrawingStore.getState()
+    const drawing = store.drawings.find((d) => d.id === dragging.id)
+    if (!drawing) return
+
+    if (drawing.points.length === 1) {
+      // Single-point drawing (arrow, text): move to new position
+      updateDrawing(dragging.id, [newPoint])
+    } else {
+      // Multi-point drawing: compute delta from first point and apply to all
+      const oldFirst = drawing.points[0]
+      const dt = new Date(newPoint.time).getTime() - new Date(oldFirst.time).getTime()
+      const dp = newPoint.price - oldFirst.price
+      const newPoints = drawing.points.map((p) => ({
+        time: new Date(new Date(p.time).getTime() + dt).toISOString(),
+        price: p.price + dp,
+      }))
+      updateDrawing(dragging.id, newPoints)
+    }
+  }, [dragging, pixelToPoint, updateDrawing])
+
+  const handleDragEnd = useCallback(() => {
+    if (dragging) setDragging(null)
+  }, [dragging])
 
   // Main chart with candles + overlay indicators + drawings
   useEffect(() => {
@@ -570,7 +625,11 @@ export default function Charts() {
         <div className="flex-1 relative">
           <div
             ref={chartRef}
-            className={`bg-slate-900 rounded-lg border border-slate-700 ${activeTool ? 'cursor-crosshair' : ''}`}
+            className={`bg-slate-900 rounded-lg border border-slate-700 ${activeTool ? 'cursor-crosshair' : selectedId ? 'cursor-grab' : ''} ${dragging ? '!cursor-grabbing' : ''}`}
+            onMouseDown={handleDragStart}
+            onMouseMove={handleDragMove}
+            onMouseUp={handleDragEnd}
+            onMouseLeave={handleDragEnd}
           />
           {/* Text input overlay */}
           {textInput.show && (

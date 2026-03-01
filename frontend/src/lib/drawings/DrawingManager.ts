@@ -16,14 +16,12 @@ export class DrawingManager {
 
   attach(_chart: IChartApi, series: ISeriesApi<SeriesType, Time>): void {
     this._series = series
-    // Re-attach existing primitives to the new series
     for (const primitive of this._primitives.values()) {
       series.attachPrimitive(primitive as ISeriesPrimitive<Time>)
     }
   }
 
   detach(): void {
-    // Primitives are auto-detached when chart.remove() is called
     this._series = null
   }
 
@@ -44,9 +42,13 @@ export class DrawingManager {
       }
     }
 
-    // Add new drawings
+    // Add new or update existing drawings
     for (const drawing of drawings) {
-      if (!this._primitives.has(drawing.id)) {
+      const existing = this._primitives.get(drawing.id)
+      if (existing) {
+        // Update the drawing reference so the primitive re-renders with new points
+        existing.drawing = drawing as never
+      } else {
         const primitive = this._createPrimitive(drawing)
         if (primitive) {
           this._primitives.set(drawing.id, primitive)

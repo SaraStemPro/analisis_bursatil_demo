@@ -22,45 +22,19 @@ export function drawArrow(
   x: number, y: number,
   direction: 'up' | 'down', size: number, color: string,
 ): void {
-  target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hpr, verticalPixelRatio: vpr }) => {
-    const bx = x * hpr
-    const by = y * vpr
-    const headH = size * 0.7 * vpr
-    const headW = size * 0.9 * hpr
-    const shaftH = size * 1.0 * vpr
-    const shaftW = size * 0.25 * hpr
-
+  target.useMediaCoordinateSpace(({ context: ctx }) => {
+    const fontSize = size * 2
+    ctx.font = `bold ${fontSize}px sans-serif`
+    ctx.textAlign = 'center'
     ctx.fillStyle = color
-    ctx.beginPath()
+
     if (direction === 'up') {
-      // Arrow pointing UP: head at top, shaft extends down
-      const tipY = by - 2 * vpr
-      // Head (triangle)
-      ctx.moveTo(bx, tipY)
-      ctx.lineTo(bx - headW / 2, tipY + headH)
-      ctx.lineTo(bx - shaftW / 2, tipY + headH)
-      // Shaft
-      ctx.lineTo(bx - shaftW / 2, tipY + headH + shaftH)
-      ctx.lineTo(bx + shaftW / 2, tipY + headH + shaftH)
-      ctx.lineTo(bx + shaftW / 2, tipY + headH)
-      // Head (right side)
-      ctx.lineTo(bx + headW / 2, tipY + headH)
+      ctx.textBaseline = 'top'
+      ctx.fillText('▲', x, y + 2)
     } else {
-      // Arrow pointing DOWN: head at bottom, shaft extends up
-      const tipY = by + 2 * vpr
-      // Head (triangle)
-      ctx.moveTo(bx, tipY)
-      ctx.lineTo(bx - headW / 2, tipY - headH)
-      ctx.lineTo(bx - shaftW / 2, tipY - headH)
-      // Shaft
-      ctx.lineTo(bx - shaftW / 2, tipY - headH - shaftH)
-      ctx.lineTo(bx + shaftW / 2, tipY - headH - shaftH)
-      ctx.lineTo(bx + shaftW / 2, tipY - headH)
-      // Head (right side)
-      ctx.lineTo(bx + headW / 2, tipY - headH)
+      ctx.textBaseline = 'bottom'
+      ctx.fillText('▼', x, y - 2)
     }
-    ctx.closePath()
-    ctx.fill()
   })
 }
 

@@ -26,6 +26,7 @@ interface DrawingStore {
 
   setTicker: (ticker: string) => void
   addDrawing: (drawing: Drawing) => void
+  updateDrawing: (id: string, points: DrawingPoint[]) => void
   removeDrawing: (id: string) => void
   clearAll: () => void
   selectTool: (tool: DrawingToolType | null) => void
@@ -52,6 +53,13 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
     const updated = [...drawings, drawing]
     save(ticker, updated)
     set({ drawings: updated, pendingPoints: [], activeTool: null, selectedId: null })
+  },
+
+  updateDrawing: (id, points) => {
+    const { ticker, drawings } = get()
+    const updated = drawings.map((d) => d.id === id ? { ...d, points } : d)
+    save(ticker, updated)
+    set({ drawings: updated })
   },
 
   removeDrawing: (id) => {
