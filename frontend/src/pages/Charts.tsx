@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts'
+import type { ISeriesApi, SeriesType, Time, MouseEventParams } from 'lightweight-charts'
 import { market, indicators } from '../api'
 import type { IndicatorDefinition, IndicatorRequest } from '../types'
+import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing } from '../types/drawings'
+import { requiredPoints, FIB_LEVELS, IMPULSE_LABELS, CORRECTIVE_LABELS } from '../types/drawings'
+import { useDrawingStore } from '../context/drawing-store'
+import { DrawingManager } from '../lib/drawings/DrawingManager'
+import DrawingToolbar from '../components/charts/DrawingToolbar'
 import { Search, Settings2, X } from 'lucide-react'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
@@ -13,6 +19,8 @@ const INDICATOR_COLORS = [
   '#f97316', '#a78bfa', '#fb7185', '#22d3ee', '#a3e635',
 ]
 
+const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
+
 export default function Charts() {
   const [ticker, setTicker] = useState('AAPL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -20,8 +28,40 @@ export default function Charts() {
   const [interval, setInterval] = useState('1d')
   const [activeIndicators, setActiveIndicators] = useState<IndicatorRequest[]>([])
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
+  const [arrowDirection, setArrowDirection] = useState<'up' | 'down'>('up')
+  const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
+
   const chartRef = useRef<HTMLDivElement>(null)
   const oscChartRef = useRef<HTMLDivElement>(null)
+  const chartInstanceRef = useRef<ReturnType<typeof createChart> | null>(null)
+  const candleSeriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null)
+  const drawingManagerRef = useRef(new DrawingManager())
+
+  // Drawing store
+  const drawingStore = useDrawingStore()
+  const {
+    drawings, activeTool, selectedId,
+    setTicker: setDrawingTicker, addDrawing, addPendingPoint,
+    resetInteraction, selectDrawing, removeDrawing, elliottWaveType,
+  } = drawingStore
+
+  // Sync ticker with drawing store
+  useEffect(() => { setDrawingTicker(ticker) }, [ticker, setDrawingTicker])
+
+  // Sync drawings with manager
+  useEffect(() => {
+    drawingManagerRef.current.syncDrawings(drawings)
+  }, [drawings])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') resetInteraction()
+      if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [resetInteraction, selectedId, removeDrawing])
 
   const { data: searchResults } = useQuery({
     queryKey: ['search', searchQuery],
@@ -56,7 +96,104 @@ export default function Charts() {
     [catalog],
   )
 
-  // Main chart with candles + overlay indicators
+  // Finalize drawing helper
+  const finalizeDrawing = useCallback((points: DrawingPoint[], toolType: string) => {
+    const color = DRAWING_COLORS[drawings.length % DRAWING_COLORS.length]
+    const id = crypto.randomUUID()
+
+    let drawing: Drawing
+    switch (toolType) {
+      case 'trendline':
+        drawing = { id, type: 'trendline', points, color, visible: true, lineWidth: 2 } as TrendlineDrawing
+        break
+      case 'arrow':
+        drawing = { id, type: 'arrow', points, color, visible: true, direction: arrowDirection } as ArrowDrawing
+        break
+      case 'text':
+        return // text finalization handled separately after text input
+      case 'fibonacci':
+        drawing = { id, type: 'fibonacci', points, color, visible: true, levels: FIB_LEVELS } as FibonacciDrawing
+        break
+      case 'elliott': {
+        const labels = elliottWaveType === 'impulse' ? IMPULSE_LABELS : CORRECTIVE_LABELS
+        drawing = { id, type: 'elliott', points, color, visible: true, waveType: elliottWaveType, labels: labels.slice(0, points.length) } as ElliottWaveDrawing
+        break
+      }
+      default:
+        return
+    }
+    addDrawing(drawing)
+  }, [drawings.length, arrowDirection, elliottWaveType, addDrawing])
+
+  // Handle chart click for drawing
+  const handleChartClick = useCallback((params: MouseEventParams<Time>) => {
+    const store = useDrawingStore.getState()
+
+    // If no tool active, check for hit-test selection
+    if (!store.activeTool) {
+      const hoveredId = params.hoveredObjectId as string | undefined
+      if (hoveredId) {
+        selectDrawing(hoveredId)
+      } else {
+        selectDrawing(null)
+      }
+      return
+    }
+
+    // Get coordinates
+    if (!params.point || !candleSeriesRef.current) return
+    const time = params.time as string | undefined
+    if (!time) return
+    const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
+    if (price === null) return
+
+    const point: DrawingPoint = { time, price: price as number }
+
+    // For text tool, show input overlay
+    if (store.activeTool === 'text') {
+      setTextInput({ show: true, point })
+      return
+    }
+
+    const newPending = [...store.pendingPoints, point]
+    addPendingPoint(point)
+
+    const required = requiredPoints(store.activeTool)
+    if (required !== null && newPending.length >= required) {
+      finalizeDrawing(newPending, store.activeTool)
+    }
+  }, [selectDrawing, addPendingPoint, finalizeDrawing])
+
+  // Handle double-click for Elliott wave completion
+  const handleChartDblClick = useCallback((_params: MouseEventParams<Time>) => {
+    const store = useDrawingStore.getState()
+    if (store.activeTool === 'elliott' && store.pendingPoints.length >= 3) {
+      finalizeDrawing(store.pendingPoints, 'elliott')
+    }
+  }, [finalizeDrawing])
+
+  // Finalize text drawing
+  const finalizeText = (text: string) => {
+    if (!textInput.point || !text.trim()) {
+      setTextInput({ show: false, point: null })
+      resetInteraction()
+      return
+    }
+    const color = DRAWING_COLORS[drawings.length % DRAWING_COLORS.length]
+    const drawing: TextDrawing = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      points: [textInput.point],
+      color,
+      visible: true,
+      text: text.trim(),
+      fontSize: 13,
+    }
+    addDrawing(drawing)
+    setTextInput({ show: false, point: null })
+  }
+
+  // Main chart with candles + overlay indicators + drawings
   useEffect(() => {
     if (!chartRef.current || !history?.data.length) return
 
@@ -74,6 +211,9 @@ export default function Charts() {
       borderDownColor: '#ef4444', borderUpColor: '#10b981',
       wickDownColor: '#ef4444', wickUpColor: '#10b981',
     })
+
+    chartInstanceRef.current = chart
+    candleSeriesRef.current = candleSeries as ISeriesApi<SeriesType, Time>
 
     const dates = history.data.map((d) => d.date.split('T')[0])
 
@@ -97,7 +237,7 @@ export default function Charts() {
       }))
     )
 
-    // Draw overlay indicators on the main chart
+    // Draw overlay indicators
     if (indicatorData) {
       let colorIdx = 0
       indicatorData.indicators.forEach((ind) => {
@@ -121,14 +261,26 @@ export default function Charts() {
       })
     }
 
+    // Attach drawing manager
+    drawingManagerRef.current.attach(chart, candleSeries as ISeriesApi<SeriesType, Time>)
+    drawingManagerRef.current.syncDrawings(useDrawingStore.getState().drawings)
+
+    // Drawing click handlers
+    chart.subscribeClick(handleChartClick)
+    chart.subscribeDblClick(handleChartDblClick)
+
     chart.timeScale().fitContent()
 
     const handleResize = () => {
       if (chartRef.current) chart.applyOptions({ width: chartRef.current.clientWidth })
     }
     window.addEventListener('resize', handleResize)
-    return () => { window.removeEventListener('resize', handleResize); chart.remove() }
-  }, [history, indicatorData, getIndicatorDef])
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      drawingManagerRef.current.detach()
+      chart.remove()
+    }
+  }, [history, indicatorData, getIndicatorDef, handleChartClick, handleChartDblClick])
 
   // Oscillator chart (RSI, MACD, STOCH, ATR, OBV)
   const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
@@ -262,6 +414,24 @@ export default function Charts() {
             </div>
           </div>
         )}
+
+        {/* Arrow direction toggle */}
+        {activeTool === 'arrow' && (
+          <div className="flex gap-1 items-center">
+            <button
+              onClick={() => setArrowDirection('up')}
+              className={`px-2 py-1 rounded text-xs ${arrowDirection === 'up' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+            >
+              Arriba
+            </button>
+            <button
+              onClick={() => setArrowDirection('down')}
+              className={`px-2 py-1 rounded text-xs ${arrowDirection === 'down' ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+            >
+              Abajo
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Period + Interval selectors */}
@@ -287,8 +457,31 @@ export default function Charts() {
         ))}
       </div>
 
-      {/* Main chart */}
-      <div ref={chartRef} className="bg-slate-900 rounded-lg border border-slate-700" />
+      {/* Main chart with toolbar */}
+      <div className="flex gap-2">
+        <DrawingToolbar />
+        <div className="flex-1 relative">
+          <div
+            ref={chartRef}
+            className={`bg-slate-900 rounded-lg border border-slate-700 ${activeTool ? 'cursor-crosshair' : ''}`}
+          />
+          {/* Text input overlay */}
+          {textInput.show && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+              <input
+                autoFocus
+                placeholder="Escribe tu nota..."
+                className="bg-slate-800 border border-emerald-500 text-white px-3 py-2 rounded text-sm w-60 focus:outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') finalizeText(e.currentTarget.value)
+                  if (e.key === 'Escape') { setTextInput({ show: false, point: null }); resetInteraction() }
+                }}
+                onBlur={(e) => finalizeText(e.currentTarget.value)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Oscillator chart */}
       {oscillatorIndicators.length > 0 && (
