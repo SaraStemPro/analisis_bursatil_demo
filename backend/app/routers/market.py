@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 
-from ..schemas.market import HistoryResponse, QuoteResponse, TickerSearchResult
+from ..schemas.market import HistoryQuery, HistoryResponse, QuoteResponse, TickerSearchResult
 from ..services import market_service
 
 router = APIRouter(prefix="/api/market", tags=["market"])
@@ -28,4 +28,10 @@ def history(
         pattern=r"^(1m|5m|15m|30m|1h|1d|1wk|1mo)$",
     ),
 ):
+    # Validate period-interval combination
+    try:
+        HistoryQuery(period=period, interval=interval)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     return market_service.get_history(ticker, period, interval)

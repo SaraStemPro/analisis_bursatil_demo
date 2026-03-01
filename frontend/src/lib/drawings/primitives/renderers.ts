@@ -27,22 +27,27 @@ export function drawArrow(
     ctx.beginPath()
     const h = size
     const w = size * 0.7
+    // Offset so arrow doesn't overlap the candle body
+    const oy = direction === 'up' ? h * 0.5 : -h * 0.5
+    const cy = y + oy
     if (direction === 'up') {
-      ctx.moveTo(x, y - h)
-      ctx.lineTo(x - w, y)
-      ctx.lineTo(x - w / 3, y)
-      ctx.lineTo(x - w / 3, y + h * 0.4)
-      ctx.lineTo(x + w / 3, y + h * 0.4)
-      ctx.lineTo(x + w / 3, y)
-      ctx.lineTo(x + w, y)
+      // Tip at top, tail at bottom
+      ctx.moveTo(x, cy - h)
+      ctx.lineTo(x - w, cy)
+      ctx.lineTo(x - w / 3, cy)
+      ctx.lineTo(x - w / 3, cy + h * 0.4)
+      ctx.lineTo(x + w / 3, cy + h * 0.4)
+      ctx.lineTo(x + w / 3, cy)
+      ctx.lineTo(x + w, cy)
     } else {
-      ctx.moveTo(x, y + h)
-      ctx.lineTo(x - w, y)
-      ctx.lineTo(x - w / 3, y)
-      ctx.lineTo(x - w / 3, y - h * 0.4)
-      ctx.lineTo(x + w / 3, y - h * 0.4)
-      ctx.lineTo(x + w / 3, y)
-      ctx.lineTo(x + w, y)
+      // Tip at bottom, tail at top
+      ctx.moveTo(x, cy + h)
+      ctx.lineTo(x - w, cy)
+      ctx.lineTo(x - w / 3, cy)
+      ctx.lineTo(x - w / 3, cy - h * 0.4)
+      ctx.lineTo(x + w / 3, cy - h * 0.4)
+      ctx.lineTo(x + w / 3, cy)
+      ctx.lineTo(x + w, cy)
     }
     ctx.closePath()
     ctx.fill()

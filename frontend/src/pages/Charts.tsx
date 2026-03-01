@@ -14,7 +14,19 @@ import DrawingToolbar from '../components/charts/DrawingToolbar'
 import { Search, Settings2, X, CandlestickChart } from 'lucide-react'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
-const INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
+const ALL_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
+
+// Yahoo Finance max period (days) per intraday interval
+const MAX_PERIOD_DAYS: Record<string, number> = { '1m': 7, '5m': 60, '15m': 60, '1h': 730 }
+const PERIOD_DAYS: Record<string, number> = { '1d': 1, '5d': 5, '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365, '5y': 1825, 'max': 99999 }
+
+function validIntervals(period: string): string[] {
+  const pDays = PERIOD_DAYS[period] ?? 99999
+  return ALL_INTERVALS.filter((iv) => {
+    const maxDays = MAX_PERIOD_DAYS[iv]
+    return maxDays === undefined || pDays <= maxDays
+  })
+}
 
 const INDICATOR_COLORS = [
   '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
@@ -483,14 +495,19 @@ export default function Charts() {
         {PERIODS.map((p) => (
           <button
             key={p}
-            onClick={() => setPeriod(p)}
+            onClick={() => {
+              setPeriod(p)
+              // Auto-adjust interval if current one is invalid for new period
+              const valid = validIntervals(p)
+              if (!valid.includes(interval)) setInterval(valid.includes('1d') ? '1d' : valid[valid.length - 1])
+            }}
             className={`px-3 py-1 rounded text-sm ${period === p ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
           >
             {p.toUpperCase()}
           </button>
         ))}
         <span className="text-slate-600 mx-1">|</span>
-        {INTERVALS.map((i) => (
+        {validIntervals(period).map((i) => (
           <button
             key={i}
             onClick={() => setInterval(i)}
@@ -513,7 +530,7 @@ export default function Charts() {
           Patrones de velas
         </button>
         {showPatterns && (
-          <span className="text-xs text-slate-400">Envolvente + Marubozu</span>
+          <span className="text-xs text-slate-400">EA/EB Envolvente · MA/MB Marubozu · LLA/LLB Long Line</span>
         )}
       </div>
 

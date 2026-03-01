@@ -3,7 +3,7 @@ import type { OHLCV } from '../types'
 export interface PatternMatch {
   index: number
   date: string
-  type: 'bullish_engulfing' | 'bearish_engulfing' | 'bullish_marubozu' | 'bearish_marubozu'
+  type: 'bullish_engulfing' | 'bearish_engulfing' | 'bullish_marubozu' | 'bearish_marubozu' | 'bullish_longline' | 'bearish_longline'
   label: string
   color: string
   position: 'aboveBar' | 'belowBar'
@@ -25,10 +25,19 @@ function isBearish(c: OHLCV): boolean {
   return c.close < c.open
 }
 
+function avgBodySize(data: OHLCV[], end: number, lookback: number): number {
+  const start = Math.max(0, end - lookback)
+  let sum = 0
+  let count = 0
+  for (let j = start; j < end; j++) {
+    sum += bodySize(data[j])
+    count++
+  }
+  return count > 0 ? sum / count : 0
+}
+
 /**
  * Engulfing: la segunda vela envuelve completamente el cuerpo de la primera.
- * Bullish engulfing: vela 1 bajista, vela 2 alcista y cuerpo 2 envuelve cuerpo 1.
- * Bearish engulfing: vela 1 alcista, vela 2 bajista y cuerpo 2 envuelve cuerpo 1.
  */
 function detectEngulfing(data: OHLCV[]): PatternMatch[] {
   const results: PatternMatch[] = []
@@ -36,35 +45,27 @@ function detectEngulfing(data: OHLCV[]): PatternMatch[] {
     const prev = data[i - 1]
     const curr = data[i]
 
-    // Bullish engulfing
     if (
       isBearish(prev) && isBullish(curr) &&
       curr.open <= prev.close && curr.close >= prev.open &&
       bodySize(curr) > bodySize(prev)
     ) {
       results.push({
-        index: i,
-        date: curr.date,
-        type: 'bullish_engulfing',
-        label: 'Envolvente alcista',
-        color: '#10b981',
-        position: 'belowBar',
+        index: i, date: curr.date,
+        type: 'bullish_engulfing', label: 'EA',
+        color: '#10b981', position: 'belowBar',
       })
     }
 
-    // Bearish engulfing
     if (
       isBullish(prev) && isBearish(curr) &&
       curr.open >= prev.close && curr.close <= prev.open &&
       bodySize(curr) > bodySize(prev)
     ) {
       results.push({
-        index: i,
-        date: curr.date,
-        type: 'bearish_engulfing',
-        label: 'Envolvente bajista',
-        color: '#ef4444',
-        position: 'aboveBar',
+        index: i, date: curr.date,
+        type: 'bearish_engulfing', label: 'EB',
+        color: '#ef4444', position: 'aboveBar',
       })
     }
   }
@@ -72,55 +73,71 @@ function detectEngulfing(data: OHLCV[]): PatternMatch[] {
 }
 
 /**
- * Marubozu / Long Line: vela con cuerpo grande y mechas muy pequeñas.
- * El cuerpo representa al menos el 90% del rango total.
- * Además, el cuerpo debe ser significativo respecto al rango medio de las últimas 20 velas.
+ * Marubozu: vela con cuerpo >= 95% del rango total y cuerpo significativo.
+ * Prácticamente sin mechas.
  */
 function detectMarubozu(data: OHLCV[]): PatternMatch[] {
   const results: PatternMatch[] = []
-  const lookback = 20
-
   for (let i = 0; i < data.length; i++) {
     const c = data[i]
     const range = totalRange(c)
     if (range === 0) continue
 
     const body = bodySize(c)
-    const bodyRatio = body / range
+    if (body / range < 0.95) continue
 
-    // Body must be >= 90% of total range
-    if (bodyRatio < 0.9) continue
-
-    // Body must be significant (> 1.5x average body of last N candles)
-    const start = Math.max(0, i - lookback)
-    let avgBody = 0
-    let count = 0
-    for (let j = start; j < i; j++) {
-      avgBody += bodySize(data[j])
-      count++
-    }
-    if (count > 0) {
-      avgBody /= count
-      if (body < avgBody * 1.5) continue
-    }
+    const avg = avgBodySize(data, i, 20)
+    if (avg > 0 && body < avg * 1.5) continue
 
     if (isBullish(c)) {
       results.push({
-        index: i,
-        date: c.date,
-        type: 'bullish_marubozu',
-        label: 'Marubozu alcista',
-        color: '#10b981',
-        position: 'belowBar',
+        index: i, date: c.date,
+        type: 'bullish_marubozu', label: 'MA',
+        color: '#10b981', position: 'belowBar',
       })
     } else if (isBearish(c)) {
       results.push({
-        index: i,
-        date: c.date,
-        type: 'bearish_marubozu',
-        label: 'Marubozu bajista',
-        color: '#ef4444',
-        position: 'aboveBar',
+        index: i, date: c.date,
+        type: 'bearish_marubozu', label: 'MB',
+        color: '#ef4444', position: 'aboveBar',
+      })
+    }
+  }
+  return results
+}
+
+/**
+ * Long Line: vela con cuerpo grande (>= 70% del rango) y cuerpo significativo,
+ * pero con mechas más visibles que el marubozu.
+ * Se excluyen las velas que ya son marubozu (>= 95%).
+ */
+function detectLongLine(data: OHLCV[]): PatternMatch[] {
+  const results: PatternMatch[] = []
+  for (let i = 0; i < data.length; i++) {
+    const c = data[i]
+    const range = totalRange(c)
+    if (range === 0) continue
+
+    const body = bodySize(c)
+    const ratio = body / range
+
+    // Long line: 70%-95% body ratio (above 95% is marubozu)
+    if (ratio < 0.70 || ratio >= 0.95) continue
+
+    const avg = avgBodySize(data, i, 20)
+    if (avg > 0 && body < avg * 1.5) continue
+
+    if (isBullish(c)) {
+      results.push({
+        index: i, date: c.date,
+        type: 'bullish_longline', label: 'LLA',
+        color: '#10b981', position: 'belowBar',
+      })
+    } else if (isBearish(c)) {
+      results.push({
+        index: i, date: c.date,
+        type: 'bearish_longline', label: 'LLB',
+        color: '#ef4444', position: 'aboveBar',
       })
     }
   }
@@ -129,6 +146,6 @@ function detectMarubozu(data: OHLCV[]): PatternMatch[] {
 
 export function detectPatterns(data: OHLCV[]): PatternMatch[] {
   if (data.length < 2) return []
-  return [...detectEngulfing(data), ...detectMarubozu(data)]
+  return [...detectEngulfing(data), ...detectMarubozu(data), ...detectLongLine(data)]
     .sort((a, b) => a.index - b.index)
 }
