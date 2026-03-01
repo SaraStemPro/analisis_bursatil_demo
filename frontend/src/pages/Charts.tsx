@@ -52,6 +52,7 @@ export default function Charts() {
   const [period, setPeriod] = useState('3mo')
   const [interval, setInterval] = useState('1d')
   const [activeIndicators, setActiveIndicators] = useState<IndicatorRequest[]>([])
+  const [indicatorColors, setIndicatorColors] = useState<Record<string, string>>({})
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
   const [arrowDirection, setArrowDirection] = useState<'up' | 'down'>('up')
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
@@ -123,6 +124,11 @@ export default function Charts() {
   const getIndicatorDef = useCallback(
     (name: string) => catalog?.indicators.find((i) => i.name === name),
     [catalog],
+  )
+
+  const getIndicatorColor = useCallback(
+    (name: string, idx: number) => indicatorColors[name] ?? INDICATOR_COLORS[idx % INDICATOR_COLORS.length],
+    [indicatorColors],
   )
 
   // Finalize drawing helper
@@ -270,18 +276,16 @@ export default function Charts() {
       }))
     )
 
-    // Draw overlay indicators — use same color index as the indicator cards
+    // Draw overlay indicators — use same color as the indicator cards
     if (indicatorData) {
       indicatorData.indicators.forEach((ind) => {
         const def = getIndicatorDef(ind.name)
         if (!def?.overlay) return
 
-        // Match color to the activeIndicators index (same as cards)
         const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
-        const baseColor = INDICATOR_COLORS[(aiIdx >= 0 ? aiIdx : 0) % INDICATOR_COLORS.length]
+        const baseColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
 
         Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
-          // Slightly vary color for multi-series indicators (e.g. BBANDS upper/middle/lower)
           const color = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
           const lineSeries = chart.addSeries(LineSeries, {
             color,
@@ -351,7 +355,7 @@ export default function Charts() {
       drawingManagerRef.current.detach()
       chart.remove()
     }
-  }, [history, indicatorData, interval, showPatterns, getIndicatorDef, handleChartClick, handleChartDblClick])
+  }, [history, indicatorData, interval, showPatterns, getIndicatorDef, getIndicatorColor, handleChartClick, handleChartDblClick])
 
   // Oscillator chart (RSI, MACD, STOCH, ATR, OBV)
   const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
@@ -376,7 +380,7 @@ export default function Charts() {
 
     oscillatorIndicators.forEach((ind) => {
       const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
-      const baseColor = INDICATOR_COLORS[(aiIdx >= 0 ? aiIdx : 0) % INDICATOR_COLORS.length]
+      const baseColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
 
       Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
         const color = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
@@ -597,14 +601,21 @@ export default function Charts() {
           {activeIndicators.map((ind, idx) => {
             const def = getIndicatorDef(ind.name)
             const indData = indicatorData?.indicators.find((d) => d.name === ind.name)
-            const color = INDICATOR_COLORS[idx % INDICATOR_COLORS.length]
+            const color = getIndicatorColor(ind.name, idx)
             const isEditing = editingIndicator === ind.name
 
             return (
               <div key={ind.name} className="bg-slate-900 rounded-lg p-3 border border-slate-700">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                    <label className="relative w-3 h-3 rounded-full cursor-pointer" style={{ backgroundColor: color }}>
+                      <input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setIndicatorColors((prev) => ({ ...prev, [ind.name]: e.target.value }))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                    </label>
                     <span className="font-medium text-sm">{def?.display_name ?? ind.name}</span>
                     {def && !def.overlay && <span className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded">osc</span>}
                   </div>

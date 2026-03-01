@@ -22,23 +22,42 @@ export function drawArrow(
   x: number, y: number,
   direction: 'up' | 'down', size: number, color: string,
 ): void {
-  target.useMediaCoordinateSpace(({ context: ctx }) => {
+  target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hpr, verticalPixelRatio: vpr }) => {
+    const bx = x * hpr
+    const by = y * vpr
+    const headH = size * 0.7 * vpr
+    const headW = size * 0.9 * hpr
+    const shaftH = size * 1.0 * vpr
+    const shaftW = size * 0.25 * hpr
+
     ctx.fillStyle = color
     ctx.beginPath()
-    const h = size * 1.4
-    const w = size * 0.8
     if (direction === 'up') {
-      // Triangle pointing up, placed below the point
-      const top = y + 4
-      ctx.moveTo(x, top)
-      ctx.lineTo(x - w / 2, top + h)
-      ctx.lineTo(x + w / 2, top + h)
+      // Arrow pointing UP: head at top, shaft extends down
+      const tipY = by - 2 * vpr
+      // Head (triangle)
+      ctx.moveTo(bx, tipY)
+      ctx.lineTo(bx - headW / 2, tipY + headH)
+      ctx.lineTo(bx - shaftW / 2, tipY + headH)
+      // Shaft
+      ctx.lineTo(bx - shaftW / 2, tipY + headH + shaftH)
+      ctx.lineTo(bx + shaftW / 2, tipY + headH + shaftH)
+      ctx.lineTo(bx + shaftW / 2, tipY + headH)
+      // Head (right side)
+      ctx.lineTo(bx + headW / 2, tipY + headH)
     } else {
-      // Triangle pointing down, placed above the point
-      const bot = y - 4
-      ctx.moveTo(x, bot)
-      ctx.lineTo(x - w / 2, bot - h)
-      ctx.lineTo(x + w / 2, bot - h)
+      // Arrow pointing DOWN: head at bottom, shaft extends up
+      const tipY = by + 2 * vpr
+      // Head (triangle)
+      ctx.moveTo(bx, tipY)
+      ctx.lineTo(bx - headW / 2, tipY - headH)
+      ctx.lineTo(bx - shaftW / 2, tipY - headH)
+      // Shaft
+      ctx.lineTo(bx - shaftW / 2, tipY - headH - shaftH)
+      ctx.lineTo(bx + shaftW / 2, tipY - headH - shaftH)
+      ctx.lineTo(bx + shaftW / 2, tipY - headH)
+      // Head (right side)
+      ctx.lineTo(bx + headW / 2, tipY - headH)
     }
     ctx.closePath()
     ctx.fill()
