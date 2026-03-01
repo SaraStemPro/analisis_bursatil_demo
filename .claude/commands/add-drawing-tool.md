@@ -12,4 +12,7 @@ Pasos:
 6. Añade soporte de preview en `frontend/src/lib/drawings/primitives/PreviewPrimitive.ts`
 7. Añade el botón en `frontend/src/components/charts/DrawingToolbar.tsx`
 8. Añade el case en finalizeDrawing() de `frontend/src/pages/Charts.tsx`
-9. Verifica que compila con `npx tsc --noEmit`
+   - Nota: finalizeDrawing lee estado del store con `useDrawingStore.getState()`
+   - Los callbacks de click usan refs estables para evitar recrear el chart
+9. Si la herramienta necesita estado extra (como dirección de flecha), añádelo al Zustand store en `drawing-store.ts`
+10. Verifica que compila con `npx tsc --noEmit`
