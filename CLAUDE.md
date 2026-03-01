@@ -12,7 +12,7 @@ Toda la especificación funcional está en `SPEC.md`. Consultarla siempre antes 
 - **Python 3.12+**, FastAPI 0.115+
 - **ORM**: SQLAlchemy 2.0+ con SQLite (dev) / PostgreSQL (prod)
 - **Validación**: Pydantic 2.0+ (schemas en `backend/app/schemas/`)
-- **Auth**: JWT con python-jose, passwords con passlib[bcrypt]
+- **Auth**: JWT con python-jose, passwords con bcrypt (directo, sin passlib)
 - **Datos bursátiles**: yfinance
 - **Indicadores técnicos**: pandas-ta
 - **RAG (Tutor IA)**: LangChain + FAISS + sentence-transformers + pdfplumber
@@ -21,7 +21,7 @@ Toda la especificación funcional está en `SPEC.md`. Consultarla siempre antes 
 ### Frontend (`frontend/`)
 - **React 18+** con TypeScript strict, Vite 5+
 - **Estilos**: TailwindCSS 3+
-- **Gráficos**: Lightweight Charts (TradingView) 4+
+- **Gráficos**: Lightweight Charts (TradingView) 5+ (Primitives API para dibujos)
 - **Data fetching**: TanStack Query 5+
 - **Routing**: React Router 6+
 - **Formularios**: React Hook Form
@@ -76,7 +76,11 @@ backend/app/schemas/
 5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset)
 6. ✅ Backtesting (motor completo, 6 templates, constructor, simulación, métricas, comparación)
 7. ✅ Tutor IA (RAG: PDF upload, chunking, FAISS/keyword search, chat con LLM, FAQ)
-8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts)
+8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
+   - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott) con Primitives API
+   - Preview en vivo mientras se dibuja
+   - Detección de patrones de velas (envolvente + marubozu)
+   - Indicadores overlay + oscilador con editor de parámetros
 9. Pulido (UI/UX, ranking, deploy)
 
 ## API — 34 rutas implementadas

@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts'
-import type { ISeriesApi, SeriesType, Time, MouseEventParams } from 'lightweight-charts'
+import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts'
+import type { ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams } from 'lightweight-charts'
 import { market, indicators } from '../api'
 import type { IndicatorDefinition, IndicatorRequest } from '../types'
 import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing } from '../types/drawings'
 import { requiredPoints, FIB_LEVELS, IMPULSE_LABELS, CORRECTIVE_LABELS } from '../types/drawings'
 import { useDrawingStore } from '../context/drawing-store'
 import { DrawingManager } from '../lib/drawings/DrawingManager'
+import { PreviewPrimitive } from '../lib/drawings/primitives/PreviewPrimitive'
+import { detectPatterns } from '../lib/patterns'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
-import { Search, Settings2, X } from 'lucide-react'
+import { Search, Settings2, X, CandlestickChart } from 'lucide-react'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
 const INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
@@ -31,11 +33,15 @@ export default function Charts() {
   const [arrowDirection, setArrowDirection] = useState<'up' | 'down'>('up')
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
 
+  const [showPatterns, setShowPatterns] = useState(false)
+
   const chartRef = useRef<HTMLDivElement>(null)
   const oscChartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<ReturnType<typeof createChart> | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null)
   const drawingManagerRef = useRef(new DrawingManager())
+  const previewRef = useRef(new PreviewPrimitive())
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
 
   // Drawing store
   const drawingStore = useDrawingStore()
@@ -56,7 +62,7 @@ export default function Charts() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') resetInteraction()
+      if (e.key === 'Escape') { resetInteraction(); previewRef.current.clear() }
       if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
     }
     window.addEventListener('keydown', handleKey)
@@ -123,6 +129,7 @@ export default function Charts() {
         return
     }
     addDrawing(drawing)
+    previewRef.current.clear()
   }, [drawings.length, arrowDirection, elliottWaveType, addDrawing])
 
   // Handle chart click for drawing
@@ -152,6 +159,7 @@ export default function Charts() {
     // For text tool, show input overlay
     if (store.activeTool === 'text') {
       setTextInput({ show: true, point })
+      previewRef.current.clear()
       return
     }
 
@@ -169,6 +177,7 @@ export default function Charts() {
     const store = useDrawingStore.getState()
     if (store.activeTool === 'elliott' && store.pendingPoints.length >= 3) {
       finalizeDrawing(store.pendingPoints, 'elliott')
+      previewRef.current.clear()
     }
   }, [finalizeDrawing])
 
@@ -262,12 +271,41 @@ export default function Charts() {
     }
 
     // Attach drawing manager
-    drawingManagerRef.current.attach(chart, candleSeries as ISeriesApi<SeriesType, Time>)
+    const seriesRef = candleSeries as ISeriesApi<SeriesType, Time>
+    drawingManagerRef.current.attach(chart, seriesRef)
     drawingManagerRef.current.syncDrawings(useDrawingStore.getState().drawings)
+
+    // Attach preview primitive
+    seriesRef.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
 
     // Drawing click handlers
     chart.subscribeClick(handleChartClick)
     chart.subscribeDblClick(handleChartDblClick)
+
+    // Crosshair move for live preview
+    const handleCrosshairMove = (params: MouseEventParams<Time>) => {
+      const store = useDrawingStore.getState()
+      if (!store.activeTool || store.pendingPoints.length === 0 || !params.point) {
+        previewRef.current.clear()
+        return
+      }
+      const anchor = store.pendingPoints[store.pendingPoints.length - 1]
+      previewRef.current.update(store.activeTool, anchor, params.point.x, params.point.y)
+    }
+    chart.subscribeCrosshairMove(handleCrosshairMove)
+
+    // Pattern markers
+    if (showPatterns && history.data.length >= 2) {
+      const patterns = detectPatterns(history.data)
+      const markers = patterns.map((p) => ({
+        time: p.date.split('T')[0] as unknown as Time,
+        position: p.position,
+        shape: (p.position === 'belowBar' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
+        color: p.color,
+        text: p.label,
+      }))
+      markersPluginRef.current = createSeriesMarkers(seriesRef, markers)
+    }
 
     chart.timeScale().fitContent()
 
@@ -277,10 +315,16 @@ export default function Charts() {
     window.addEventListener('resize', handleResize)
     return () => {
       window.removeEventListener('resize', handleResize)
+      chart.unsubscribeCrosshairMove(handleCrosshairMove)
+      if (markersPluginRef.current) {
+        markersPluginRef.current.detach()
+        markersPluginRef.current = null
+      }
+      previewRef.current.clear()
       drawingManagerRef.current.detach()
       chart.remove()
     }
-  }, [history, indicatorData, getIndicatorDef, handleChartClick, handleChartDblClick])
+  }, [history, indicatorData, showPatterns, getIndicatorDef, handleChartClick, handleChartDblClick])
 
   // Oscillator chart (RSI, MACD, STOCH, ATR, OBV)
   const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
@@ -455,6 +499,22 @@ export default function Charts() {
             {i}
           </button>
         ))}
+      </div>
+
+      {/* Patterns toggle */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setShowPatterns((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
+            showPatterns ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          <CandlestickChart size={14} />
+          Patrones de velas
+        </button>
+        {showPatterns && (
+          <span className="text-xs text-slate-400">Envolvente + Marubozu</span>
+        )}
       </div>
 
       {/* Main chart with toolbar */}
