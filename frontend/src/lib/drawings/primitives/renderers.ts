@@ -25,29 +25,20 @@ export function drawArrow(
   target.useMediaCoordinateSpace(({ context: ctx }) => {
     ctx.fillStyle = color
     ctx.beginPath()
-    const h = size
-    const w = size * 0.7
-    // Offset so arrow doesn't overlap the candle body
-    const oy = direction === 'up' ? h * 0.5 : -h * 0.5
-    const cy = y + oy
+    const h = size * 1.4
+    const w = size * 0.8
     if (direction === 'up') {
-      // Tip at top, tail at bottom
-      ctx.moveTo(x, cy - h)
-      ctx.lineTo(x - w, cy)
-      ctx.lineTo(x - w / 3, cy)
-      ctx.lineTo(x - w / 3, cy + h * 0.4)
-      ctx.lineTo(x + w / 3, cy + h * 0.4)
-      ctx.lineTo(x + w / 3, cy)
-      ctx.lineTo(x + w, cy)
+      // Triangle pointing up, placed below the point
+      const top = y + 4
+      ctx.moveTo(x, top)
+      ctx.lineTo(x - w / 2, top + h)
+      ctx.lineTo(x + w / 2, top + h)
     } else {
-      // Tip at bottom, tail at top
-      ctx.moveTo(x, cy + h)
-      ctx.lineTo(x - w, cy)
-      ctx.lineTo(x - w / 3, cy)
-      ctx.lineTo(x - w / 3, cy - h * 0.4)
-      ctx.lineTo(x + w / 3, cy - h * 0.4)
-      ctx.lineTo(x + w / 3, cy)
-      ctx.lineTo(x + w, cy)
+      // Triangle pointing down, placed above the point
+      const bot = y - 4
+      ctx.moveTo(x, bot)
+      ctx.lineTo(x - w / 2, bot - h)
+      ctx.lineTo(x + w / 2, bot - h)
     }
     ctx.closePath()
     ctx.fill()

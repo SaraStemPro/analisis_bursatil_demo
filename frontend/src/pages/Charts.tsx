@@ -229,12 +229,13 @@ export default function Charts() {
   useEffect(() => {
     if (!chartRef.current || !history?.data.length) return
 
+    const isIntraday = INTRADAY_INTERVALS.has(interval)
     const chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#0f172a' }, textColor: '#94a3b8' },
       grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
       width: chartRef.current.clientWidth,
       height: 450,
-      timeScale: { borderColor: '#334155' },
+      timeScale: { borderColor: '#334155', timeVisible: isIntraday, secondsVisible: false },
       rightPriceScale: { borderColor: '#334155' },
     })
 
@@ -269,16 +270,19 @@ export default function Charts() {
       }))
     )
 
-    // Draw overlay indicators
+    // Draw overlay indicators — use same color index as the indicator cards
     if (indicatorData) {
-      let colorIdx = 0
       indicatorData.indicators.forEach((ind) => {
         const def = getIndicatorDef(ind.name)
         if (!def?.overlay) return
 
-        Object.entries(ind.data).forEach(([seriesKey, values]) => {
-          const color = INDICATOR_COLORS[colorIdx % INDICATOR_COLORS.length]
-          colorIdx++
+        // Match color to the activeIndicators index (same as cards)
+        const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
+        const baseColor = INDICATOR_COLORS[(aiIdx >= 0 ? aiIdx : 0) % INDICATOR_COLORS.length]
+
+        Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
+          // Slightly vary color for multi-series indicators (e.g. BBANDS upper/middle/lower)
+          const color = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
           const lineSeries = chart.addSeries(LineSeries, {
             color,
             lineWidth: 2,
@@ -358,22 +362,24 @@ export default function Charts() {
   useEffect(() => {
     if (!oscChartRef.current || !history?.data.length || oscillatorIndicators.length === 0) return
 
+    const isIntradayOsc = INTRADAY_INTERVALS.has(interval)
     const chart = createChart(oscChartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#0f172a' }, textColor: '#94a3b8' },
       grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
       width: oscChartRef.current.clientWidth,
       height: 200,
-      timeScale: { borderColor: '#334155' },
+      timeScale: { borderColor: '#334155', timeVisible: isIntradayOsc, secondsVisible: false },
       rightPriceScale: { borderColor: '#334155' },
     })
 
     const oscTimes = history.data.map((d) => toChartTime(d.date, interval))
-    let colorIdx = 0
 
     oscillatorIndicators.forEach((ind) => {
-      Object.entries(ind.data).forEach(([seriesKey, values]) => {
-        const color = INDICATOR_COLORS[colorIdx % INDICATOR_COLORS.length]
-        colorIdx++
+      const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
+      const baseColor = INDICATOR_COLORS[(aiIdx >= 0 ? aiIdx : 0) % INDICATOR_COLORS.length]
+
+      Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
+        const color = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
 
         if (ind.name === 'MACD' && seriesKey === 'histogram') {
           const histSeries = chart.addSeries(HistogramSeries, {
