@@ -14,7 +14,7 @@ Toda la especificación funcional está en `SPEC.md`. Consultarla siempre antes 
 - **Validación**: Pydantic 2.0+ (schemas en `backend/app/schemas/`)
 - **Auth**: JWT con python-jose, passwords con bcrypt (directo, sin passlib)
 - **Datos bursátiles**: yfinance
-- **Indicadores técnicos**: pandas-ta
+- **Indicadores técnicos**: pandas + numpy (cálculos nativos, sin pandas-ta)
 - **RAG (Tutor IA)**: LangChain + FAISS + sentence-transformers + pdfplumber
 - **Tests**: pytest + httpx
 
