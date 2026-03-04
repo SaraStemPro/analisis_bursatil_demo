@@ -86,6 +86,13 @@ CATALOG: list[IndicatorDefinition] = [
         overlay=True,
         params=[],
     ),
+    IndicatorDefinition(
+        name="FRACTALS",
+        display_name="Fractales de Williams",
+        category="tendencia",
+        overlay=True,
+        params=[IndicatorParam(name="period", type="int", default=21, min=3, max=99)],
+    ),
 ]
 
 _CATALOG_NAMES = {ind.name for ind in CATALOG}
@@ -160,6 +167,27 @@ def _vwap(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series) 
     return (typical_price * volume).cumsum() / volume.cumsum()
 
 
+def _fractals(high: pd.Series, low: pd.Series, period: int) -> pd.DataFrame:
+    """Williams Fractals: local high/low over a centered window of `period` bars.
+    period must be odd; n = (period-1)//2 bars on each side."""
+    if period % 2 == 0:
+        period += 1
+    n = (period - 1) // 2
+    fractal_up = pd.Series(np.nan, index=high.index)
+    fractal_down = pd.Series(np.nan, index=low.index)
+
+    for i in range(n, len(high) - n):
+        window_high = high.iloc[i - n : i + n + 1]
+        if high.iloc[i] == window_high.max():
+            fractal_up.iloc[i] = float(high.iloc[i])
+
+        window_low = low.iloc[i - n : i + n + 1]
+        if low.iloc[i] == window_low.min():
+            fractal_down.iloc[i] = float(low.iloc[i])
+
+    return pd.DataFrame({"fractal_up": fractal_up, "fractal_down": fractal_down})
+
+
 def _compute_indicator(df, ind: IndicatorRequest) -> IndicatorSeries:
     """Calcula un indicador sobre un DataFrame OHLCV y devuelve sus series."""
     name = ind.name.upper()
@@ -222,6 +250,12 @@ def _compute_indicator(df, ind: IndicatorRequest) -> IndicatorSeries:
     elif name == "VWAP":
         result = _vwap(df["High"], df["Low"], df["Close"], df["Volume"])
         series_data["vwap"] = _series_to_list(result)
+
+    elif name == "FRACTALS":
+        period = int(params.get("period", 21))
+        result = _fractals(df["High"], df["Low"], period)
+        for col in result.columns:
+            series_data[col] = _series_to_list(result[col])
 
     return IndicatorSeries(name=ind.name, params=ind.params, data=series_data)
 

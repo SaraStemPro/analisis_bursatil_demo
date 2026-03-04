@@ -7,8 +7,10 @@ import { ArrowPrimitive } from './primitives/ArrowPrimitive'
 import { TextPrimitive } from './primitives/TextPrimitive'
 import { FibonacciPrimitive } from './primitives/FibonacciPrimitive'
 import { ElliottWavePrimitive } from './primitives/ElliottWavePrimitive'
+import { HLinePrimitive } from './primitives/HLinePrimitive'
+import { VLinePrimitive } from './primitives/VLinePrimitive'
 
-type AnyPrimitive = TrendlinePrimitive | ArrowPrimitive | TextPrimitive | FibonacciPrimitive | ElliottWavePrimitive
+type AnyPrimitive = TrendlinePrimitive | ArrowPrimitive | TextPrimitive | FibonacciPrimitive | ElliottWavePrimitive | HLinePrimitive | VLinePrimitive
 
 export class DrawingManager {
   private _series: ISeriesApi<SeriesType, Time> | null = null
@@ -25,7 +27,7 @@ export class DrawingManager {
     this._series = null
   }
 
-  syncDrawings(drawings: Drawing[]): void {
+  syncDrawings(drawings: Drawing[], selectedId: string | null = null): void {
     if (!this._series) return
 
     const currentIds = new Set(this._primitives.keys())
@@ -46,15 +48,35 @@ export class DrawingManager {
     for (const drawing of drawings) {
       const existing = this._primitives.get(drawing.id)
       if (existing) {
-        // Update the drawing reference so the primitive re-renders with new points
-        existing.drawing = drawing as never
+        // If drawing data changed (color, points, etc.), recreate the primitive
+        // to force an immediate visual update
+        const changed = (existing.drawing as unknown) !== (drawing as unknown)
+        if (changed) {
+          this._series.detachPrimitive(existing as ISeriesPrimitive<Time>)
+          this._primitives.delete(drawing.id)
+          const primitive = this._createPrimitive(drawing)
+          if (primitive) {
+            primitive.isSelected = drawing.id === selectedId
+            this._primitives.set(drawing.id, primitive)
+            this._series.attachPrimitive(primitive as ISeriesPrimitive<Time>)
+          }
+        } else {
+          existing.isSelected = drawing.id === selectedId
+        }
       } else {
         const primitive = this._createPrimitive(drawing)
         if (primitive) {
+          primitive.isSelected = drawing.id === selectedId
           this._primitives.set(drawing.id, primitive)
           this._series.attachPrimitive(primitive as ISeriesPrimitive<Time>)
         }
       }
+    }
+  }
+
+  setSelected(selectedId: string | null): void {
+    for (const [id, primitive] of this._primitives) {
+      primitive.isSelected = id === selectedId
     }
   }
 
@@ -73,6 +95,8 @@ export class DrawingManager {
       case 'text': return new TextPrimitive(drawing)
       case 'fibonacci': return new FibonacciPrimitive(drawing)
       case 'elliott': return new ElliottWavePrimitive(drawing)
+      case 'hline': return new HLinePrimitive(drawing)
+      case 'vline': return new VLinePrimitive(drawing)
     }
   }
 }

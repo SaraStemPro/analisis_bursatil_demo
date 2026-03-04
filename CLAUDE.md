@@ -72,18 +72,68 @@ backend/app/schemas/
 1. ✅ Schemas Pydantic
 2. ✅ Estructura + Auth (FastAPI, config, database, JWT, modelos SQLAlchemy)
 3. ✅ Gráficos (yfinance: search, quote, history OHLCV)
-4. ✅ Indicadores (catálogo 9 indicadores, cálculo, presets)
+4. ✅ Indicadores (catálogo 10 indicadores, cálculo, presets)
 5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset)
 6. ✅ Backtesting (motor completo, 6 templates, constructor, simulación, métricas, comparación)
 7. ✅ Tutor IA (RAG: PDF upload, chunking, FAISS/keyword search, chat con LLM, FAQ)
 8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
-   - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott) con Primitives API
-   - Edición de dibujos: seleccionar + mover (click-to-move via botón "Mover" en toolbar)
-   - Preview en vivo mientras se dibuja
-   - Detección de patrones de velas: envolvente (EA/EB), marubozu (MA/MB), long line (LLA/LLB)
+   - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott, hline, vline) con Primitives API
+   - Edición de dibujos: seleccionar + mover + cambiar color (color picker en toolbar)
+   - Preview en vivo mientras se dibuja (PreviewPrimitive + subscribeCrosshairMove)
+   - Detección de patrones de velas: envolvente, marubozu, long line, martillo (EA/EB, MA/MB, LLA/LLB, MaA/MaB)
+   - Selector de patrones por checkbox (activar/desactivar individualmente)
    - Indicadores overlay + oscilador con editor de parámetros y colores personalizables
+   - Osciladores en ventanas separadas (OscillatorChart) con scroll sincronizado al main chart
+   - Fractales de Williams renderizados como marcadores sobre las velas
+   - Historial de 5 tickers recientes con botón X para eliminar
+   - Botón "Hoy" (scroll to realtime), escala logarítmica (toggle LOG)
+   - Enlace a Yahoo Finance por ticker, info de exchange y market state
    - Soporte intradiario (1m, 5m, 15m, 1h) con timestamps Unix + validación período/intervalo
+   - Preservación de escala al añadir/quitar indicadores
+   - Dibujo en gráficos de osciladores (cada chart tiene DrawingManager propio, activeChartId en store)
+   - VWAP oculto del catálogo (aún disponible en backend)
 9. Pulido (UI/UX, ranking, deploy)
+
+## Indicadores — 10 en catálogo backend
+```
+SMA, EMA          — tendencia, overlay
+MACD              — tendencia, oscilador
+RSI               — momentum, oscilador
+STOCH             — momentum, oscilador
+BBANDS            — volatilidad, overlay
+ATR               — volatilidad, oscilador
+OBV               — volumen, oscilador
+VWAP              — volumen, overlay (oculto en frontend)
+FRACTALS          — tendencia, overlay (renderizado como marcadores)
+```
+
+## Arquitectura de Charts (frontend)
+
+### Archivos clave
+```
+pages/Charts.tsx                          ← Página principal, chart de velas + lógica global
+components/charts/OscillatorChart.tsx      ← Un chart independiente por oscilador
+components/charts/DrawingToolbar.tsx       ← Toolbar lateral de herramientas de dibujo
+context/drawing-store.ts                  ← Zustand store: dibujos, herramientas, selección
+lib/drawings/DrawingManager.ts            ← Gestiona primitivas de dibujo en un chart
+lib/drawings/primitives/*.ts              ← 7 primitivas + PreviewPrimitive + renderers
+lib/patterns.ts                           ← Detección de patrones de velas (client-side)
+lib/recentTickers.ts                      ← localStorage para tickers recientes
+lib/chartUtils.ts                         ← CHART_THEME, toChartTime(), INDICATOR_COLORS
+```
+
+### Patrones de sincronización (osciladores)
+- Cada OscillatorChart tiene una **serie spacer invisible** con todos los timestamps del main chart
+- Esto alinea los LogicalRange (índices de barra) entre charts con distinto número de datos
+- Sync usa `setVisibleLogicalRange` bidireccional con un **shared `isSyncingRef`** para evitar loops
+- Los charts de osciladores se registran en un `Map<string, IChartApi>` del padre vía callbacks
+- No se usa React state para el sync (evita re-render loops); todo por refs + API directa
+
+### Patrones de dibujo
+- Primitivas implementan `ISeriesPrimitive<Time>` (lightweight-charts Primitives API)
+- DrawingManager.syncDrawings: compara por referencia → si cambió, destruye y recrea primitiva (actualización inmediata de color/posición)
+- PreviewPrimitive: dibuja preview en vivo durante crosshair move
+- `activeChartId` en store determina qué chart recibe clics de dibujo ('main' | 'osc-RSI' | etc.)
 
 ## API — 34 rutas implementadas
 ```

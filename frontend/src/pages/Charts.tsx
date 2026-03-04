@@ -1,31 +1,24 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts'
-import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams } from 'lightweight-charts'
+import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, createSeriesMarkers } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams, LogicalRange } from 'lightweight-charts'
 import { market, indicators } from '../api'
 import type { IndicatorDefinition, IndicatorRequest } from '../types'
-import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing } from '../types/drawings'
+import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing, HLineDrawing, VLineDrawing } from '../types/drawings'
 import { requiredPoints, FIB_LEVELS, IMPULSE_LABELS, CORRECTIVE_LABELS } from '../types/drawings'
 import { useDrawingStore } from '../context/drawing-store'
 import { DrawingManager } from '../lib/drawings/DrawingManager'
 import { PreviewPrimitive } from '../lib/drawings/primitives/PreviewPrimitive'
-import { detectPatterns } from '../lib/patterns'
+import { detectPatterns, PATTERN_CATALOG } from '../lib/patterns'
+import type { PatternType } from '../lib/patterns'
+import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/recentTickers'
+import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
-import { Search, Settings2, X, CandlestickChart } from 'lucide-react'
+import OscillatorChart from '../components/charts/OscillatorChart'
+import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
 const ALL_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
-const INTRADAY_INTERVALS = new Set(['1m', '5m', '15m', '30m', '1h'])
-
-/** Convert ISO date string to lightweight-charts Time value.
- *  For intraday intervals: Unix timestamp (seconds).
- *  For daily+: 'YYYY-MM-DD' string. */
-function toChartTime(dateStr: string, currentInterval: string): Time {
-  if (INTRADAY_INTERVALS.has(currentInterval)) {
-    return Math.floor(new Date(dateStr).getTime() / 1000) as unknown as Time
-  }
-  return dateStr.split('T')[0] as unknown as Time
-}
 
 // Yahoo Finance max period (days) per intraday interval
 const MAX_PERIOD_DAYS: Record<string, number> = { '1m': 7, '5m': 60, '15m': 60, '1h': 730 }
@@ -39,11 +32,6 @@ function validIntervals(period: string): string[] {
   })
 }
 
-const INDICATOR_COLORS = [
-  '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
-  '#f97316', '#a78bfa', '#fb7185', '#22d3ee', '#a3e635',
-]
-
 const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
 
 export default function Charts() {
@@ -56,10 +44,25 @@ export default function Charts() {
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
 
-  const [showPatterns, setShowPatterns] = useState(false)
+  // Feature 11: pattern selector — set of active pattern types
+  const [activePatterns, setActivePatterns] = useState<Set<PatternType>>(new Set())
+  const [showPatternSelector, setShowPatternSelector] = useState(false)
+
+  // Feature 5: log scale
+  const [logScale, setLogScale] = useState(false)
+
+  // Feature 1: recent tickers
+  const [recentTickers, setRecentTickers] = useState<string[]>(() => getRecentTickers())
+
+  // Feature 9: synced range for oscillators — ref-based to avoid re-render loops
+  const isSyncingRef = useRef(false)
+  const oscChartsRef = useRef<Map<string, IChartApi>>(new Map())
+
+  // Feature 4: preserve scale
+  const savedRangeRef = useRef<LogicalRange | null>(null)
+  const isFirstLoadRef = useRef(true)
 
   const chartRef = useRef<HTMLDivElement>(null)
-  const oscChartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null)
   const drawingManagerRef = useRef(new DrawingManager())
@@ -71,18 +74,30 @@ export default function Charts() {
 
   // Drawing store
   const {
-    drawings, activeTool, selectedId, moveMode,
+    drawings, activeTool, selectedId, activeChartId,
     setTicker: setDrawingTicker,
-    resetInteraction, removeDrawing,
+    resetInteraction, removeDrawing, setActiveChartId,
   } = useDrawingStore()
 
-  // Sync ticker with drawing store
-  useEffect(() => { setDrawingTicker(ticker) }, [ticker, setDrawingTicker])
+  // Filter drawings for main chart
+  const mainDrawings = drawings.filter((d) => !d.chartId || d.chartId === 'main')
+
+  // Sync ticker with drawing store + recent tickers
+  useEffect(() => {
+    setDrawingTicker(ticker)
+    setRecentTickers(addRecentTicker(ticker))
+  }, [ticker, setDrawingTicker])
+
+  // Feature 4: Reset isFirstLoad when data source changes (not indicators)
+  useEffect(() => {
+    isFirstLoadRef.current = true
+    savedRangeRef.current = null
+  }, [ticker, period, interval])
 
   // Sync drawings with manager
   useEffect(() => {
-    drawingManagerRef.current.syncDrawings(drawings)
-  }, [drawings])
+    drawingManagerRef.current.syncDrawings(mainDrawings)
+  }, [mainDrawings])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -141,21 +156,27 @@ export default function Charts() {
     let drawing: Drawing
     switch (toolType) {
       case 'trendline':
-        drawing = { id, type: 'trendline', points, color, visible: true, lineWidth: 2 } as TrendlineDrawing
+        drawing = { id, type: 'trendline', points, color, visible: true, lineWidth: 2, chartId: 'main' } as TrendlineDrawing
         break
       case 'arrow':
-        drawing = { id, type: 'arrow', points, color, visible: true, direction: store.arrowDirection } as ArrowDrawing
+        drawing = { id, type: 'arrow', points, color: store.arrowDirection === 'up' ? '#10b981' : '#ef4444', visible: true, direction: store.arrowDirection, chartId: 'main' } as ArrowDrawing
         break
       case 'text':
         return // text finalization handled separately after text input
       case 'fibonacci':
-        drawing = { id, type: 'fibonacci', points, color, visible: true, levels: FIB_LEVELS } as FibonacciDrawing
+        drawing = { id, type: 'fibonacci', points, color, visible: true, levels: FIB_LEVELS, chartId: 'main' } as FibonacciDrawing
         break
       case 'elliott': {
         const labels = store.elliottWaveType === 'impulse' ? IMPULSE_LABELS : CORRECTIVE_LABELS
-        drawing = { id, type: 'elliott', points, color, visible: true, waveType: store.elliottWaveType, labels: labels.slice(0, points.length) } as ElliottWaveDrawing
+        drawing = { id, type: 'elliott', points, color, visible: true, waveType: store.elliottWaveType, labels: labels.slice(0, points.length), chartId: 'main' } as ElliottWaveDrawing
         break
       }
+      case 'hline':
+        drawing = { id, type: 'hline', points, color, visible: true, chartId: 'main' } as HLineDrawing
+        break
+      case 'vline':
+        drawing = { id, type: 'vline', points, color, visible: true, chartId: 'main' } as VLineDrawing
+        break
       default:
         return
     }
@@ -177,28 +198,8 @@ export default function Charts() {
       return { time, price: price as number }
     }
 
-    // Move mode: move the selected drawing to the clicked position
-    if (store.moveMode && store.selectedId) {
-      const newPoint = getPoint()
-      if (!newPoint) return
-      const drawing = store.drawings.find((d) => d.id === store.selectedId)
-      if (!drawing) return
-
-      if (drawing.points.length === 1) {
-        store.updateDrawing(drawing.id, [newPoint])
-      } else {
-        const oldFirst = drawing.points[0]
-        const dtMs = new Date(newPoint.time).getTime() - new Date(oldFirst.time).getTime()
-        const dp = newPoint.price - oldFirst.price
-        const newPoints = drawing.points.map((p) => ({
-          time: new Date(new Date(p.time).getTime() + dtMs).toISOString(),
-          price: p.price + dp,
-        }))
-        store.updateDrawing(drawing.id, newPoints)
-      }
-      store.setMoveMode(false)
-      return
-    }
+    // Only handle clicks if main chart is active
+    if (store.activeChartId !== 'main') return
 
     // If no tool active, check for hit-test selection
     if (!store.activeTool) {
@@ -230,6 +231,7 @@ export default function Charts() {
   // Handle double-click for Elliott wave completion
   const handleChartDblClick = useCallback(() => {
     const store = useDrawingStore.getState()
+    if (store.activeChartId !== 'main') return
     if (store.activeTool === 'elliott' && store.pendingPoints.length >= 3) {
       finalizeDrawing(store.pendingPoints, 'elliott')
       previewRef.current.clear()
@@ -257,6 +259,7 @@ export default function Charts() {
       visible: true,
       text: text.trim(),
       fontSize: 13,
+      chartId: 'main',
     }
     store.addDrawing(drawing)
     setTextInput({ show: false, point: null })
@@ -266,14 +269,17 @@ export default function Charts() {
   useEffect(() => {
     if (!chartRef.current || !history?.data.length) return
 
+    let chart: ReturnType<typeof createChart>
+    try {
+
     const isIntraday = INTRADAY_INTERVALS.has(interval)
-    const chart = createChart(chartRef.current, {
+    chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#0f172a' }, textColor: '#94a3b8' },
       grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
-      width: chartRef.current.clientWidth,
+      autoSize: true,
       height: 450,
       timeScale: { borderColor: '#334155', timeVisible: isIntraday, secondsVisible: false },
-      rightPriceScale: { borderColor: '#334155' },
+      rightPriceScale: { borderColor: '#334155', mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
     })
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -308,18 +314,19 @@ export default function Charts() {
     )
 
     // Draw overlay indicators — use same color as the indicator cards
+    // (FRACTALS rendered as markers below, not as LineSeries)
     if (indicatorData) {
       indicatorData.indicators.forEach((ind) => {
         const def = getIndicatorDef(ind.name)
-        if (!def?.overlay) return
+        if (!def?.overlay || ind.name === 'FRACTALS') return
 
         const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
         const baseColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
 
         Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
-          const color = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
+          const seriesColor = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
           const lineSeries = chart.addSeries(LineSeries, {
-            color,
+            color: seriesColor,
             lineWidth: 2,
             title: `${ind.name} ${seriesKey}`,
             priceScaleId: 'right',
@@ -335,7 +342,7 @@ export default function Charts() {
     // Attach drawing manager
     const seriesRef = candleSeries as ISeriesApi<SeriesType, Time>
     drawingManagerRef.current.attach(chart, seriesRef)
-    drawingManagerRef.current.syncDrawings(useDrawingStore.getState().drawings)
+    drawingManagerRef.current.syncDrawings(useDrawingStore.getState().drawings.filter((d) => !d.chartId || d.chartId === 'main'))
 
     // Attach preview primitive
     seriesRef.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
@@ -344,12 +351,24 @@ export default function Charts() {
     const onChartClick = (params: MouseEventParams<Time>) => handleChartClickRef.current(params)
     const onChartDblClick = () => handleChartDblClickRef.current()
     chart.subscribeClick(onChartClick)
-    chart.subscribeDblClick(onChartDblClick)
+    if (typeof chart.subscribeDblClick === 'function') {
+      chart.subscribeDblClick(onChartDblClick)
+    }
 
     // Crosshair move for live preview
     const handleCrosshairMove = (params: MouseEventParams<Time>) => {
       const store = useDrawingStore.getState()
-      if (!store.activeTool || store.pendingPoints.length === 0 || !params.point) {
+      if (store.activeChartId !== 'main') return
+      if (!store.activeTool || !params.point) {
+        previewRef.current.clear()
+        return
+      }
+      // hline/vline: show preview without anchor point
+      if ((store.activeTool === 'hline' || store.activeTool === 'vline') && store.pendingPoints.length === 0) {
+        previewRef.current.updateNoAnchor(store.activeTool, params.point.x, params.point.y)
+        return
+      }
+      if (store.pendingPoints.length === 0) {
         previewRef.current.clear()
         return
       }
@@ -358,99 +377,153 @@ export default function Charts() {
     }
     chart.subscribeCrosshairMove(handleCrosshairMove)
 
-    // Pattern markers
-    if (showPatterns && history.data.length >= 2) {
-      const patterns = detectPatterns(history.data)
-      const markers = patterns.map((p) => ({
-        time: toChartTime(p.date, interval),
-        position: p.position,
-        shape: (p.position === 'belowBar' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
-        color: p.color,
-        text: p.label,
-      }))
-      markersPluginRef.current = createSeriesMarkers(seriesRef, markers)
+    // Collect all markers: patterns + fractals
+    const allMarkers: { time: Time; position: 'aboveBar' | 'belowBar'; shape: 'arrowUp' | 'arrowDown'; color: string; text: string }[] = []
+
+    // Pattern markers — Feature 11: filter by activePatterns
+    if (activePatterns.size > 0 && history.data.length >= 2) {
+      const patterns = detectPatterns(history.data).filter((p) => activePatterns.has(p.type))
+      patterns.forEach((p) => {
+        allMarkers.push({
+          time: toChartTime(p.date, interval),
+          position: p.position as 'aboveBar' | 'belowBar',
+          shape: p.position === 'belowBar' ? 'arrowUp' : 'arrowDown',
+          color: p.color,
+          text: p.label,
+        })
+      })
     }
 
-    chart.timeScale().fitContent()
-
-    const handleResize = () => {
-      if (chartRef.current) chart.applyOptions({ width: chartRef.current.clientWidth })
-    }
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      chart.unsubscribeCrosshairMove(handleCrosshairMove)
-      if (markersPluginRef.current) {
-        markersPluginRef.current.detach()
-        markersPluginRef.current = null
+    // Fractals markers
+    if (indicatorData) {
+      const fractalsInd = indicatorData.indicators.find((ind) => ind.name === 'FRACTALS')
+      if (fractalsInd) {
+        fractalsInd.data.fractal_up?.forEach((v, i) => {
+          if (v !== null) {
+            allMarkers.push({
+              time: times[i],
+              position: 'aboveBar',
+              shape: 'arrowDown',
+              color: '#22d3ee',
+              text: 'F',
+            })
+          }
+        })
+        fractalsInd.data.fractal_down?.forEach((v, i) => {
+          if (v !== null) {
+            allMarkers.push({
+              time: times[i],
+              position: 'belowBar',
+              shape: 'arrowUp',
+              color: '#f59e0b',
+              text: 'F',
+            })
+          }
+        })
       }
-      previewRef.current.clear()
-      drawingManagerRef.current.detach()
-      chart.remove()
+    }
+
+    // Sort markers by time and attach
+    allMarkers.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0))
+    if (allMarkers.length > 0) {
+      markersPluginRef.current = createSeriesMarkers(seriesRef, allMarkers)
+    }
+
+    // Feature 4: preserve scale
+    if (isFirstLoadRef.current) {
+      chart.timeScale().fitContent()
+      isFirstLoadRef.current = false
+    } else if (savedRangeRef.current) {
+      chart.timeScale().setVisibleLogicalRange(savedRangeRef.current)
+    } else {
+      chart.timeScale().fitContent()
+    }
+
+    // Feature 9: sync visible range to oscillators — logical ranges now aligned
+    // thanks to spacer series in each OscillatorChart
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (isSyncingRef.current || !range) return
+      isSyncingRef.current = true
+      oscChartsRef.current.forEach((oscChart) => {
+        try { oscChart.timeScale().setVisibleLogicalRange(range) } catch { /* chart may be disposed */ }
+      })
+      requestAnimationFrame(() => { isSyncingRef.current = false })
+    })
+
+    } catch (err) {
+      console.error('[Charts] Error creating chart:', err)
+      return
+    }
+
+    const chartLocal = chart
+    return () => {
+      try {
+        // Feature 4: save range before cleanup
+        savedRangeRef.current = chartLocal.timeScale().getVisibleLogicalRange()
+        if (markersPluginRef.current) {
+          markersPluginRef.current.detach()
+          markersPluginRef.current = null
+        }
+        previewRef.current.clear()
+        drawingManagerRef.current.detach()
+        chartLocal.remove()
+      } catch (cleanupErr) {
+        console.error('[Charts] Cleanup error:', cleanupErr)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, indicatorData, interval, showPatterns, getIndicatorDef, getIndicatorColor])
+  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor])
 
-  // Oscillator chart (RSI, MACD, STOCH, ATR, OBV)
+  // Feature 5: toggle log scale imperatively
+  const toggleLogScale = () => {
+    const next = !logScale
+    setLogScale(next)
+    chartInstanceRef.current?.priceScale('right').applyOptions({
+      mode: next ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+    })
+  }
+
+  // Feature 3: scroll to today
+  const scrollToToday = () => {
+    chartInstanceRef.current?.timeScale().scrollToRealTime()
+  }
+
+  // Oscillator indicators (Feature 10: separate charts)
   const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
     const def = getIndicatorDef(ind.name)
     return def && !def.overlay
   }) ?? []
 
-  useEffect(() => {
-    if (!oscChartRef.current || !history?.data.length || oscillatorIndicators.length === 0) return
+  const oscTimes = history?.data.map((d) => toChartTime(d.date, interval)) ?? []
 
-    const isIntradayOsc = INTRADAY_INTERVALS.has(interval)
-    const chart = createChart(oscChartRef.current, {
-      layout: { background: { type: ColorType.Solid, color: '#0f172a' }, textColor: '#94a3b8' },
-      grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
-      width: oscChartRef.current.clientWidth,
-      height: 200,
-      timeScale: { borderColor: '#334155', timeVisible: isIntradayOsc, secondsVisible: false },
-      rightPriceScale: { borderColor: '#334155' },
+  // Handle synced range from oscillators — logical ranges now aligned via spacer series
+  const handleOscRangeChange = useCallback((range: LogicalRange | null, sourceChartId: string) => {
+    if (isSyncingRef.current || !range) return
+    isSyncingRef.current = true
+    try { chartInstanceRef.current?.timeScale().setVisibleLogicalRange(range) } catch { /* */ }
+    oscChartsRef.current.forEach((oscChart, id) => {
+      if (id !== sourceChartId) {
+        try { oscChart.timeScale().setVisibleLogicalRange(range) } catch { /* */ }
+      }
     })
+    requestAnimationFrame(() => { isSyncingRef.current = false })
+  }, [])
 
-    const oscTimes = history.data.map((d) => toChartTime(d.date, interval))
-
-    oscillatorIndicators.forEach((ind) => {
-      const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
-      const baseColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
-
-      Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
-        const color = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
-
-        if (ind.name === 'MACD' && seriesKey === 'histogram') {
-          const histSeries = chart.addSeries(HistogramSeries, {
-            color,
-            title: `${ind.name} ${seriesKey}`,
-          })
-          const histData = values
-            .map((v, i) => (v !== null ? { time: oscTimes[i], value: v, color: v >= 0 ? '#10b981' : '#ef4444' } : null))
-            .filter(Boolean) as { time: Time; value: number; color: string }[]
-          histSeries.setData(histData)
-        } else {
-          const lineSeries = chart.addSeries(LineSeries, {
-            color,
-            lineWidth: 2,
-            title: `${ind.name} ${seriesKey}`,
-          })
-          const lineData = values
-            .map((v, i) => (v !== null ? { time: oscTimes[i], value: v } : null))
-            .filter(Boolean) as { time: Time; value: number }[]
-          lineSeries.setData(lineData)
-        }
-      })
-    })
-
-    chart.timeScale().fitContent()
-
-    const handleResize = () => {
-      if (oscChartRef.current) chart.applyOptions({ width: oscChartRef.current.clientWidth })
+  // Register/unregister oscillator chart instances for direct sync
+  const registerOscChart = useCallback((chartId: string, chart: IChartApi) => {
+    oscChartsRef.current.set(chartId, chart)
+    // Apply current main chart logical range immediately
+    if (chartInstanceRef.current) {
+      const mainRange = chartInstanceRef.current.timeScale().getVisibleLogicalRange()
+      if (mainRange) {
+        try { chart.timeScale().setVisibleLogicalRange(mainRange) } catch { /* */ }
+      }
     }
-    window.addEventListener('resize', handleResize)
-    return () => { window.removeEventListener('resize', handleResize); chart.remove() }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, indicatorData])
+  }, [])
+
+  const unregisterOscChart = useCallback((chartId: string) => {
+    oscChartsRef.current.delete(chartId)
+  }, [])
 
   const toggleIndicator = (ind: IndicatorDefinition) => {
     setActiveIndicators((prev) => {
@@ -474,6 +547,25 @@ export default function Charts() {
           : ind
       )
     )
+  }
+
+  // Feature 11: toggle a single pattern type
+  const togglePattern = (type: PatternType) => {
+    setActivePatterns((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }
+
+  // Feature 11: toggle all patterns
+  const toggleAllPatterns = () => {
+    if (activePatterns.size === PATTERN_CATALOG.length) {
+      setActivePatterns(new Set())
+    } else {
+      setActivePatterns(new Set(PATTERN_CATALOG.map((p) => p.type)))
+    }
   }
 
   const categories = catalog
@@ -509,13 +601,55 @@ export default function Charts() {
               ))}
             </div>
           )}
+
+          {/* Feature 1: Recent tickers with remove buttons */}
+          {recentTickers.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {recentTickers.map((t) => (
+                <span
+                  key={t}
+                  className={`inline-flex items-center gap-0.5 rounded text-xs transition-colors ${
+                    t === ticker ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  <button
+                    onClick={() => setTicker(t)}
+                    className="pl-2 py-0.5"
+                  >
+                    {t}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setRecentTickers(removeRecentTicker(t)) }}
+                    className="pr-1.5 py-0.5 opacity-50 hover:opacity-100 hover:text-red-400"
+                    title={`Quitar ${t}`}
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {quote && (
           <div className="flex items-center gap-4">
             <div>
-              <h2 className="text-xl font-bold">{quote.symbol}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold">{quote.symbol}</h2>
+                {/* Feature 12: Yahoo Finance link */}
+                <a
+                  href={`https://finance.yahoo.com/quote/${quote.symbol}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Ver en Yahoo Finance"
+                  className="text-slate-400 hover:text-emerald-400 transition-colors"
+                >
+                  <ExternalLink size={14} />
+                </a>
+              </div>
               <p className="text-sm text-slate-400">{quote.name}</p>
+              {/* Feature 12: exchange + market state */}
+              <p className="text-xs text-slate-500">{quote.exchange} · {quote.market_state}</p>
             </div>
             <div className="text-right">
               <p className="text-xl font-bold">{quote.price.toFixed(2)} {quote.currency}</p>
@@ -528,8 +662,8 @@ export default function Charts() {
 
       </div>
 
-      {/* Period + Interval selectors */}
-      <div className="flex flex-wrap gap-2">
+      {/* Period + Interval selectors + Feature 3: Hoy + Feature 5: LOG */}
+      <div className="flex flex-wrap gap-2 items-center">
         {PERIODS.map((p) => (
           <button
             key={p}
@@ -563,21 +697,75 @@ export default function Charts() {
             </button>
           )
         })}
+        <span className="text-slate-600 mx-1">|</span>
+        {/* Feature 3: Hoy button */}
+        <button
+          onClick={scrollToToday}
+          className="px-3 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700"
+          title="Scroll al día actual"
+        >
+          Hoy
+        </button>
+        {/* Feature 5: LOG toggle */}
+        <button
+          onClick={toggleLogScale}
+          className={`px-3 py-1 rounded text-sm font-mono ${
+            logScale ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+          title="Escala logarítmica"
+        >
+          LOG
+        </button>
       </div>
 
-      {/* Patterns toggle */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setShowPatterns((v) => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
-            showPatterns ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-          }`}
-        >
-          <CandlestickChart size={14} />
-          Patrones de velas
-        </button>
-        {showPatterns && (
-          <span className="text-xs text-slate-400">EA/EB Envolvente · MA/MB Marubozu · LLA/LLB Long Line</span>
+      {/* Feature 11: Pattern selector */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPatternSelector((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
+              activePatterns.size > 0 ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <CandlestickChart size={14} />
+            Patrones de velas
+            {activePatterns.size > 0 && <span className="text-xs opacity-80">({activePatterns.size})</span>}
+            {showPatternSelector ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {activePatterns.size > 0 && !showPatternSelector && (
+            <span className="text-xs text-slate-400">
+              {PATTERN_CATALOG.filter((p) => activePatterns.has(p.type)).map((p) => p.label.split(' — ')[0]).join(' · ')}
+            </span>
+          )}
+        </div>
+        {showPatternSelector && (
+          <div className="bg-slate-900 rounded-lg border border-slate-700 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-400 font-medium">Selecciona patrones a mostrar</span>
+              <button
+                onClick={toggleAllPatterns}
+                className="text-xs text-emerald-400 hover:text-emerald-300"
+              >
+                {activePatterns.size === PATTERN_CATALOG.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {PATTERN_CATALOG.map((p) => (
+                <label key={p.type} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={activePatterns.has(p.type)}
+                    onChange={() => togglePattern(p.type)}
+                    className="accent-emerald-500"
+                  />
+                  <div>
+                    <span className="text-sm text-slate-200">{p.label}</span>
+                    <p className="text-[10px] text-slate-500 leading-tight">{p.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -587,7 +775,10 @@ export default function Charts() {
         <div className="flex-1 relative">
           <div
             ref={chartRef}
-            className={`bg-slate-900 rounded-lg border border-slate-700 ${activeTool ? 'cursor-crosshair' : moveMode ? 'cursor-move' : ''}`}
+            onClick={() => setActiveChartId('main')}
+            className={`bg-slate-900 rounded-lg border transition-colors ${
+              activeChartId === 'main' ? 'border-emerald-500' : 'border-slate-700'
+            } ${activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''}`}
           />
           {/* Text input overlay */}
           {textInput.show && (
@@ -607,10 +798,28 @@ export default function Charts() {
         </div>
       </div>
 
-      {/* Oscillator chart */}
-      {oscillatorIndicators.length > 0 && (
-        <div ref={oscChartRef} className="bg-slate-900 rounded-lg border border-slate-700" />
-      )}
+      {/* Feature 10: Separate oscillator charts */}
+      {oscillatorIndicators.map((ind) => {
+        const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
+        const oscColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
+        const oscChartId = `osc-${ind.name}`
+        return (
+          <OscillatorChart
+            key={ind.name}
+            indicator={ind}
+            times={oscTimes}
+            color={oscColor}
+            interval={interval}
+            syncingRef={isSyncingRef}
+            onRegister={registerOscChart}
+            onUnregister={unregisterOscChart}
+            onVisibleRangeChange={handleOscRangeChange}
+            chartId={oscChartId}
+            isActive={activeChartId === oscChartId}
+            onActivate={() => setActiveChartId(oscChartId)}
+          />
+        )
+      })}
 
       {/* Active indicators with params */}
       {activeIndicators.length > 0 && (
@@ -688,7 +897,7 @@ export default function Charts() {
         </div>
       )}
 
-      {/* Indicators catalog */}
+      {/* Indicators catalog — Feature 6: filter out VWAP */}
       {catalog && (
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
           <h3 className="font-semibold mb-3">Indicadores ({activeIndicators.length}/5)</h3>
@@ -697,7 +906,7 @@ export default function Charts() {
               <div key={cat}>
                 <p className="text-xs font-medium text-slate-400 uppercase mb-1">{cat}</p>
                 <div className="flex flex-wrap gap-2">
-                  {catalog.indicators.filter((i) => i.category === cat).map((ind) => {
+                  {catalog.indicators.filter((i) => i.category === cat && i.name !== 'VWAP').map((ind) => {
                     const active = activeIndicators.some((a) => a.name === ind.name)
                     return (
                       <button

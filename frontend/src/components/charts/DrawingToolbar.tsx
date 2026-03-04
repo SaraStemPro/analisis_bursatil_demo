@@ -1,9 +1,22 @@
-import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Trash2, X, Move } from 'lucide-react'
+import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Minus, Trash2, X } from 'lucide-react'
 import { useDrawingStore } from '../../context/drawing-store'
 import type { DrawingToolType } from '../../types/drawings'
 
-const TOOLS: { type: DrawingToolType; icon: typeof TrendingUp; label: string }[] = [
+/** Custom vertical line icon — a simple | bar */
+function VLineIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="12" y1="3" x2="12" y2="21" />
+    </svg>
+  )
+}
+
+type IconComponent = typeof TrendingUp | typeof VLineIcon
+
+const TOOLS: { type: DrawingToolType; icon: IconComponent; label: string }[] = [
   { type: 'trendline', icon: TrendingUp, label: 'Tendencia' },
+  { type: 'hline', icon: Minus, label: 'Línea horizontal' },
+  { type: 'vline', icon: VLineIcon, label: 'Línea vertical' },
   { type: 'arrow', icon: ArrowUp, label: 'Flecha' },
   { type: 'text', icon: Type, label: 'Texto' },
   { type: 'fibonacci', icon: GitBranch, label: 'Fibonacci' },
@@ -12,11 +25,15 @@ const TOOLS: { type: DrawingToolType; icon: typeof TrendingUp; label: string }[]
 
 const GUIDANCE: Record<DrawingToolType, string> = {
   trendline: 'Click 2 puntos para trazar la línea',
+  hline: 'Click un punto para línea horizontal',
+  vline: 'Click un punto para línea vertical',
   arrow: 'Click un punto para colocar la flecha',
   text: 'Click un punto para añadir texto',
   fibonacci: 'Click 2 puntos (máximo y mínimo)',
   elliott: 'Click puntos, doble-click para terminar',
 }
+
+const COLOR_PALETTE = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#ffffff']
 
 export default function DrawingToolbar() {
   const {
@@ -24,7 +41,7 @@ export default function DrawingToolbar() {
     removeDrawing, clearAll, drawings, resetInteraction,
     elliottWaveType, setElliottWaveType,
     arrowDirection, setArrowDirection,
-    moveMode, setMoveMode,
+    updateDrawingColor,
   } = useDrawingStore()
 
   return (
@@ -90,17 +107,29 @@ export default function DrawingToolbar() {
       {/* Divider */}
       <div className="border-t border-slate-700 my-1" />
 
-      {/* Move selected drawing */}
+      {/* Color picker for selected drawing */}
       {selectedId && (
-        <button
-          onClick={() => setMoveMode(!moveMode)}
-          title="Mover dibujo"
-          className={`p-2 rounded transition-colors ${
-            moveMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          <Move size={18} />
-        </button>
+        <div className="flex flex-col gap-1 border-t border-slate-700 pt-1 mt-1">
+          <div className="flex flex-wrap gap-1 px-0.5 justify-center">
+            {COLOR_PALETTE.map((c) => (
+              <button
+                key={c}
+                onClick={() => updateDrawingColor(selectedId, c)}
+                className="w-4 h-4 rounded-full border border-slate-600 hover:scale-125 transition-transform"
+                style={{ backgroundColor: c }}
+                title={c}
+              />
+            ))}
+          </div>
+          <label className="flex items-center justify-center cursor-pointer" title="Color personalizado">
+            <input
+              type="color"
+              value={drawings.find((d) => d.id === selectedId)?.color ?? '#ffffff'}
+              onChange={(e) => updateDrawingColor(selectedId, e.target.value)}
+              className="w-6 h-6 cursor-pointer bg-transparent border-0"
+            />
+          </label>
+        </div>
       )}
 
       {/* Delete selected */}
@@ -147,13 +176,6 @@ export default function DrawingToolbar() {
               {pendingPoints.length} pts
             </p>
           )}
-        </div>
-      )}
-      {moveMode && (
-        <div className="mt-1 px-1">
-          <p className="text-[9px] text-blue-400 leading-tight text-center">
-            Click para mover
-          </p>
         </div>
       )}
     </div>

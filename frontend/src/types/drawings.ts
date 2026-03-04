@@ -1,4 +1,4 @@
-export type DrawingToolType = 'trendline' | 'arrow' | 'text' | 'fibonacci' | 'elliott'
+export type DrawingToolType = 'trendline' | 'arrow' | 'text' | 'fibonacci' | 'elliott' | 'hline' | 'vline'
 
 export interface DrawingPoint {
   time: string
@@ -11,6 +11,7 @@ interface BaseDrawing {
   points: DrawingPoint[]
   color: string
   visible: boolean
+  chartId?: string // 'main' | 'osc-RSI' | etc. Defaults to 'main'
 }
 
 export interface TrendlineDrawing extends BaseDrawing {
@@ -40,7 +41,15 @@ export interface ElliottWaveDrawing extends BaseDrawing {
   labels: string[]
 }
 
-export type Drawing = TrendlineDrawing | ArrowDrawing | TextDrawing | FibonacciDrawing | ElliottWaveDrawing
+export interface HLineDrawing extends BaseDrawing {
+  type: 'hline'
+}
+
+export interface VLineDrawing extends BaseDrawing {
+  type: 'vline'
+}
+
+export type Drawing = TrendlineDrawing | ArrowDrawing | TextDrawing | FibonacciDrawing | ElliottWaveDrawing | HLineDrawing | VLineDrawing
 
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
 
@@ -51,6 +60,8 @@ export function requiredPoints(type: DrawingToolType): number | null {
   switch (type) {
     case 'arrow':
     case 'text':
+    case 'hline':
+    case 'vline':
       return 1
     case 'trendline':
     case 'fibonacci':

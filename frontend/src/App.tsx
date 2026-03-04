@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './context/auth-store'
 import Layout from './components/layout/Layout'
@@ -9,6 +10,29 @@ import Demo from './pages/Demo'
 import Backtest from './pages/Backtest'
 import Tutor from './pages/Tutor'
 import Profile from './pages/Profile'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('ErrorBoundary caught:', error, info) }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <div className="bg-red-900/30 border border-red-500 rounded-lg p-6 max-w-lg">
+            <h2 className="text-red-400 font-bold text-lg mb-2">Error en la aplicacion</h2>
+            <pre className="text-red-300 text-sm whitespace-pre-wrap">{this.state.error.message}</pre>
+            <pre className="text-red-400/60 text-xs mt-2 whitespace-pre-wrap">{this.state.error.stack}</pre>
+            <button onClick={() => this.setState({ error: null })} className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthStore()
@@ -26,7 +50,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route element={<ProtectedRoute><ErrorBoundary><Layout /></ErrorBoundary></ProtectedRoute>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/charts" element={<Charts />} />
           <Route path="/demo" element={<Demo />} />

@@ -28,6 +28,10 @@ class PreviewRenderer implements IPrimitivePaneRenderer {
   draw(target: CanvasRenderingTarget2D): void {
     if (this.tool === 'trendline' || this.tool === 'elliott') {
       drawLine(target, this.x1, this.y1, this.x2, this.y2, '#ffffff80', 2, true)
+    } else if (this.tool === 'hline') {
+      drawLine(target, 0, this.y2, this.chartWidth, this.y2, '#ffffff80', 1.5, true)
+    } else if (this.tool === 'vline') {
+      drawLine(target, this.x2, 0, this.x2, 2000, '#ffffff80', 1.5, true)
     } else if (this.tool === 'fibonacci') {
       // Draw preview fib levels
       for (let i = 0; i < this.fibLevels.length - 1; i++) {
@@ -97,6 +101,18 @@ export class PreviewPrimitive implements ISeriesPrimitive<Time> {
     this.tool = null
     this.anchorPoint = null
     this._paneView._renderer = null
+    this._requestUpdate?.()
+  }
+
+  /** Preview for hline/vline that doesn't need an anchor point — just cursor position */
+  updateNoAnchor(tool: DrawingToolType, cx: number, cy: number): void {
+    this.tool = tool
+    this.anchorPoint = null
+    this.cursorX = cx
+    this.cursorY = cy
+    if (!this._chart) { this._paneView._renderer = null; return }
+    const chartWidth = this._chart.timeScale().width()
+    this._paneView._renderer = new PreviewRenderer(tool, 0, 0, cx, cy, chartWidth, [])
     this._requestUpdate?.()
   }
 

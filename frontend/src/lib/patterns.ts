@@ -1,13 +1,36 @@
 import type { OHLCV } from '../types'
 
+export type PatternType =
+  | 'bullish_engulfing' | 'bearish_engulfing'
+  | 'bullish_marubozu' | 'bearish_marubozu'
+  | 'bullish_longline' | 'bearish_longline'
+  | 'bullish_hammer' | 'bearish_hammer'
+
 export interface PatternMatch {
   index: number
   date: string
-  type: 'bullish_engulfing' | 'bearish_engulfing' | 'bullish_marubozu' | 'bearish_marubozu' | 'bullish_longline' | 'bearish_longline'
+  type: PatternType
   label: string
   color: string
   position: 'aboveBar' | 'belowBar'
 }
+
+export interface PatternCatalogEntry {
+  type: PatternType
+  label: string
+  description: string
+}
+
+export const PATTERN_CATALOG: PatternCatalogEntry[] = [
+  { type: 'bullish_engulfing', label: 'EA — Envolvente Alcista', description: 'La segunda vela alcista envuelve el cuerpo de la primera bajista' },
+  { type: 'bearish_engulfing', label: 'EB — Envolvente Bajista', description: 'La segunda vela bajista envuelve el cuerpo de la primera alcista' },
+  { type: 'bullish_marubozu', label: 'MA — Marubozu Alcista', description: 'Vela alcista sin mechas (cuerpo ≥ 95% del rango)' },
+  { type: 'bearish_marubozu', label: 'MB — Marubozu Bajista', description: 'Vela bajista sin mechas (cuerpo ≥ 95% del rango)' },
+  { type: 'bullish_longline', label: 'LLA — Long Line Alcista', description: 'Vela alcista con cuerpo grande (70-95% del rango)' },
+  { type: 'bearish_longline', label: 'LLB — Long Line Bajista', description: 'Vela bajista con cuerpo grande (70-95% del rango)' },
+  { type: 'bullish_hammer', label: 'MaA — Martillo Alcista', description: 'Cuerpo pequeño arriba, sombra inferior larga (señal de reversión alcista)' },
+  { type: 'bearish_hammer', label: 'MaB — Shooting Star', description: 'Cuerpo pequeño abajo, sombra superior larga (señal de reversión bajista)' },
+]
 
 function bodySize(c: OHLCV): number {
   return Math.abs(c.close - c.open)
@@ -144,8 +167,53 @@ function detectLongLine(data: OHLCV[]): PatternMatch[] {
   return results
 }
 
+/**
+ * Hammer / Shooting Star:
+ * - Martillo alcista (MaA): cuerpo < 35% del rango, sombra inferior >= 2x cuerpo, sombra superior <= 0.5x cuerpo
+ * - Shooting star (MaB): cuerpo < 35% del rango, sombra superior >= 2x cuerpo, sombra inferior <= 0.5x cuerpo
+ */
+function detectHammer(data: OHLCV[]): PatternMatch[] {
+  const results: PatternMatch[] = []
+  for (let i = 0; i < data.length; i++) {
+    const c = data[i]
+    const range = totalRange(c)
+    if (range === 0) continue
+
+    const body = bodySize(c)
+    if (body / range >= 0.35) continue
+
+    const upperBody = Math.max(c.open, c.close)
+    const lowerBody = Math.min(c.open, c.close)
+    const upperShadow = c.high - upperBody
+    const lowerShadow = lowerBody - c.low
+
+    // Martillo alcista: sombra inferior larga, superior corta
+    if (lowerShadow >= 2 * body && upperShadow <= 0.5 * body) {
+      results.push({
+        index: i, date: c.date,
+        type: 'bullish_hammer', label: 'MaA',
+        color: '#10b981', position: 'belowBar',
+      })
+    }
+
+    // Shooting star / martillo bajista: sombra superior larga, inferior corta
+    if (upperShadow >= 2 * body && lowerShadow <= 0.5 * body) {
+      results.push({
+        index: i, date: c.date,
+        type: 'bearish_hammer', label: 'MaB',
+        color: '#ef4444', position: 'aboveBar',
+      })
+    }
+  }
+  return results
+}
+
 export function detectPatterns(data: OHLCV[]): PatternMatch[] {
   if (data.length < 2) return []
-  return [...detectEngulfing(data), ...detectMarubozu(data), ...detectLongLine(data)]
-    .sort((a, b) => a.index - b.index)
+  return [
+    ...detectEngulfing(data),
+    ...detectMarubozu(data),
+    ...detectLongLine(data),
+    ...detectHammer(data),
+  ].sort((a, b) => a.index - b.index)
 }

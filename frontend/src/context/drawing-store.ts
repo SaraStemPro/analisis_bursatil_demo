@@ -6,7 +6,10 @@ const STORAGE_PREFIX = 'drawings:'
 function load(ticker: string): Drawing[] {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + ticker)
-    return raw ? JSON.parse(raw) : []
+    if (!raw) return []
+    const drawings: Drawing[] = JSON.parse(raw)
+    // Migration: default chartId to 'main' for old drawings
+    return drawings.map((d) => d.chartId ? d : { ...d, chartId: 'main' })
   } catch {
     return []
   }
@@ -25,10 +28,12 @@ interface DrawingStore {
   elliottWaveType: 'impulse' | 'corrective'
   arrowDirection: 'up' | 'down'
   moveMode: boolean
+  activeChartId: string
 
   setTicker: (ticker: string) => void
   addDrawing: (drawing: Drawing) => void
   updateDrawing: (id: string, points: DrawingPoint[]) => void
+  updateDrawingColor: (id: string, color: string) => void
   removeDrawing: (id: string) => void
   clearAll: () => void
   selectTool: (tool: DrawingToolType | null) => void
@@ -38,6 +43,7 @@ interface DrawingStore {
   setElliottWaveType: (type: 'impulse' | 'corrective') => void
   setArrowDirection: (dir: 'up' | 'down') => void
   setMoveMode: (mode: boolean) => void
+  setActiveChartId: (chartId: string) => void
 }
 
 export const useDrawingStore = create<DrawingStore>((set, get) => ({
@@ -49,6 +55,7 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   elliottWaveType: 'impulse',
   arrowDirection: 'up',
   moveMode: false,
+  activeChartId: 'main',
 
   setTicker: (ticker) => {
     set({ ticker, drawings: load(ticker), selectedId: null })
@@ -64,6 +71,13 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   updateDrawing: (id, points) => {
     const { ticker, drawings } = get()
     const updated = drawings.map((d) => d.id === id ? { ...d, points } : d)
+    save(ticker, updated)
+    set({ drawings: updated })
+  },
+
+  updateDrawingColor: (id, color) => {
+    const { ticker, drawings } = get()
+    const updated = drawings.map((d) => d.id === id ? { ...d, color } : d)
     save(ticker, updated)
     set({ drawings: updated })
   },
@@ -107,5 +121,9 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
 
   setMoveMode: (mode) => {
     set({ moveMode: mode })
+  },
+
+  setActiveChartId: (chartId) => {
+    set({ activeChartId: chartId })
   },
 }))
