@@ -1,6 +1,14 @@
 from fastapi import APIRouter, Query, HTTPException
 
-from ..schemas.market import HistoryQuery, HistoryResponse, QuoteResponse, TickerSearchResult
+from ..schemas.market import (
+    DetailedQuoteResponse,
+    HistoryQuery,
+    HistoryResponse,
+    QuoteResponse,
+    ScreenerFilters,
+    ScreenerResponse,
+    TickerSearchResult,
+)
 from ..services import market_service
 
 router = APIRouter(prefix="/api/market", tags=["market"])
@@ -35,3 +43,18 @@ def history(
         raise HTTPException(status_code=422, detail=str(e))
 
     return market_service.get_history(ticker, period, interval)
+
+
+@router.get("/detailed-quote/{ticker}", response_model=DetailedQuoteResponse)
+def detailed_quote(ticker: str):
+    return market_service.get_detailed_quote(ticker)
+
+
+@router.post("/screener", response_model=ScreenerResponse)
+def screener(filters: ScreenerFilters = ScreenerFilters()):
+    return market_service.get_screener(filters)
+
+
+@router.get("/screener/sectors/{universe}")
+def screener_sectors(universe: str):
+    return {"sectors": market_service.get_screener_sectors(universe)}

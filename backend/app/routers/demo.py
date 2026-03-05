@@ -4,11 +4,13 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.user import User
 from ..schemas.demo import (
+    ClosePositionRequest,
     OrderCreateRequest,
     OrderResponse,
     PerformanceResponse,
     PortfolioResetRequest,
     PortfolioResponse,
+    PortfolioSummaryResponse,
 )
 from ..services import demo_service
 from ..utils.auth import get_current_user
@@ -47,6 +49,31 @@ def performance(
     current_user: User = Depends(get_current_user),
 ):
     return demo_service.get_performance(db, current_user.id)
+
+
+@router.post("/close-position", response_model=OrderResponse, status_code=201)
+def close_pos(
+    body: ClosePositionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return demo_service.close_position(db, current_user.id, body)
+
+
+@router.post("/close-all", response_model=list[OrderResponse], status_code=201)
+def close_all(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return demo_service.close_all_positions(db, current_user.id)
+
+
+@router.get("/portfolio/summary", response_model=PortfolioSummaryResponse)
+def portfolio_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return demo_service.get_portfolio_summary(db, current_user.id)
 
 
 @router.post("/reset", response_model=PortfolioResponse)

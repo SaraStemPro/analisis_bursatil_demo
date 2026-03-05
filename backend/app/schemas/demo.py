@@ -18,6 +18,12 @@ class OrderCreateRequest(BaseModel):
     take_profit: Decimal | None = Field(default=None, gt=0, decimal_places=2)
 
 
+class ClosePositionRequest(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+    quantity: int = Field(gt=0, le=100_000)
+    side: str = Field(pattern=r"^(long|short)$")
+
+
 class PortfolioResetRequest(BaseModel):
     initial_balance: Decimal = Field(
         default=Decimal("100000.00"),
@@ -36,6 +42,7 @@ class PositionResponse(BaseModel):
     current_price: Decimal
     pnl: Decimal
     pnl_pct: Decimal
+    side: str = "long"  # "long" | "short"
 
     model_config = {"from_attributes": True}
 
@@ -62,6 +69,7 @@ class OrderResponse(BaseModel):
     stop_loss: Decimal | None = None
     take_profit: Decimal | None = None
     status: OrderStatus
+    side: str | None = None
     pnl: Decimal | None = None
     created_at: datetime
     closed_at: datetime | None = None
@@ -82,3 +90,18 @@ class PerformanceResponse(BaseModel):
     best_trade_pnl: float | None = None
     worst_trade_pnl: float | None = None
     avg_trade_duration_days: float | None = None
+
+
+class SectorAllocation(BaseModel):
+    sector: str
+    weight_pct: float
+    value: float
+
+
+class PortfolioSummaryResponse(BaseModel):
+    total_value: float
+    balance: float
+    invested: float
+    positions_count: int
+    sectors: list[SectorAllocation]
+    diversity_score: float  # 0-100, Shannon entropy normalizada

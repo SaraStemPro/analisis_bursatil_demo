@@ -1,6 +1,6 @@
 // --- Enums ---
 export type UserRole = 'student' | 'professor' | 'admin'
-export type OrderType = 'buy' | 'sell'
+export type OrderType = 'buy' | 'sell' | 'close'
 export type OrderStatus = 'open' | 'closed' | 'cancelled'
 export type BacktestStatus = 'running' | 'completed' | 'failed'
 export type ExitReason = 'signal' | 'stop_loss' | 'take_profit'
@@ -109,6 +109,7 @@ export interface Position {
   current_price: number
   pnl: number
   pnl_pct: number
+  side: 'long' | 'short'
 }
 
 export interface Portfolio {
@@ -131,9 +132,72 @@ export interface Order {
   stop_loss: number | null
   take_profit: number | null
   status: OrderStatus
+  side: string | null
   pnl: number | null
   created_at: string
   closed_at: string | null
+}
+
+export interface SectorAllocation {
+  sector: string
+  weight_pct: number
+  value: number
+}
+
+export interface PortfolioSummary {
+  total_value: number
+  balance: number
+  invested: number
+  positions_count: number
+  sectors: SectorAllocation[]
+  diversity_score: number
+}
+
+export interface DetailedQuote {
+  symbol: string
+  name: string
+  price: number
+  change_percent: number
+  market_cap: number | null
+  sector: string | null
+  industry: string | null
+  pe_ratio: number | null
+  forward_pe: number | null
+  peg_ratio: number | null
+  price_to_book: number | null
+  dividend_yield: number | null
+  profit_margin: number | null
+  roe: number | null
+  revenue_growth: number | null
+  debt_to_equity: number | null
+  beta: number | null
+  fifty_two_week_high: number | null
+  fifty_two_week_low: number | null
+  avg_volume: number | null
+}
+
+export interface ScreenerFilters {
+  universe: 'sp500' | 'ibex35' | 'tech' | 'healthcare' | 'finance' | 'energy' | 'industrials' | 'consumer' | 'all'
+  sectors?: string[]
+  market_cap_min?: number
+  market_cap_max?: number
+  pe_min?: number
+  pe_max?: number
+  dividend_min?: number
+  dividend_max?: number
+  price_min?: number
+  price_max?: number
+  change_min?: number
+  change_max?: number
+  beta_min?: number
+  beta_max?: number
+}
+
+export interface ScreenerResult {
+  universe: string
+  total: number
+  filtered: number
+  stocks: DetailedQuote[]
 }
 
 export interface Performance {

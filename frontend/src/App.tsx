@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Charts from './pages/Charts'
 import Demo from './pages/Demo'
+import Screener from './pages/Screener'
 import Backtest from './pages/Backtest'
 import Tutor from './pages/Tutor'
 import Profile from './pages/Profile'
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/charts" element={<Charts />} />
           <Route path="/demo" element={<Demo />} />
+          <Route path="/screener" element={<Screener />} />
           <Route path="/backtest" element={<Backtest />} />
           <Route path="/tutor" element={<Tutor />} />
           <Route path="/profile" element={<Profile />} />

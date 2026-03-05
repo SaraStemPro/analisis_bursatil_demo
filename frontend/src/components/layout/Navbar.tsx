@@ -1,10 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../context/auth-store'
-import { BarChart3, BookOpen, FlaskConical, LineChart, LogOut, MessageCircle, User } from 'lucide-react'
+import { BarChart3, BookOpen, FlaskConical, LineChart, LogOut, MessageCircle, Search, User } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
   { to: '/charts', label: 'Gráficos', icon: LineChart },
+  { to: '/screener', label: 'Screener', icon: Search },
   { to: '/demo', label: 'Paper Trading', icon: BookOpen },
   { to: '/backtest', label: 'Backtesting', icon: FlaskConical },
   { to: '/tutor', label: 'Tutor IA', icon: MessageCircle },
@@ -18,7 +19,7 @@ export default function Navbar() {
     <nav className="bg-slate-900 text-white border-b border-slate-700">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
         <Link to="/" className="text-lg font-bold text-emerald-400">
-          BursatilEdu
+          AnalisisBursatil
         </Link>
 
         <div className="flex items-center gap-1">

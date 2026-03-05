@@ -20,10 +20,13 @@ from .auth import (
 )
 from .course import CourseCreateRequest, CourseResponse
 from .market import (
+    DetailedQuoteResponse,
     HistoryQuery,
     HistoryResponse,
     OHLCV,
     QuoteResponse,
+    ScreenerFilters,
+    ScreenerResponse,
     TickerSearchResult,
 )
 from .indicators import (
@@ -38,12 +41,15 @@ from .indicators import (
     PresetResponse,
 )
 from .demo import (
+    ClosePositionRequest,
     OrderCreateRequest,
     OrderResponse,
     PerformanceResponse,
     PortfolioResetRequest,
     PortfolioResponse,
+    PortfolioSummaryResponse,
     PositionResponse,
+    SectorAllocation,
 )
 from .tutor import (
     ChatRequest,
@@ -97,10 +103,13 @@ __all__ = [
     "CourseCreateRequest",
     "CourseResponse",
     # Market
+    "DetailedQuoteResponse",
     "HistoryQuery",
     "HistoryResponse",
     "OHLCV",
     "QuoteResponse",
+    "ScreenerFilters",
+    "ScreenerResponse",
     "TickerSearchResult",
     # Indicators
     "CalculateRequest",
@@ -113,12 +122,15 @@ __all__ = [
     "PresetCreateRequest",
     "PresetResponse",
     # Demo
+    "ClosePositionRequest",
     "OrderCreateRequest",
     "OrderResponse",
     "PerformanceResponse",
     "PortfolioResetRequest",
     "PortfolioResponse",
+    "PortfolioSummaryResponse",
     "PositionResponse",
+    "SectorAllocation",
     # Tutor
     "ChatRequest",
     "ChatResponse",

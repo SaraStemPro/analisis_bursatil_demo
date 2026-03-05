@@ -1,11 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from .config import settings
 from .database import Base, engine
 from .routers import auth, market, indicators, demo, backtest, tutor
 
 Base.metadata.create_all(bind=engine)
+
+# Lightweight migration: add missing columns to existing tables
+with engine.connect() as conn:
+    inspector = inspect(engine)
+    if "orders" in inspector.get_table_names():
+        columns = [c["name"] for c in inspector.get_columns("orders")]
+        if "side" not in columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN side VARCHAR(10)"))
+            conn.commit()
 
 app = FastAPI(
     title=settings.app_name,

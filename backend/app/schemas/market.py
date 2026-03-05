@@ -85,3 +85,50 @@ class HistoryResponse(BaseModel):
     period: str
     interval: str
     data: list[OHLCV]
+
+
+class DetailedQuoteResponse(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    change_percent: float
+    market_cap: float | None = None
+    sector: str | None = None
+    industry: str | None = None
+    pe_ratio: float | None = None
+    forward_pe: float | None = None
+    peg_ratio: float | None = None
+    price_to_book: float | None = None
+    dividend_yield: float | None = None
+    profit_margin: float | None = None
+    roe: float | None = None
+    revenue_growth: float | None = None
+    debt_to_equity: float | None = None
+    beta: float | None = None
+    fifty_two_week_high: float | None = None
+    fifty_two_week_low: float | None = None
+    avg_volume: float | None = None
+
+
+class ScreenerFilters(BaseModel):
+    universe: str = Field(default="sp500", pattern=r"^(sp500|ibex35|tech|healthcare|finance|energy|industrials|consumer|all)$")
+    sectors: list[str] | None = None
+    market_cap_min: float | None = None  # in billions
+    market_cap_max: float | None = None
+    pe_min: float | None = None
+    pe_max: float | None = None
+    dividend_min: float | None = None
+    dividend_max: float | None = None
+    price_min: float | None = None
+    price_max: float | None = None
+    change_min: float | None = None  # % change
+    change_max: float | None = None
+    beta_min: float | None = None
+    beta_max: float | None = None
+
+
+class ScreenerResponse(BaseModel):
+    universe: str
+    total: int
+    filtered: int
+    stocks: list[DetailedQuoteResponse]

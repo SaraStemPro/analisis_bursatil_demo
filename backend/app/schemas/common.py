@@ -8,8 +8,9 @@ class UserRole(str, Enum):
 
 
 class OrderType(str, Enum):
-    buy = "buy"
-    sell = "sell"
+    buy = "buy"      # Abrir LONG
+    sell = "sell"     # Abrir SHORT
+    close = "close"  # Cerrar posicion (total o parcial)
 
 
 class OrderStatus(str, Enum):

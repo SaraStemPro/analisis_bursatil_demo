@@ -2,7 +2,9 @@ import { api } from './client'
 import type {
   TokenResponse, User, TickerSearchResult, Quote, HistoryResponse,
   IndicatorDefinition, CalculateResponse, IndicatorRequest, Preset,
-  Portfolio, Order, Performance, ChatResponse, Conversation, Document,
+  Portfolio, Order, Performance, PortfolioSummary, DetailedQuote,
+  ScreenerFilters, ScreenerResult,
+  ChatResponse, Conversation, Document,
   Strategy, BacktestRun, BacktestRunSummary, BacktestTrade, StrategyRules,
 } from '../types'
 
@@ -21,6 +23,9 @@ export const market = {
   quote: (ticker: string) => api.get<Quote>(`/market/quote/${ticker}`),
   history: (ticker: string, period = '1mo', interval = '1d') =>
     api.get<HistoryResponse>(`/market/history/${ticker}?period=${period}&interval=${interval}`),
+  detailedQuote: (ticker: string) => api.get<DetailedQuote>(`/market/detailed-quote/${ticker}`),
+  screener: (filters: ScreenerFilters) => api.post<ScreenerResult>('/market/screener', filters),
+  screenerSectors: (universe: string) => api.get<{ sectors: string[] }>(`/market/screener/sectors/${universe}`),
 }
 
 // --- Indicators ---
@@ -38,8 +43,12 @@ export const demo = {
   portfolio: () => api.get<Portfolio>('/demo/portfolio'),
   createOrder: (data: { ticker: string; type: string; quantity: number; price?: number; stop_loss?: number; take_profit?: number }) =>
     api.post<Order>('/demo/order', data),
+  closePosition: (data: { ticker: string; quantity: number; side: string }) =>
+    api.post<Order>('/demo/close-position', data),
+  closeAll: () => api.post<Order[]>('/demo/close-all', {}),
   orders: () => api.get<Order[]>('/demo/orders'),
   performance: () => api.get<Performance>('/demo/performance'),
+  portfolioSummary: () => api.get<PortfolioSummary>('/demo/portfolio/summary'),
   reset: (initial_balance = 100000) => api.post<Portfolio>('/demo/reset', { initial_balance }),
 }
 

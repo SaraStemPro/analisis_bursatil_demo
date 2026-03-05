@@ -31,12 +31,12 @@ Toda la especificación funcional está en `SPEC.md`. Consultarla siempre antes 
 ```
 backend/app/schemas/
 ├── __init__.py      ← re-exports todo
-├── common.py        ← enums compartidos (UserRole, OrderType, Comparator, etc.)
+├── common.py        ← enums compartidos (UserRole, OrderType[buy/sell/close], Comparator, etc.)
 ├── auth.py          ← Register, Login, Token, User, Invite
 ├── course.py        ← Course CRUD
-├── market.py        ← Search, Quote, OHLCV, HistoryQuery
+├── market.py        ← Search, Quote, OHLCV, HistoryQuery, DetailedQuote, ScreenerFilters, ScreenerResponse
 ├── indicators.py    ← Catalog, Calculate, Presets (max 5 indicadores)
-├── demo.py          ← Portfolio, Orders, Performance (paper trading)
+├── demo.py          ← Portfolio, Orders, Performance, ClosePosition, PortfolioSummary (paper trading)
 ├── tutor.py         ← Chat, Conversations, Documents, FAQ
 └── backtest.py      ← Strategy rules, BacktestRun, Trades, Compare
 ```
@@ -73,7 +73,7 @@ backend/app/schemas/
 2. ✅ Estructura + Auth (FastAPI, config, database, JWT, modelos SQLAlchemy)
 3. ✅ Gráficos (yfinance: search, quote, history OHLCV)
 4. ✅ Indicadores (catálogo 10 indicadores, cálculo, presets)
-5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset)
+5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset, short selling, close-all)
 6. ✅ Backtesting (motor completo, 6 templates, constructor, simulación, métricas, comparación)
 7. ✅ Tutor IA (RAG: PDF upload, chunking, FAISS/keyword search, chat con LLM, FAQ)
 8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
@@ -92,6 +92,20 @@ backend/app/schemas/
    - Preservación de escala al añadir/quitar indicadores
    - Dibujo en gráficos de osciladores (cada chart tiene DrawingManager propio, activeChartId en store)
    - VWAP oculto del catálogo (aún disponible en backend)
+   - Botón "Comprar" en Charts → navega a Paper Trading con ticker pre-rellenado
+   - Paper Trading mejorado:
+     - Buy = abrir LONG, Sell = abrir SHORT (posiciones simultáneas long/short permitidas)
+     - Cerrar posición (total o parcial) con modal de confirmación
+     - Botón "Cerrar todo" para liquidar todas las posiciones
+     - Posiciones en formato tabla/lista (no tarjetas)
+     - Resumen portfolio con diversificación (Shannon entropy) y distribución sectorial
+     - Buscador de tickers con autocompletado en formulario de orden
+   - Stock Screener (página independiente `/screener`):
+     - 9 universos: S&P 500 (~128), IBEX 35 (34), Tech (41), Healthcare (28), Finance (26), Energy (19), Industrials, Consumer, All
+     - 7 filtros: Sector, Market Cap, P/E, Dividendo%, Precio, Cambio%, Beta
+     - Tabla sorteable con 12 columnas + búsqueda por texto
+     - Simulador de portfolio: seleccionar acciones, ver distribución sectorial, diversity score, comprar todo
+     - Navegación: ticker → Charts, carrito → Paper Trading con ticker pre-rellenado
 9. Pulido (UI/UX, ranking, deploy)
 
 ## Indicadores — 10 en catálogo backend
@@ -135,18 +149,55 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime(), INDICA
 - PreviewPrimitive: dibuja preview en vivo durante crosshair move
 - `activeChartId` en store determina qué chart recibe clics de dibujo ('main' | 'osc-RSI' | etc.)
 
-## API — 34 rutas implementadas
+## API — 39 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
-Market:     GET search, quote/{ticker}, history/{ticker}
+Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
+            POST screener | GET screener/sectors/{universe}
 Indicators: GET catalog | POST calculate | GET/POST presets
-Demo:       GET portfolio, orders, performance | POST order, reset
+Demo:       GET portfolio, orders, performance, portfolio/summary
+            POST order, close-position, close-all, reset
 Backtest:   GET templates, strategies, strategies/{id} | POST strategies
             PUT/DELETE strategies/{id}
             POST run | GET runs, runs/{id}, runs/{id}/trades | DELETE runs/{id}
             POST compare
 Tutor:      POST chat | GET conversations | POST/GET documents | GET faq
 Health:     GET /api/health
+```
+
+## Arquitectura de Paper Trading (Demo)
+
+### Semántica de órdenes
+- `buy` → abre posición LONG (deduce coste del balance)
+- `sell` → abre posición SHORT (deduce margen 100% del balance)
+- `close` → cierra posición (total o parcial), campo `side` indica si cierra long o short
+- Un mismo ticker puede tener posición LONG y SHORT simultáneamente
+
+### Archivos clave
+```
+pages/Demo.tsx                             ← Página principal, tabla de posiciones, botón cerrar-todo
+components/demo/OrderForm.tsx              ← Formulario con buscador de tickers, botones Long/Short
+components/demo/TickerSearchInput.tsx       ← Autocompletado con market.search() + debounce
+components/demo/ClosePositionDialog.tsx     ← Modal cierre parcial/total con slider
+components/demo/PortfolioSummaryPanel.tsx   ← Sectores + diversity score (Shannon entropy)
+components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde, sell rojo, close amber)
+```
+
+### Modelo de datos (Order)
+- Columna `side` (String(10), nullable): "long" | "short"
+- Migration automática en `main.py` (ALTER TABLE si columna no existe)
+
+## Arquitectura de Screener
+
+### Backend
+- Universos curados en `market_service.py`: SP500 (~128), IBEX35 (34), Tech, Healthcare, Finance, Energy, Industrials, Consumer
+- Cache multinivel: `_info_cache` (30min TTL) para yf.Ticker().info, `_screener_cache` (5min TTL) por universo
+- **IMPORTANTE**: resultados vacíos NO se cachean (evita envenenamiento de cache por fallos de yfinance)
+- Filtrado server-side: `_apply_filters()` aplica sector, market_cap, P/E, dividend, price, change%, beta
+
+### Frontend
+```
+pages/Screener.tsx  ← Página completa: filtros + tabla sorteable + simulador de portfolio
 ```
 
 ## Comandos útiles

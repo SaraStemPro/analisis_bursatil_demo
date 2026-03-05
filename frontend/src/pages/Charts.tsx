@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, createSeriesMarkers } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams, LogicalRange } from 'lightweight-charts'
@@ -15,7 +16,7 @@ import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/re
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
-import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
 const ALL_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
@@ -35,8 +36,19 @@ function validIntervals(period: string): string[] {
 const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
 
 export default function Charts() {
-  const [ticker, setTicker] = useState('AAPL')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTicker = searchParams.get('ticker')?.toUpperCase() || 'AAPL'
+
+  const navigate = useNavigate()
+  const [ticker, setTicker] = useState(initialTicker)
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Clear ticker param from URL after reading it
+  useEffect(() => {
+    if (searchParams.has('ticker')) {
+      setSearchParams({}, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [period, setPeriod] = useState('3mo')
   const [interval, setInterval] = useState('1d')
   const [activeIndicators, setActiveIndicators] = useState<IndicatorRequest[]>([])
@@ -646,6 +658,13 @@ export default function Charts() {
                 >
                   <ExternalLink size={14} />
                 </a>
+                <button
+                  onClick={() => navigate(`/demo?buy=${quote.symbol}`)}
+                  title="Comprar en Paper Trading"
+                  className="flex items-center gap-1 px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 rounded text-white text-xs font-medium transition-colors"
+                >
+                  <ShoppingCart size={12} /> Comprar
+                </button>
               </div>
               <p className="text-sm text-slate-400">{quote.name}</p>
               {/* Feature 12: exchange + market state */}
