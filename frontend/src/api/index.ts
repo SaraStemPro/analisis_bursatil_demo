@@ -4,7 +4,7 @@ import type {
   IndicatorDefinition, CalculateResponse, IndicatorRequest, Preset,
   Portfolio, Order, Performance, PortfolioSummary, DetailedQuote,
   ScreenerFilters, ScreenerResult,
-  ChatResponse, Conversation, Document,
+  ChatResponse, Conversation, ConversationMessages, Document,
   Strategy, BacktestRun, BacktestRunSummary, BacktestTrade, StrategyRules,
 } from '../types'
 
@@ -57,12 +57,15 @@ export const tutor = {
   chat: (data: { message: string; conversation_id?: string }) =>
     api.post<ChatResponse>('/tutor/chat', data),
   conversations: () => api.get<Conversation[]>('/tutor/conversations'),
+  conversationMessages: (id: string) => api.get<ConversationMessages>(`/tutor/conversations/${id}/messages`),
+  deleteConversation: (id: string) => api.delete<void>(`/tutor/conversations/${id}`),
   uploadDocument: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
     return api.post<Document>('/tutor/documents', formData)
   },
   documents: () => api.get<Document[]>('/tutor/documents'),
+  deleteDocument: (id: string) => api.delete<void>(`/tutor/documents/${id}`),
   faq: () => api.get<{ items: { question: string; count: number }[] }>('/tutor/faq'),
 }
 

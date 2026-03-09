@@ -51,12 +51,17 @@ class ConversationResponse(BaseModel):
 class DocumentResponse(BaseModel):
     id: UUID
     filename: str
-    course_id: UUID
+    course_id: UUID | None = None
     uploaded_by: UUID
     processed: bool
     uploaded_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ConversationMessagesResponse(BaseModel):
+    id: UUID
+    messages: list[MessageResponse]
 
 
 class FAQItem(BaseModel):

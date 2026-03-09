@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -6,6 +6,7 @@ from ..models.user import User
 from ..schemas.tutor import (
     ChatRequest,
     ChatResponse,
+    ConversationMessagesResponse,
     ConversationResponse,
     DocumentResponse,
     FAQResponse,
@@ -33,24 +34,36 @@ def conversations(
     return tutor_service.get_conversations(db, current_user.id)
 
 
+@router.get("/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse)
+def conversation_messages(
+    conversation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return tutor_service.get_conversation_messages(db, current_user.id, conversation_id)
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(
+    conversation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tutor_service.delete_conversation(db, current_user.id, conversation_id)
+
+
 @router.post("/documents", response_model=DocumentResponse, status_code=201)
 async def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("professor", "admin")),
 ):
-    if not current_user.course_id:
+    # Resolve course_id: from professor's course, or None (global)
+    course_id = current_user.course_id
+    if not course_id:
         from ..models.course import Course
         course = db.query(Course).filter(Course.professor_id == current_user.id).first()
-        if not course:
-            from fastapi import HTTPException, status
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No tienes un curso asignado",
-            )
-        course_id = course.id
-    else:
-        course_id = current_user.course_id
+        course_id = course.id if course else None
 
     return await tutor_service.upload_document(db, current_user.id, course_id, file)
 
@@ -60,17 +73,22 @@ def list_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.course_id:
+    course_id = current_user.course_id
+    if not course_id:
         from ..models.course import Course
         course = db.query(Course).filter(Course.professor_id == current_user.id).first()
         course_id = course.id if course else None
-    else:
-        course_id = current_user.course_id
-
-    if not course_id:
-        return []
 
     return tutor_service.get_documents(db, course_id)
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+def delete_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("professor", "admin")),
+):
+    tutor_service.delete_document(db, current_user.id, document_id)
 
 
 @router.get("/faq", response_model=FAQResponse)

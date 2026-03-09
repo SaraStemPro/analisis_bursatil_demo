@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # LLM (Tutor IA)
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5:14b"
 
     # Embeddings
     embedding_model: str = "all-MiniLM-L6-v2"

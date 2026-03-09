@@ -246,10 +246,15 @@ export interface Conversation {
 export interface Document {
   id: string
   filename: string
-  course_id: string
+  course_id: string | null
   uploaded_by: string
   processed: boolean
   uploaded_at: string
+}
+
+export interface ConversationMessages {
+  id: string
+  messages: Message[]
 }
 
 // --- Backtest ---

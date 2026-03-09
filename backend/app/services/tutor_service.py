@@ -15,6 +15,7 @@ from ..models.message import Message
 from ..schemas.tutor import (
     ChatRequest,
     ChatResponse,
+    ConversationMessagesResponse,
     ConversationResponse,
     DocumentResponse,
     FAQItem,
@@ -24,9 +25,13 @@ from ..schemas.tutor import (
 )
 from ..utils.pdf_processor import process_pdf
 
-# Vector store en memoria (FAISS se inicializa lazy)
+# ──────────────────────────────────────
+# Vector store + chunk persistence
+# ──────────────────────────────────────
+
 _vector_store: dict | None = None
 _chunks_db: list[dict] = []  # [{text, page, document_id, filename}]
+_CHUNKS_FILE = Path("uploads/chunks.json")
 
 
 def _get_vector_store():
@@ -43,6 +48,24 @@ def _get_vector_store():
         except Exception:
             _vector_store = {"model": None, "index": None, "initialized": False}
     return _vector_store
+
+
+def _save_chunks():
+    """Persiste los chunks a disco."""
+    _CHUNKS_FILE.parent.mkdir(exist_ok=True)
+    with open(_CHUNKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(_chunks_db, f, ensure_ascii=False)
+
+
+def _load_chunks():
+    """Carga chunks de disco al arrancar."""
+    global _chunks_db
+    if _CHUNKS_FILE.exists():
+        try:
+            with open(_CHUNKS_FILE, "r", encoding="utf-8") as f:
+                _chunks_db = json.load(f)
+        except Exception:
+            _chunks_db = []
 
 
 def _rebuild_index():
@@ -70,11 +93,21 @@ def _rebuild_index():
         vs["index"] = None
 
 
+def startup_load():
+    """Carga chunks persistidos y reconstruye el índice FAISS al arrancar."""
+    _load_chunks()
+    if _chunks_db:
+        _rebuild_index()
+
+
+# Load on module import
+startup_load()
+
+
 def _search_chunks(query: str, top_k: int = 5) -> list[dict]:
     """Busca los chunks más relevantes para una query."""
     vs = _get_vector_store()
     if not vs["initialized"] or not vs["model"] or vs["index"] is None:
-        # Fallback: búsqueda por palabras clave
         return _keyword_search(query, top_k)
 
     try:
@@ -98,15 +131,26 @@ def _search_chunks(query: str, top_k: int = 5) -> list[dict]:
         return _keyword_search(query, top_k)
 
 
+_STOPWORDS_ES = frozenset(
+    "a al algo ante asi como con contra cual de del desde donde durante e el ella ellos"
+    " en entre era es esa ese eso esta este fue ha hay la las le les lo los mas me mi"
+    " muy ni no nos nosotros o otra otro para pero por que quien se ser si sin sobre"
+    " su sus te ti tiene todo tu tus un una uno unas unos ya yo".split()
+)
+
+
 def _keyword_search(query: str, top_k: int = 5) -> list[dict]:
-    """Búsqueda simple por coincidencia de palabras."""
-    query_words = set(query.lower().split())
+    """Búsqueda por coincidencia de palabras relevantes (sin stopwords)."""
+    query_words = set(query.lower().split()) - _STOPWORDS_ES
+    if not query_words:
+        query_words = set(query.lower().split())  # fallback si todo era stopwords
+
     scored = []
     for chunk in _chunks_db:
         chunk_words = set(chunk["text"].lower().split())
-        overlap = len(query_words & chunk_words)
-        if overlap > 0:
-            scored.append((overlap, chunk))
+        overlap = query_words & chunk_words
+        if overlap:
+            scored.append((len(overlap), chunk))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [c for _, c in scored[:top_k]]
@@ -178,13 +222,42 @@ def _generate_response(query: str, context_chunks: list[dict], conversation_hist
         except Exception:
             pass
 
+    # Intentar con Ollama (local, gratis)
+    if settings.ollama_base_url:
+        try:
+            import httpx
+
+            system_prompt = (
+                "Eres un tutor de análisis técnico bursátil para estudiantes universitarios. "
+                "Responde SOLO basándote en el material del curso proporcionado abajo. "
+                "Si la pregunta no se puede responder con el material, di claramente que no está en los apuntes. "
+                "NO inventes información que no esté en el material. "
+                "Responde en español, de forma clara, pedagógica y estructurada.\n\n"
+                f"Material del curso:\n{context}"
+            )
+
+            messages = [{"role": "system", "content": system_prompt}]
+            for msg in conversation_history[-6:]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            messages.append({"role": "user", "content": query})
+
+            resp = httpx.post(
+                f"{settings.ollama_base_url}/api/chat",
+                json={"model": settings.ollama_model, "messages": messages, "stream": False},
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+            return resp.json()["message"]["content"]
+        except Exception:
+            pass
+
     # Fallback sin LLM
     if context_chunks:
         response = "He encontrado la siguiente información relevante en los apuntes del curso:\n\n"
         for c in context_chunks[:3]:
-            response += f"📄 **{c['filename']}** (página {c['page']}):\n"
+            response += f"**{c['filename']}** (página {c['page']}):\n"
             response += f"> {c['text'][:300]}...\n\n"
-        response += "\n_Nota: Para respuestas más elaboradas, configura una API key de Anthropic u OpenAI._"
+        response += "\n_Nota: Para respuestas más elaboradas, arranca Ollama o configura una API key._"
         return response
     else:
         return (
@@ -314,10 +387,66 @@ def get_conversations(db: Session, user_id: str) -> list[ConversationResponse]:
     return results
 
 
+def get_conversation_messages(db: Session, user_id: str, conversation_id: str) -> ConversationMessagesResponse:
+    """Obtiene todos los mensajes de una conversación."""
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id, Conversation.user_id == user_id)
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversación no encontrada")
+
+    messages = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+
+    message_responses = []
+    for m in messages:
+        source_models = None
+        if m.sources:
+            source_models = [
+                Source(
+                    document_id=s["document_id"],
+                    filename=s["filename"],
+                    page=s.get("page"),
+                    chunk_text=s.get("chunk_text", ""),
+                )
+                for s in m.sources
+            ]
+        message_responses.append(MessageResponse(
+            id=m.id,
+            role=m.role,
+            content=m.content,
+            sources=source_models,
+            created_at=m.created_at,
+        ))
+
+    return ConversationMessagesResponse(id=conversation.id, messages=message_responses)
+
+
+def delete_conversation(db: Session, user_id: str, conversation_id: str):
+    """Elimina una conversación y todos sus mensajes."""
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id, Conversation.user_id == user_id)
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversación no encontrada")
+
+    db.query(Message).filter(Message.conversation_id == conversation_id).delete()
+    db.delete(conversation)
+    db.commit()
+
+
 async def upload_document(
     db: Session,
     user_id: str,
-    course_id: str,
+    course_id: str | None,
     file: UploadFile,
 ) -> DocumentResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -349,7 +478,7 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
 
-    # Procesar PDF en background (síncrono por ahora)
+    # Procesar PDF
     try:
         chunks = process_pdf(str(file_path))
         for chunk in chunks:
@@ -360,6 +489,7 @@ async def upload_document(
                 "filename": file.filename,
             })
 
+        _save_chunks()
         _rebuild_index()
 
         doc.processed = True
@@ -378,13 +508,16 @@ async def upload_document(
     )
 
 
-def get_documents(db: Session, course_id: str) -> list[DocumentResponse]:
-    docs = (
-        db.query(Document)
-        .filter(Document.course_id == course_id)
-        .order_by(Document.uploaded_at.desc())
-        .all()
-    )
+def get_documents(db: Session, course_id: str | None) -> list[DocumentResponse]:
+    query = db.query(Document)
+    if course_id:
+        # Show course docs + global docs (course_id is None)
+        query = query.filter((Document.course_id == course_id) | (Document.course_id.is_(None)))
+    else:
+        # No course: show only global docs
+        query = query.filter(Document.course_id.is_(None))
+
+    docs = query.order_by(Document.uploaded_at.desc()).all()
     return [
         DocumentResponse(
             id=d.id,
@@ -398,9 +531,33 @@ def get_documents(db: Session, course_id: str) -> list[DocumentResponse]:
     ]
 
 
+def delete_document(db: Session, user_id: str, document_id: str):
+    """Elimina un documento y sus chunks asociados. Solo profesores pueden borrar (ya filtrado en router)."""
+    global _chunks_db
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
+
+    # Remove physical file
+    try:
+        file_path = Path(doc.file_path)
+        if file_path.exists():
+            file_path.unlink()
+    except Exception:
+        pass
+
+    # Remove chunks from memory and disk
+    _chunks_db = [c for c in _chunks_db if c["document_id"] != document_id]
+    _save_chunks()
+    _rebuild_index()
+
+    # Remove from DB
+    db.delete(doc)
+    db.commit()
+
+
 def get_faq(db: Session, course_id: str) -> FAQResponse:
     """Obtiene las preguntas más frecuentes de los alumnos de un curso."""
-    # Buscar usuarios del curso
     from ..models.user import User
 
     user_ids = [
@@ -410,7 +567,6 @@ def get_faq(db: Session, course_id: str) -> FAQResponse:
     if not user_ids:
         return FAQResponse(items=[])
 
-    # Buscar mensajes de tipo "user" de esos alumnos
     conversation_ids = [
         cid
         for (cid,) in db.query(Conversation.id)
@@ -432,7 +588,6 @@ def get_faq(db: Session, course_id: str) -> FAQResponse:
         .all()
     )
 
-    # Contar preguntas similares (simplificado: agrupamos por contenido exacto)
     counts: dict[str, int] = {}
     for (content,) in messages:
         key = content.strip().lower()[:100]

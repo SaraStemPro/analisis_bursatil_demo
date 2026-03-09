@@ -54,6 +54,7 @@ from .demo import (
 from .tutor import (
     ChatRequest,
     ChatResponse,
+    ConversationMessagesResponse,
     ConversationResponse,
     DocumentResponse,
     FAQItem,
@@ -134,6 +135,7 @@ __all__ = [
     # Tutor
     "ChatRequest",
     "ChatResponse",
+    "ConversationMessagesResponse",
     "ConversationResponse",
     "DocumentResponse",
     "FAQItem",
