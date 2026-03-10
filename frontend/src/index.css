@@ -4,3 +4,27 @@ body {
   margin: 0;
   min-height: 100vh;
 }
+
+/* Scrollbar on top of screener table */
+.scrollbar-top {
+  overflow-x: scroll !important;
+  transform: rotateX(180deg);
+}
+.scrollbar-top > * {
+  transform: rotateX(180deg);
+}
+.scrollbar-top::-webkit-scrollbar {
+  height: 10px;
+}
+.scrollbar-top::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 5px;
+}
+.scrollbar-top::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 5px;
+  min-width: 40px;
+}
+.scrollbar-top::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

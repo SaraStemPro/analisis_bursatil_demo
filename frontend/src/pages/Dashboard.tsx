@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../context/auth-store'
 import { demo } from '../api'
-import { BookOpen, FlaskConical, LineChart, MessageCircle, TrendingUp } from 'lucide-react'
+import { BookOpen, FlaskConical, LineChart, MessageCircle, Search, TrendingUp } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuthStore()
@@ -12,7 +12,7 @@ export default function Dashboard() {
     { to: '/charts', label: 'Gráficos', desc: 'Analiza acciones con velas japonesas e indicadores', icon: LineChart, color: 'bg-blue-600' },
     { to: '/demo', label: 'Paper Trading', desc: 'Practica compra/venta con dinero ficticio', icon: BookOpen, color: 'bg-emerald-600' },
     { to: '/backtest', label: 'Backtesting', desc: 'Prueba estrategias contra datos históricos', icon: FlaskConical, color: 'bg-purple-600' },
-    { to: '/tutor', label: 'Tutor IA', desc: 'Pregunta al tutor basado en los apuntes del curso', icon: MessageCircle, color: 'bg-amber-600' },
+    { to: '/screener', label: 'Screener', desc: 'Busca y filtra acciones por fundamentales para construir tu portfolio', icon: Search, color: 'bg-cyan-600' },
   ]
 
   return (
@@ -70,6 +70,22 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {/* Tutor IA — bloque destacado */}
+      <Link
+        to="/tutor"
+        className="block bg-slate-900 rounded-lg p-6 border border-amber-700/50 hover:border-amber-500/70 transition-colors group"
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <div className="bg-amber-600 p-3 rounded">
+            <MessageCircle size={24} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold group-hover:text-amber-400 transition-colors">Tutor IA</h3>
+            <p className="text-sm text-slate-400">Pregunta al tutor basado en los apuntes del curso. Sube PDFs, consulta dudas y repasa conceptos clave de análisis bursátil.</p>
+          </div>
+        </div>
+      </Link>
     </div>
   )
 }

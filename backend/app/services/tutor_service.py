@@ -531,6 +531,19 @@ def get_documents(db: Session, course_id: str | None) -> list[DocumentResponse]:
     ]
 
 
+def get_document_for_download(db: Session, document_id: str) -> dict:
+    """Obtiene la ruta del archivo de un documento para descarga."""
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
+
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado en el servidor")
+
+    return {"file_path": str(file_path), "filename": doc.filename}
+
+
 def delete_document(db: Session, user_id: str, document_id: str):
     """Elimina un documento y sus chunks asociados. Solo profesores pueden borrar (ya filtrado en router)."""
     global _chunks_db

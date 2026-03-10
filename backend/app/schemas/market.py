@@ -108,10 +108,11 @@ class DetailedQuoteResponse(BaseModel):
     fifty_two_week_high: float | None = None
     fifty_two_week_low: float | None = None
     avg_volume: float | None = None
+    volatility: float | None = None
 
 
 class ScreenerFilters(BaseModel):
-    universe: str = Field(default="sp500", pattern=r"^(sp500|ibex35|tech|healthcare|finance|energy|industrials|consumer|all)$")
+    universe: str = Field(default="sp500", pattern=r"^(sp500|ibex35|tech|healthcare|finance|energy|industrials|consumer|indices|currencies|commodities|all)$")
     sectors: list[str] | None = None
     market_cap_min: float | None = None  # in billions
     market_cap_max: float | None = None
@@ -125,6 +126,10 @@ class ScreenerFilters(BaseModel):
     change_max: float | None = None
     beta_min: float | None = None
     beta_max: float | None = None
+    volatility_min: float | None = None
+    volatility_max: float | None = None
+    roe_min: float | None = None
+    roe_max: float | None = None
 
 
 class ScreenerResponse(BaseModel):

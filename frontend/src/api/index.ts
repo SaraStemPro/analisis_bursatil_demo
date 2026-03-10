@@ -3,7 +3,7 @@ import type {
   TokenResponse, User, TickerSearchResult, Quote, HistoryResponse,
   IndicatorDefinition, CalculateResponse, IndicatorRequest, Preset,
   Portfolio, Order, Performance, PortfolioSummary, DetailedQuote,
-  ScreenerFilters, ScreenerResult,
+  ScreenerFilters, ScreenerResult, Cartera,
   ChatResponse, Conversation, ConversationMessages, Document,
   Strategy, BacktestRun, BacktestRunSummary, BacktestTrade, StrategyRules,
 } from '../types'
@@ -41,7 +41,7 @@ export const indicators = {
 // --- Demo ---
 export const demo = {
   portfolio: () => api.get<Portfolio>('/demo/portfolio'),
-  createOrder: (data: { ticker: string; type: string; quantity: number; price?: number; stop_loss?: number; take_profit?: number }) =>
+  createOrder: (data: { ticker: string; type: string; quantity: number; price?: number; stop_loss?: number; take_profit?: number; portfolio_group?: string }) =>
     api.post<Order>('/demo/order', data),
   closePosition: (data: { ticker: string; quantity: number; side: string }) =>
     api.post<Order>('/demo/close-position', data),
@@ -50,6 +50,8 @@ export const demo = {
   performance: () => api.get<Performance>('/demo/performance'),
   portfolioSummary: () => api.get<PortfolioSummary>('/demo/portfolio/summary'),
   reset: (initial_balance = 100000) => api.post<Portfolio>('/demo/reset', { initial_balance }),
+  carteras: () => api.get<Cartera[]>('/demo/carteras'),
+  closeCartera: (name: string) => api.post<Order[]>(`/demo/close-cartera/${encodeURIComponent(name)}`, {}),
 }
 
 // --- Tutor ---
@@ -66,6 +68,27 @@ export const tutor = {
   },
   documents: () => api.get<Document[]>('/tutor/documents'),
   deleteDocument: (id: string) => api.delete<void>(`/tutor/documents/${id}`),
+  downloadDocument: (id: string) => {
+    const token = localStorage.getItem('token')
+    const link = document.createElement('a')
+    link.href = `/api/tutor/documents/${id}/download`
+    // Use fetch with auth header to get the blob, then trigger download
+    return fetch(`/api/tutor/documents/${id}/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((res) => {
+      if (!res.ok) throw new Error('Error al descargar')
+      return res.blob()
+    }).then((blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = '' // browser will use Content-Disposition filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    })
+  },
   faq: () => api.get<{ items: { question: string; count: number }[] }>('/tutor/faq'),
 }
 
@@ -79,7 +102,7 @@ export const backtest = {
   updateStrategy: (id: string, data: { name?: string; description?: string; rules?: StrategyRules }) =>
     api.put<Strategy>(`/backtest/strategies/${id}`, data),
   deleteStrategy: (id: string) => api.delete<void>(`/backtest/strategies/${id}`),
-  run: (data: { strategy_id: string; ticker: string; start_date: string; end_date: string; initial_capital?: number; commission_pct?: number }) =>
+  run: (data: { strategy_id: string; ticker: string; start_date: string; end_date: string; interval?: string; initial_capital?: number; commission_pct?: number }) =>
     api.post<BacktestRun>('/backtest/run', data),
   runs: () => api.get<BacktestRunSummary[]>('/backtest/runs'),
   getRun: (id: string) => api.get<BacktestRun>(`/backtest/runs/${id}`),

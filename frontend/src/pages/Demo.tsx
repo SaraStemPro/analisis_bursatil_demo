@@ -3,11 +3,27 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { demo } from '../api'
 import type { Position } from '../types'
-import { RotateCcw, X, ExternalLink, XCircle } from 'lucide-react'
+import { RotateCcw, X, ExternalLink, XCircle, Briefcase } from 'lucide-react'
+import type { Cartera } from '../types'
 import OrderForm from '../components/demo/OrderForm'
 import ClosePositionDialog from '../components/demo/ClosePositionDialog'
 import PortfolioSummaryPanel from '../components/demo/PortfolioSummaryPanel'
 import OrderHistory from '../components/demo/OrderHistory'
+
+// Smart price formatting: 5 decimals for small prices (forex), 2 for normal stocks
+function fmtPrice(val: number): string {
+  const n = Number(val)
+  if (n < 10) return n.toFixed(5)
+  if (n < 100) return n.toFixed(4)
+  return n.toFixed(2)
+}
+
+function fmtPnl(val: number): string {
+  const n = Number(val)
+  const abs = Math.abs(n)
+  if (abs < 0.01) return n.toFixed(5)
+  return n.toFixed(2)
+}
 
 export default function Demo() {
   const qc = useQueryClient()
@@ -26,12 +42,14 @@ export default function Demo() {
 
   const { data: portfolio } = useQuery({ queryKey: ['portfolio'], queryFn: demo.portfolio })
   const { data: perf } = useQuery({ queryKey: ['performance'], queryFn: demo.performance })
+  const { data: carteras } = useQuery({ queryKey: ['carteras'], queryFn: demo.carteras })
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['portfolio'] })
     qc.invalidateQueries({ queryKey: ['orders'] })
     qc.invalidateQueries({ queryKey: ['performance'] })
     qc.invalidateQueries({ queryKey: ['portfolioSummary'] })
+    qc.invalidateQueries({ queryKey: ['carteras'] })
   }
 
   const resetMut = useMutation({
@@ -44,7 +62,14 @@ export default function Demo() {
     onSuccess: invalidateAll,
   })
 
-  const hasPositions = portfolio && portfolio.positions.length > 0
+  const closeCarteraMut = useMutation({
+    mutationFn: (name: string) => demo.closeCartera(name),
+    onSuccess: invalidateAll,
+  })
+
+  // Separate cartera positions from individual positions
+  const individualPositions = portfolio?.positions.filter((p) => !p.portfolio_group) || []
+  const hasPositions = individualPositions.length > 0
 
   return (
     <div className="space-y-6">
@@ -96,7 +121,7 @@ export default function Demo() {
           {/* Open positions — list format */}
           {hasPositions && (
             <div>
-              <h3 className="text-sm font-medium text-slate-400 mb-2">Posiciones abiertas ({portfolio.positions.length})</h3>
+              <h3 className="text-sm font-medium text-slate-400 mb-2">Posiciones individuales ({individualPositions.length})</h3>
               <div className="border border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -112,7 +137,7 @@ export default function Demo() {
                     </tr>
                   </thead>
                   <tbody>
-                    {portfolio.positions.map((p) => {
+                    {individualPositions.map((p) => {
                       const isLong = p.side === 'long'
                       const isProfit = Number(p.pnl) >= 0
                       return (
@@ -134,10 +159,10 @@ export default function Demo() {
                             </span>
                           </td>
                           <td className="px-3 py-2 text-right text-white">{p.quantity}</td>
-                          <td className="px-3 py-2 text-right text-slate-300">{Number(p.avg_price).toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right text-white">{Number(p.current_price).toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
+                          <td className="px-3 py-2 text-right text-white">{fmtPrice(p.current_price)}</td>
                           <td className={`px-3 py-2 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {isProfit ? '+' : ''}{Number(p.pnl).toFixed(2)}€
+                            {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
                           </td>
                           <td className={`px-3 py-2 text-right ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isProfit ? '+' : ''}{Number(p.pnl_pct).toFixed(2)}%
@@ -161,6 +186,88 @@ export default function Demo() {
           )}
         </div>
       )}
+
+      {/* Carteras */}
+      {carteras && carteras.length > 0 && carteras.map((c: Cartera) => (
+        <div key={c.name} className="bg-slate-900 rounded-lg p-5 border border-cyan-700/50">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Briefcase size={18} className="text-cyan-400" />
+              {c.name}
+            </h2>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-slate-400">{c.positions.length} posiciones &middot; {c.sectors} sectores</span>
+              <span className={`font-medium ${c.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {c.total_pnl >= 0 ? '+' : ''}{c.total_pnl.toFixed(2)}€ ({c.total_pnl_pct >= 0 ? '+' : ''}{c.total_pnl_pct.toFixed(2)}%)
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded ${
+                c.diversity_score >= 70 ? 'bg-emerald-900/60 text-emerald-400' :
+                c.diversity_score >= 40 ? 'bg-amber-900/60 text-amber-400' : 'bg-red-900/60 text-red-400'
+              }`}>
+                {c.diversity_score >= 70 ? 'Diversificado' : c.diversity_score >= 40 ? 'Moderado' : 'Concentrado'} {c.diversity_score}%
+              </span>
+              <button
+                onClick={() => { if (confirm(`¿Cerrar TODA la cartera "${c.name}"?`)) closeCarteraMut.mutate(c.name) }}
+                disabled={closeCarteraMut.isPending}
+                className="flex items-center gap-1 text-slate-400 hover:text-amber-400 disabled:opacity-50"
+              >
+                <XCircle size={14} /> Cerrar cartera
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
+            <div><p className="text-slate-400 text-xs">Invertido</p><p className="font-medium">${c.total_invested.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
+            <div><p className="text-slate-400 text-xs">Valor actual</p><p className="font-medium">${c.total_current.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
+          </div>
+          <div className="border border-slate-700 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-800/50">
+                  <th className="px-3 py-1.5">Ticker</th>
+                  <th className="px-3 py-1.5 text-right">Cant.</th>
+                  <th className="px-3 py-1.5 text-right">P. medio</th>
+                  <th className="px-3 py-1.5 text-right">P. actual</th>
+                  <th className="px-3 py-1.5 text-right">P&L</th>
+                  <th className="px-3 py-1.5 text-right">%</th>
+                  <th className="px-3 py-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.positions.map((p) => {
+                  const isProfit = p.pnl >= 0
+                  return (
+                    <tr key={`${p.ticker}-${p.side}`} className="border-b border-slate-800 hover:bg-slate-800/50">
+                      <td className="px-3 py-1.5">
+                        <button onClick={() => navigate(`/charts?ticker=${p.ticker}`)} className="font-medium text-white hover:text-cyan-400 inline-flex items-center gap-1">
+                          {p.ticker} <ExternalLink size={10} className="opacity-40" />
+                        </button>
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-white">{p.quantity}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
+                      <td className="px-3 py-1.5 text-right text-white">{fmtPrice(p.current_price)}</td>
+                      <td className={`px-3 py-1.5 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
+                      </td>
+                      <td className={`px-3 py-1.5 text-right ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {isProfit ? '+' : ''}{p.pnl_pct.toFixed(2)}%
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <button
+                          onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name })}
+                          className="text-slate-500 hover:text-red-400 transition-colors"
+                          title="Cerrar posicion (total o parcial)"
+                        >
+                          <X size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
 
       {/* Order form */}
       <OrderForm initialTicker={initialTicker} />

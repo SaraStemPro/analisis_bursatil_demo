@@ -1,9 +1,9 @@
 # Plataforma de Análisis Bursátil Educativa — Especificación (SDD)
 
-> Versión: 1.0
-> Fecha: 2026-02-26
+> Versión: 2.0
+> Fecha: 2026-03-09
 > Autor: Spec Driven Development
-> Estado: **BORRADOR — pendiente de aprobación**
+> Estado: **Fases 1-8 COMPLETADAS — Fase 9 (Pulido) en progreso**
 
 ---
 
@@ -108,22 +108,32 @@ POST /api/indicators/presets              → guardar preset
 
 ### 4.3 Modo Demo (Paper Trading)
 
-**Objetivo**: Practicar compra/venta con dinero ficticio usando datos reales.
+**Objetivo**: Practicar compra/venta con dinero ficticio usando datos reales. Incluye posiciones individuales y carteras agrupadas.
 
 **Requisitos**:
 - Saldo inicial configurable (por defecto: 100.000 €)
-- Operaciones: Comprar, Vender, Stop-Loss, Take-Profit
+- Operaciones: Buy (abrir LONG), Sell (abrir SHORT), Close (cerrar total/parcial)
+- Un mismo ticker puede tener posición LONG y SHORT simultáneamente
 - Portfolio virtual con posiciones abiertas y cerradas
 - Historial de operaciones con P&L (Profit & Loss)
-- Métricas de rendimiento: rentabilidad total, ratio Sharpe, max drawdown
+- Métricas de rendimiento: rentabilidad total, ratio Sharpe, max drawdown, win rate
+- Carteras nombradas (portfolio_group): agrupan posiciones, muestran diversity score
+- Diversity score penalizado: Shannon entropy + penalizaciones (min 5 posiciones, min 3 sectores, concentración >40%)
+- Cerrar cartera completa o posiciones individuales para rebalanceo
+- Formato inteligente de precios: 5 decimales para forex (<10), 2 para acciones (>=100)
 - Ranking opcional entre estudiantes del mismo curso (gamificación)
 
 **Endpoints**:
 ```
-GET    /api/demo/portfolio                → portfolio actual del usuario
-POST   /api/demo/order                    → crear orden {ticker, type, quantity, price?, stop_loss?, take_profit?}
+GET    /api/demo/portfolio                → portfolio actual del usuario (posiciones + balance)
+POST   /api/demo/order                    → crear orden {ticker, type, quantity, price?, stop_loss?, take_profit?, portfolio_group?}
+POST   /api/demo/close-position           → cerrar posición {ticker, quantity, side}
+POST   /api/demo/close-all                → cerrar todas las posiciones abiertas
 GET    /api/demo/orders                   → historial de órdenes
 GET    /api/demo/performance              → métricas de rendimiento
+GET    /api/demo/portfolio/summary        → resumen con sectores y diversity score
+GET    /api/demo/carteras                 → carteras agrupadas con P&L y diversity score
+POST   /api/demo/close-cartera/{name}     → cerrar todas las posiciones de una cartera
 POST   /api/demo/reset                    → resetear portfolio a valores iniciales
 ```
 
@@ -149,8 +159,12 @@ POST   /api/demo/reset                    → resetear portfolio a valores inici
 ```
 POST /api/tutor/chat                     → {message, conversation_id?} → respuesta + fuentes
 GET  /api/tutor/conversations            → historial de conversaciones del usuario
+GET  /api/tutor/conversations/{id}/messages → mensajes de una conversación
+DELETE /api/tutor/conversations/{id}      → eliminar conversación
 POST /api/tutor/documents                → subir PDF (solo profesor)
 GET  /api/tutor/documents                → listar PDFs subidos
+GET  /api/tutor/documents/{id}/download  → descargar PDF
+DELETE /api/tutor/documents/{id}         → eliminar PDF (solo profesor)
 GET  /api/tutor/faq                      → preguntas frecuentes (solo profesor)
 ```
 
@@ -194,25 +208,35 @@ Cada estrategia predefinida incluye:
 
 #### 4.6.2 Constructor Visual de Estrategias (Construir)
 
-Interfaz visual donde el alumno define su propia estrategia sin escribir código, combinando indicadores del catálogo (módulo 4.2) con condiciones lógicas.
+Interfaz visual donde el alumno define su propia estrategia sin escribir código, combinando indicadores del catálogo (módulo 4.2) con condiciones lógicas, patrones de velas y gestión de riesgo avanzada.
 
 **Estructura de una estrategia**:
 ```
 Estrategia
 ├── Nombre y descripción
-├── Condiciones de ENTRADA (cuándo comprar)
-│   ├── Condición 1: [Indicador] [Comparador] [Valor o Indicador]
+├── Tipo de posición: Long (comprar) o Short (vender en corto)
+├── Condiciones de ENTRADA
+│   ├── Condición 1: [Operando] [Comparador] [Operando]  (offset: N velas atrás)
 │   ├── Condición 2: ...
 │   └── Operador lógico entre condiciones: AND / OR
-├── Condiciones de SALIDA (cuándo vender)
-│   ├── Condición 1: [Indicador] [Comparador] [Valor o Indicador]
-│   ├── Condición 2: ...
+├── Condiciones de SALIDA
+│   ├── Condición 1: [Operando] [Comparador] [Operando]  (offset: N velas atrás)
 │   └── Operador lógico entre condiciones: AND / OR
 └── Gestión de riesgo
-    ├── Stop-Loss: % máximo de pérdida por operación
-    ├── Take-Profit: % objetivo de ganancia por operación
-    └── Tamaño de posición: % del capital por operación
+    ├── Stop-Loss: Fijo (%) o Dinámico (fractal soporte/resistencia)
+    ├── Take-Profit: % objetivo
+    ├── Capital por operación: % del cash disponible
+    └── Riesgo máximo por trade: % del capital total
 ```
+
+**Tipos de operandos**:
+- **Indicador**: SMA, EMA, RSI, MACD, BBANDS (con selector de banda: inferior/media/superior), STOCH, ATR, OBV, FRACTALS
+- **Precio**: apertura, cierre, máximo, mínimo
+- **Volumen**: volumen de la barra
+- **Valor numérico**: constante (ej: 30, 70)
+- **Patrón de vela**: envolvente alcista/bajista, martillo alcista/bajista, marubozu alcista/bajista, long line alcista/bajista
+
+**Offset (velas atrás)**: cada condición puede evaluarse N velas atrás (0 = vela actual, 4 = hace 4 velas). Permite combinar condiciones en diferentes momentos temporales.
 
 **Tipos de comparadores disponibles**:
 
@@ -225,11 +249,6 @@ Estrategia
 | `entre` | RSI(14) entre 40 y 60 |
 | `fuera_de` | Precio fuera de Bandas de Bollinger |
 
-**Elementos referenciables en condiciones**:
-- Cualquier indicador del catálogo (4.2) con sus parámetros
-- Precio: apertura, cierre, máximo, mínimo
-- Volumen
-
 **Formato JSON de una estrategia** (cómo se almacena):
 ```json
 {
@@ -237,14 +256,16 @@ Estrategia
     "operator": "AND",
     "conditions": [
       {
-        "left": {"type": "indicator", "name": "RSI", "params": {"period": 14}},
-        "comparator": "less_than",
-        "right": {"type": "value", "value": 30}
+        "left": {"type": "candle_pattern", "pattern": "bullish_hammer"},
+        "comparator": "greater_than",
+        "right": {"type": "value", "value": 0},
+        "offset": 0
       },
       {
-        "left": {"type": "price", "field": "close"},
-        "comparator": "crosses_above",
-        "right": {"type": "indicator", "name": "EMA", "params": {"period": 20}}
+        "left": {"type": "price", "field": "low"},
+        "comparator": "less_than",
+        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "lower"}},
+        "offset": 0
       }
     ]
   },
@@ -252,17 +273,21 @@ Estrategia
     "operator": "OR",
     "conditions": [
       {
-        "left": {"type": "indicator", "name": "RSI", "params": {"period": 14}},
+        "left": {"type": "indicator", "name": "RSI", "params": {"length": 14}},
         "comparator": "greater_than",
-        "right": {"type": "value", "value": 70}
+        "right": {"type": "value", "value": 70},
+        "offset": 0
       }
     ]
   },
   "risk_management": {
     "stop_loss_pct": 5.0,
-    "take_profit_pct": 10.0,
-    "position_size_pct": 10.0
-  }
+    "stop_loss_type": "fractal",
+    "take_profit_pct": 15.0,
+    "position_size_pct": 100,
+    "max_risk_pct": 2.0
+  },
+  "side": "long"
 }
 ```
 
@@ -273,8 +298,10 @@ Al ejecutar un backtest, el sistema procesa la estrategia contra los datos hist�
 **Parámetros de ejecución**:
 - Ticker (o lista de tickers para probar en varios activos)
 - Rango de fechas (inicio y fin)
+- Timeframe/Intervalo: 1m, 5m, 15m, 1h, 4h, 1d (diario), 1wk (semanal)
 - Capital inicial (por defecto: 100.000 €, coherente con el modo demo)
 - Comisión por operación (configurable, por defecto: 0.1%)
+- Warmup automático: el motor descarga datos extra antes del start_date para calentar indicadores (SMA 200 necesita 200+ barras)
 
 **Métricas de rendimiento** (mostradas en el informe):
 
@@ -319,7 +346,7 @@ PUT    /api/backtest/strategies/{id}          → actualizar estrategia
 DELETE /api/backtest/strategies/{id}          → eliminar estrategia
 
 # Ejecución
-POST   /api/backtest/run                      → ejecutar backtest {strategy_id, ticker, start_date, end_date, initial_capital, commission_pct}
+POST   /api/backtest/run                      → ejecutar backtest {strategy_id, ticker, start_date, end_date, interval?, initial_capital, commission_pct}
 GET    /api/backtest/runs                     → historial de backtests del usuario
 GET    /api/backtest/runs/{id}               → resultado completo de un backtest (métricas + trades)
 GET    /api/backtest/runs/{id}/trades        → lista de operaciones del backtest
@@ -327,6 +354,46 @@ DELETE /api/backtest/runs/{id}               → eliminar resultado de backtest
 
 # Comparación
 POST   /api/backtest/compare                  → comparar backtests {run_ids: [id1, id2, id3]} → métricas lado a lado
+```
+
+### 4.7 Stock Screener
+
+**Objetivo**: Buscar, filtrar y comparar activos financieros por fundamentales y métricas de mercado. Incluye un simulador de portfolio para practicar asset allocation antes de comprar.
+
+**Universos disponibles** (11):
+
+| Universo | Tickers | Tipo |
+|----------|---------|------|
+| S&P 500 | ~130 | Equity |
+| IBEX 35 | 35 | Equity |
+| Tech | 42 | Equity |
+| Healthcare | 28 | Equity |
+| Finance | 28 | Equity |
+| Energy | 20 | Equity |
+| Industrials | 23 | Equity |
+| Consumer | 22 | Equity |
+| Índices | 12 | Non-equity |
+| Divisas | 10 | Non-equity |
+| Materias Primas | 12 | Non-equity |
+
+**Filtros** (9): Precio, Cambio%, Sector, Market Cap, P/E, Dividendo%, Beta, ROE, Volatilidad
+
+**Simulador de portfolio**:
+- Seleccionar activos con cantidades individuales
+- Ver distribución sectorial y diversity score (Shannon entropy penalizada)
+- Tips de diversificación según el estado del portfolio
+- Comprar toda la cartera → ejecución secuencial → auto-navegación a Paper Trading
+
+**Comportamiento UI**:
+- Tabla sorteable con scroll horizontal (barra arriba)
+- Columnas adaptativas: oculta Market Cap, Sector, P/E, Div%, ROE para universos non-equity
+- Búsqueda por texto sobre ticker y nombre
+- Etiqueta "productos" en vez de "acciones"
+
+**Endpoints**:
+```
+POST /api/market/screener                → filtrar activos {universe, filtros...} → lista de DetailedQuote
+GET  /api/market/screener/sectors/{u}    → sectores disponibles para un universo
 ```
 
 ---
@@ -360,13 +427,15 @@ Order
 ├── id: UUID
 ├── portfolio_id: FK → Portfolio
 ├── ticker: string
-├── type: enum(buy, sell)
+├── type: enum(buy, sell, close)
 ├── quantity: integer
-├── price: decimal
-├── stop_loss: decimal?
-├── take_profit: decimal?
+├── price: decimal(14,5)          ← 5 decimales para forex
+├── stop_loss: decimal(14,5)?
+├── take_profit: decimal(14,5)?
 ├── status: enum(open, closed, cancelled)
-├── pnl: decimal?
+├── side: enum(long, short)?      ← dirección de la posición
+├── pnl: decimal(14,5)?
+├── portfolio_group: string(100)? ← nombre de cartera (agrupación)
 ├── created_at: datetime
 └── closed_at: datetime?
 
@@ -531,7 +600,7 @@ analisis_bursatil_demo/
 |-----------|-----------|---------|
 | Framework | FastAPI | 0.115+ |
 | Datos bursátiles | yfinance | 0.2+ |
-| Indicadores técnicos | pandas-ta | 0.3+ |
+| Indicadores técnicos | pandas + numpy (nativo) | — |
 | ORM | SQLAlchemy | 2.0+ |
 | BD desarrollo | SQLite | — |
 | BD producción | PostgreSQL | 16+ |
@@ -570,27 +639,41 @@ analisis_bursatil_demo/
 
 ## 9. Fases de Implementación
 
-| Fase | Módulo | Entregable |
-|------|--------|------------|
-| 1 | Estructura + Auth | Proyecto base, login/registro, JWT |
-| 2 | Gráficos | Candlestick interactivo con datos de yfinance |
-| 3 | Indicadores | Catálogo completo con panel configurable |
-| 4 | Modo Demo | Paper trading con portfolio virtual |
-| 5 | Backtesting | Motor de backtesting, constructor visual, estrategias predefinidas |
-| 6 | Tutor IA | RAG sobre PDFs, chat funcional, integración con backtesting |
-| 7 | Pulido | UI/UX, ranking, preguntas frecuentes, deploy |
+| Fase | Módulo | Estado | Entregable |
+|------|--------|--------|------------|
+| 1 | Schemas Pydantic | ✅ | Todos los schemas de request/response |
+| 2 | Estructura + Auth | ✅ | Proyecto base, login/registro, JWT |
+| 3 | Gráficos | ✅ | Candlestick interactivo, dibujos, patrones, intradiario, hora Madrid |
+| 4 | Indicadores | ✅ | Catálogo 10 indicadores, panel configurable, osciladores sync |
+| 5 | Modo Demo | ✅ | Paper trading: long/short, carteras, diversificación, multi-asset |
+| 6 | Backtesting | ✅ | Motor completo, 6 templates, constructor visual, comparación |
+| 7 | Tutor IA | ✅ | RAG con Ollama local, PDF upload, FAISS+keyword, historial |
+| 8 | Frontend completo | ✅ | React 18, TW v4, LC v5, 7 páginas, screener 11 universos |
+| 9 | Pulido | 🔄 | UI/UX, responsive, ranking, deploy |
 
 ---
 
 ## 10. Criterios de Aceptación Globales
 
-- [ ] Un estudiante puede buscar una acción, ver su gráfico de velas y activar indicadores
-- [ ] Un estudiante puede practicar compra/venta con dinero ficticio y ver su rendimiento
-- [ ] Un estudiante puede hacer preguntas y recibir respuestas basadas en los PDFs del profesor
-- [ ] Un estudiante puede ejecutar una estrategia predefinida sobre un ticker y ver el informe de resultados
-- [ ] Un estudiante puede construir su propia estrategia combinando indicadores y condiciones sin escribir código
-- [ ] Un estudiante puede comparar los resultados de distintas estrategias lado a lado
-- [ ] Un estudiante puede pedir al tutor IA que interprete los resultados de su backtest
-- [ ] Un profesor puede subir PDFs y ver las preguntas frecuentes de sus alumnos
-- [ ] La aplicación funciona en móvil y escritorio (responsive)
-- [ ] Los datos bursátiles son reales y actualizados (Yahoo Finance)
+- [x] Un estudiante puede buscar una acción, ver su gráfico de velas y activar indicadores
+- [x] Un estudiante puede dibujar sobre el gráfico (trendlines, Fibonacci, Elliott, flechas, texto)
+- [x] Un estudiante puede detectar patrones de velas (envolvente, marubozu, martillo, long line)
+- [x] Un estudiante puede ver gráficos intradiarios con hora de Madrid
+- [x] Un estudiante puede practicar compra/venta (long/short) con dinero ficticio y ver su rendimiento
+- [x] Un estudiante puede crear carteras diversificadas desde el screener y gestionarlas en Paper Trading
+- [x] Un estudiante puede filtrar activos por 11 universos (acciones, índices, divisas, materias primas) y 9 filtros
+- [x] Un estudiante puede hacer preguntas y recibir respuestas basadas en los PDFs del profesor
+- [x] Un estudiante puede ejecutar una estrategia predefinida sobre un ticker y ver el informe de resultados
+- [x] Un estudiante puede construir su propia estrategia combinando indicadores, patrones de velas y condiciones sin escribir código
+- [x] Un estudiante puede operar en largo (long) y en corto (short) en backtesting
+- [x] Un estudiante puede seleccionar el timeframe (diario, horario, minutos, semanal) para backtesting
+- [x] Un estudiante puede usar condiciones con offset temporal (evaluar N velas atrás)
+- [x] Un estudiante puede usar stops dinámicos en fractales y gestión de riesgo por trade
+- [x] Un estudiante puede seleccionar la banda de Bollinger (inferior/media/superior) en condiciones
+- [x] Un estudiante puede comparar los resultados de distintas estrategias lado a lado
+- [x] Un profesor puede subir PDFs y ver las preguntas frecuentes de sus alumnos
+- [x] Los datos bursátiles son reales y actualizados (Yahoo Finance)
+- [x] Precios forex/divisas se muestran con 5 decimales (no se truncan)
+- [ ] La aplicación funciona correctamente en móvil (responsive)
+- [ ] Ranking de estudiantes por rendimiento (gamificación)
+- [ ] Deploy a producción

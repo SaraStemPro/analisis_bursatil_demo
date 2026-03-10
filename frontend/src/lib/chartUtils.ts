@@ -10,12 +10,22 @@ export const CHART_THEME = {
   rightPriceScale: { borderColor: '#334155' },
 } as const
 
+/** Get Madrid (Europe/Madrid) UTC offset in seconds for a given date.
+ *  Accounts for CET (+1) / CEST (+2) transitions automatically. */
+function getMadridOffsetSec(date: Date): number {
+  const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' })
+  const madridStr = date.toLocaleString('en-US', { timeZone: 'Europe/Madrid' })
+  return (new Date(madridStr).getTime() - new Date(utcStr).getTime()) / 1000
+}
+
 /** Convert ISO date string to lightweight-charts Time value.
- *  For intraday intervals: Unix timestamp (seconds).
+ *  For intraday intervals: Unix timestamp adjusted to Madrid timezone.
  *  For daily+: 'YYYY-MM-DD' string. */
 export function toChartTime(dateStr: string, currentInterval: string): Time {
   if (INTRADAY_INTERVALS.has(currentInterval)) {
-    return Math.floor(new Date(dateStr).getTime() / 1000) as unknown as Time
+    const date = new Date(dateStr)
+    const utcSec = Math.floor(date.getTime() / 1000)
+    return (utcSec + getMadridOffsetSec(date)) as unknown as Time
   }
   return dateStr.split('T')[0] as unknown as Time
 }

@@ -25,8 +25,10 @@ from ..schemas.backtest import (
     StrategyRules,
     StrategyUpdateRequest,
 )
-from ..schemas.common import Comparator, ConditionOperandType
+from ..schemas.common import CandlePattern, Comparator, ConditionOperandType, StopLossType, StrategySide
 from ..services import indicator_service
+
+import numpy as np
 
 
 # ──────────────────────────────────────
@@ -58,8 +60,8 @@ TEMPLATES: list[dict] = [
         },
     },
     {
-        "name": "Cruce de Muerte",
-        "description": "Inversa del Cruce Dorado. Compra cuando SMA 50 cruza por debajo de SMA 200 (posición corta conceptual).",
+        "name": "Cruce de Muerte (Short)",
+        "description": "Abre posición corta cuando SMA 50 cruza por debajo de SMA 200. Cierra cuando cruza por encima.",
         "rules": {
             "entry": {
                 "operator": "AND",
@@ -78,6 +80,7 @@ TEMPLATES: list[dict] = [
                 }],
             },
             "risk_management": {"stop_loss_pct": 10, "take_profit_pct": 25, "position_size_pct": 100},
+            "side": "short",
         },
     },
     {
@@ -135,7 +138,7 @@ TEMPLATES: list[dict] = [
                 "conditions": [{
                     "left": {"type": "price", "field": "close"},
                     "comparator": "less_than",
-                    "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2}},
+                    "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "lower"}},
                 }],
             },
             "exit": {
@@ -143,7 +146,7 @@ TEMPLATES: list[dict] = [
                 "conditions": [{
                     "left": {"type": "price", "field": "close"},
                     "comparator": "greater_than",
-                    "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2}},
+                    "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "upper"}},
                 }],
             },
             "risk_management": {"stop_loss_pct": 3, "take_profit_pct": 10, "position_size_pct": 100},
@@ -310,17 +313,37 @@ def run_backtest(db: Session, user_id: str, body: BacktestRunRequest) -> Backtes
     db.refresh(run)
 
     try:
-        # Descargar datos
+        # Calcular período de warmup según indicadores usados
+        warmup_bars = _calc_warmup(rules)
+
+        # Descargar datos con warmup extra
         tk = yf.Ticker(body.ticker)
-        df = tk.history(start=body.start_date.isoformat(), end=body.end_date.isoformat(), interval="1d")
+        interval = body.interval if hasattr(body, "interval") else "1d"
+        # Calcular warmup en tiempo real según intervalo
+        if interval in ("1m", "5m", "15m"):
+            warmup_td = pd.Timedelta(hours=warmup_bars)
+        elif interval in ("1h", "4h"):
+            warmup_td = pd.Timedelta(days=warmup_bars // 6 + 1)
+        else:
+            warmup_td = pd.Timedelta(days=int(warmup_bars * 1.6))
+        warmup_start = pd.Timestamp(body.start_date) - warmup_td
+        df = tk.history(start=warmup_start.strftime("%Y-%m-%d"), end=body.end_date.isoformat(), interval=interval)
 
         if df.empty:
             raise ValueError(f"Sin datos para {body.ticker} en el rango indicado")
 
-        # Calcular indicadores necesarios
+        # Calcular indicadores sobre todo el dataset (incluido warmup)
         indicator_data = _compute_all_indicators(df, rules)
 
-        # Ejecutar simulación
+        # Encontrar el índice donde empieza el rango real del usuario
+        sim_start_idx = 0
+        start_ts = pd.Timestamp(body.start_date, tz=df.index.tz)
+        for idx_i in range(len(df)):
+            if df.index[idx_i] >= start_ts:
+                sim_start_idx = idx_i
+                break
+
+        # Ejecutar simulación solo desde sim_start_idx
         trades, equity_curve = _simulate(
             df=df,
             rules=rules,
@@ -328,6 +351,7 @@ def run_backtest(db: Session, user_id: str, body: BacktestRunRequest) -> Backtes
             initial_capital=float(body.initial_capital),
             commission_pct=float(body.commission_pct),
             position_size_pct=rules.risk_management.position_size_pct,
+            sim_start_idx=sim_start_idx,
         )
 
         # Guardar trades
@@ -437,50 +461,155 @@ def compare_runs(db: Session, user_id: str, run_ids: list[UUID]) -> BacktestComp
 
 
 # ──────────────────────────────────────
+# Detección de patrones de velas
+# ──────────────────────────────────────
+
+def _detect_candle_patterns(df: pd.DataFrame) -> dict[str, pd.Series]:
+    """Detecta patrones de velas. Devuelve series booleanas (1.0 si patrón presente, 0.0 si no)."""
+    o, h, l, c = df["Open"], df["High"], df["Low"], df["Close"]
+    body = (c - o).abs()
+    full_range = h - l
+    upper_shadow = h - pd.concat([o, c], axis=1).max(axis=1)
+    lower_shadow = pd.concat([o, c], axis=1).min(axis=1) - l
+
+    prev_body = body.shift(1)
+    prev_o = o.shift(1)
+    prev_c = c.shift(1)
+
+    patterns = {}
+
+    # Envolvente alcista: vela bajista seguida de vela alcista que envuelve
+    patterns[CandlePattern.bullish_engulfing.value] = (
+        (prev_c < prev_o) & (c > o) &
+        (o <= prev_c) & (c >= prev_o) &
+        (body > prev_body)
+    ).astype(float)
+
+    # Envolvente bajista: vela alcista seguida de vela bajista que envuelve
+    patterns[CandlePattern.bearish_engulfing.value] = (
+        (prev_c > prev_o) & (c < o) &
+        (o >= prev_c) & (c <= prev_o) &
+        (body > prev_body)
+    ).astype(float)
+
+    # Martillo alcista: cuerpo pequeño arriba, sombra inferior larga (>2x cuerpo)
+    patterns[CandlePattern.bullish_hammer.value] = (
+        (lower_shadow >= 2 * body) &
+        (upper_shadow <= body * 0.5) &
+        (body > 0) &
+        (full_range > 0)
+    ).astype(float)
+
+    # Martillo bajista (shooting star): cuerpo pequeño abajo, sombra superior larga
+    patterns[CandlePattern.bearish_hammer.value] = (
+        (upper_shadow >= 2 * body) &
+        (lower_shadow <= body * 0.5) &
+        (body > 0) &
+        (full_range > 0)
+    ).astype(float)
+
+    # Marubozu alcista: vela alcista con sombras muy pequeñas
+    patterns[CandlePattern.bullish_marubozu.value] = (
+        (c > o) &
+        (body >= 0.9 * full_range) &
+        (full_range > 0)
+    ).astype(float)
+
+    # Marubozu bajista
+    patterns[CandlePattern.bearish_marubozu.value] = (
+        (c < o) &
+        (body >= 0.9 * full_range) &
+        (full_range > 0)
+    ).astype(float)
+
+    # Long line alcista: cuerpo grande (>70% del rango), alcista, sombras moderadas
+    patterns[CandlePattern.bullish_long_line.value] = (
+        (c > o) &
+        (body >= 0.7 * full_range) &
+        (full_range > 0) &
+        (body > body.rolling(20, min_periods=1).mean() * 1.5)
+    ).astype(float)
+
+    # Long line bajista
+    patterns[CandlePattern.bearish_long_line.value] = (
+        (c < o) &
+        (body >= 0.7 * full_range) &
+        (full_range > 0) &
+        (body > body.rolling(20, min_periods=1).mean() * 1.5)
+    ).astype(float)
+
+    return {k: v.fillna(0.0) for k, v in patterns.items()}
+
+
+# ──────────────────────────────────────
 # Motor de simulación interno
 # ──────────────────────────────────────
 
 def _compute_all_indicators(df: pd.DataFrame, rules: StrategyRules) -> dict[str, pd.Series]:
-    """Calcula todos los indicadores referenciados en las reglas."""
-    import pandas_ta as ta
+    """Calcula todos los indicadores y patrones de velas referenciados en las reglas."""
+    needed: dict[str, tuple[str, dict]] = {}
+    needs_patterns = False
+    needs_fractals_for_stop = rules.risk_management.stop_loss_type == StopLossType.fractal
 
-    needed = set()
     for group in [rules.entry, rules.exit]:
         for cond in group.conditions:
             for operand in [cond.left, cond.right]:
                 if operand.type == ConditionOperandType.indicator and operand.name:
-                    key = f"{operand.name}_{_params_key(operand.params or {})}"
-                    needed.add((operand.name.upper(), operand.params or {}, key))
+                    # Strip 'band' from params for key/calculation (it's only for selection)
+                    calc_params = {k: v for k, v in (operand.params or {}).items() if k != "band"}
+                    key = f"{operand.name}_{_params_key(calc_params)}"
+                    needed[key] = (operand.name.upper(), calc_params)
+                elif operand.type == ConditionOperandType.candle_pattern:
+                    needs_patterns = True
             if cond.right_upper and cond.right_upper.type == ConditionOperandType.indicator:
-                key = f"{cond.right_upper.name}_{_params_key(cond.right_upper.params or {})}"
-                needed.add((cond.right_upper.name.upper(), cond.right_upper.params or {}, key))
+                calc_params = {k: v for k, v in (cond.right_upper.params or {}).items() if k != "band"}
+                key = f"{cond.right_upper.name}_{_params_key(calc_params)}"
+                needed[key] = (cond.right_upper.name.upper(), calc_params)
 
-    data = {}
-    for name, params, key in needed:
+    data: dict[str, pd.Series] = {}
+
+    for key, (name, params) in needed.items():
         if name == "SMA":
-            data[key] = ta.sma(df["Close"], length=int(params.get("length", 20)))
+            data[key] = indicator_service._sma(df["Close"], int(params.get("length", 20)))
         elif name == "EMA":
-            data[key] = ta.ema(df["Close"], length=int(params.get("length", 20)))
+            data[key] = indicator_service._ema(df["Close"], int(params.get("length", 20)))
         elif name == "RSI":
-            data[key] = ta.rsi(df["Close"], length=int(params.get("length", 14)))
+            data[key] = indicator_service._rsi(df["Close"], int(params.get("length", 14)))
         elif name == "MACD":
-            result = ta.macd(df["Close"], fast=int(params.get("fast", 12)), slow=int(params.get("slow", 26)), signal=int(params.get("signal", 9)))
-            data[key] = result.iloc[:, 0]  # MACD line
-            data[f"{key}_signal"] = result.iloc[:, 2]  # Signal line
+            result = indicator_service._macd(df["Close"], int(params.get("fast", 12)), int(params.get("slow", 26)), int(params.get("signal", 9)))
+            data[key] = result["macd"]
+            data[f"{key}_signal"] = result["signal"]
         elif name == "BBANDS":
-            result = ta.bbands(df["Close"], length=int(params.get("length", 20)), std=float(params.get("std", 2.0)))
-            data[f"{key}_lower"] = result.iloc[:, 0]
-            data[f"{key}_mid"] = result.iloc[:, 1]
-            data[f"{key}_upper"] = result.iloc[:, 2]
+            result = indicator_service._bbands(df["Close"], int(params.get("length", 20)), float(params.get("std", 2.0)))
+            data[f"{key}_lower"] = result["bbl"]
+            data[f"{key}_mid"] = result["bbm"]
+            data[f"{key}_upper"] = result["bbu"]
         elif name == "STOCH":
-            result = ta.stoch(df["High"], df["Low"], df["Close"], k=int(params.get("k", 14)), d=int(params.get("d", 3)))
-            data[key] = result.iloc[:, 0]
+            result = indicator_service._stoch(df["High"], df["Low"], df["Close"], int(params.get("k", 14)), int(params.get("d", 3)))
+            data[key] = result["stochk"]
         elif name == "ATR":
-            data[key] = ta.atr(df["High"], df["Low"], df["Close"], length=int(params.get("length", 14)))
+            data[key] = indicator_service._atr(df["High"], df["Low"], df["Close"], int(params.get("length", 14)))
         elif name == "OBV":
-            data[key] = ta.obv(df["Close"], df["Volume"])
+            data[key] = indicator_service._obv(df["Close"], df["Volume"])
         elif name == "VWAP":
-            data[key] = ta.vwap(df["High"], df["Low"], df["Close"], df["Volume"])
+            data[key] = indicator_service._vwap(df["High"], df["Low"], df["Close"], df["Volume"])
+        elif name == "FRACTALS":
+            period = int(params.get("period", 21))
+            result = indicator_service._fractals(df["High"], df["Low"], period)
+            data[f"{key}_up"] = result["fractal_up"]
+            data[f"{key}_down"] = result["fractal_down"]
+
+    # Compute fractals for dynamic stop if needed
+    if needs_fractals_for_stop and "_stop_fractal_down" not in data:
+        result = indicator_service._fractals(df["High"], df["Low"], 21)
+        data["_stop_fractal_down"] = result["fractal_down"]
+        data["_stop_fractal_up"] = result["fractal_up"]
+
+    # Compute candle patterns if needed
+    if needs_patterns:
+        patterns = _detect_candle_patterns(df)
+        for pname, pseries in patterns.items():
+            data[f"_pattern_{pname}"] = pseries
 
     return data
 
@@ -495,13 +624,24 @@ def _get_operand_value(operand: ConditionOperand, i: int, df: pd.DataFrame, indi
         return float(df.iloc[i][col])
     elif operand.type == ConditionOperandType.volume:
         return float(df.iloc[i]["Volume"])
+    elif operand.type == ConditionOperandType.candle_pattern:
+        pattern_name = operand.pattern.value if operand.pattern else ""
+        series = indicator_data.get(f"_pattern_{pattern_name}")
+        if series is None:
+            return 0.0
+        val = series.iloc[i]
+        return 0.0 if pd.isna(val) else float(val)
     elif operand.type == ConditionOperandType.indicator:
-        key = f"{operand.name}_{_params_key(operand.params or {})}"
+        params = operand.params or {}
+        # Excluir 'band' del key para que coincida con el key de cálculo
+        calc_params = {k: v for k, v in params.items() if k != "band"}
+        key = f"{operand.name}_{_params_key(calc_params)}"
         name = operand.name.upper() if operand.name else ""
-        # Para BBANDS, en entry usamos lower, en exit usamos upper
-        if name == "BBANDS" and f"{key}_lower" in indicator_data:
-            # Por defecto devolvemos lower (para comparaciones genéricas el contexto decide)
-            series = indicator_data.get(f"{key}_lower")
+        if name == "BBANDS":
+            band = str(params.get("band", "lower"))
+            series = indicator_data.get(f"{key}_{band}")
+        elif name == "FRACTALS":
+            series = indicator_data.get(f"{key}_down")
         else:
             series = indicator_data.get(key)
         if series is None:
@@ -511,24 +651,17 @@ def _get_operand_value(operand: ConditionOperand, i: int, df: pd.DataFrame, indi
     return None
 
 
-def _get_operand_value_for_exit(operand: ConditionOperand, i: int, df: pd.DataFrame, indicator_data: dict) -> float | None:
-    """Igual que _get_operand_value pero para BBANDS usa la banda superior."""
-    if operand.type == ConditionOperandType.indicator and operand.name and operand.name.upper() == "BBANDS":
-        key = f"{operand.name}_{_params_key(operand.params or {})}"
-        series = indicator_data.get(f"{key}_upper")
-        if series is None:
-            return None
-        val = series.iloc[i]
-        return None if pd.isna(val) else float(val)
-    return _get_operand_value(operand, i, df, indicator_data)
-
-
 def _evaluate_condition(cond, i: int, df: pd.DataFrame, indicator_data: dict, is_exit: bool = False) -> bool:
-    """Evalúa una condición en el índice i."""
-    get_val = _get_operand_value_for_exit if is_exit else _get_operand_value
+    """Evalúa una condición en el índice i, con soporte de offset (velas atrás)."""
+    get_val = _get_operand_value
+    offset = cond.offset if hasattr(cond, "offset") and cond.offset else 0
+    eval_i = i - offset
 
-    left_val = get_val(cond.left, i, df, indicator_data)
-    right_val = get_val(cond.right, i, df, indicator_data)
+    if eval_i < 0:
+        return False
+
+    left_val = get_val(cond.left, eval_i, df, indicator_data)
+    right_val = get_val(cond.right, eval_i, df, indicator_data)
 
     if left_val is None or right_val is None:
         return False
@@ -540,10 +673,10 @@ def _evaluate_condition(cond, i: int, df: pd.DataFrame, indicator_data: dict, is
     elif comp == Comparator.less_than:
         return left_val < right_val
     elif comp in (Comparator.crosses_above, Comparator.crosses_below):
-        if i < 1:
+        if eval_i < 1:
             return False
-        prev_left = get_val(cond.left, i - 1, df, indicator_data)
-        prev_right = get_val(cond.right, i - 1, df, indicator_data)
+        prev_left = get_val(cond.left, eval_i - 1, df, indicator_data)
+        prev_right = get_val(cond.right, eval_i - 1, df, indicator_data)
         if prev_left is None or prev_right is None:
             return False
         if comp == Comparator.crosses_above:
@@ -551,12 +684,12 @@ def _evaluate_condition(cond, i: int, df: pd.DataFrame, indicator_data: dict, is
         else:
             return prev_left >= prev_right and left_val < right_val
     elif comp == Comparator.between:
-        upper_val = get_val(cond.right_upper, i, df, indicator_data) if cond.right_upper else None
+        upper_val = get_val(cond.right_upper, eval_i, df, indicator_data) if cond.right_upper else None
         if upper_val is None:
             return False
         return right_val <= left_val <= upper_val
     elif comp == Comparator.outside:
-        upper_val = get_val(cond.right_upper, i, df, indicator_data) if cond.right_upper else None
+        upper_val = get_val(cond.right_upper, eval_i, df, indicator_data) if cond.right_upper else None
         if upper_val is None:
             return False
         return left_val < right_val or left_val > upper_val
@@ -572,6 +705,47 @@ def _evaluate_group(group: ConditionGroup, i: int, df: pd.DataFrame, indicator_d
     return any(results)
 
 
+def _find_last_fractal_support(indicator_data: dict, i: int, entry_price: float) -> float | None:
+    """Encuentra el último fractal inferior (soporte) por debajo del precio de entrada."""
+    series = indicator_data.get("_stop_fractal_down")
+    if series is None:
+        return None
+    for j in range(i, -1, -1):
+        val = series.iloc[j]
+        if not pd.isna(val) and float(val) < entry_price:
+            return float(val)
+    return None
+
+
+def _find_last_fractal_resistance(indicator_data: dict, i: int, entry_price: float) -> float | None:
+    """Encuentra el último fractal superior (resistencia) por encima del precio de entrada."""
+    series = indicator_data.get("_stop_fractal_up")
+    if series is None:
+        return None
+    for j in range(i, -1, -1):
+        val = series.iloc[j]
+        if not pd.isna(val) and float(val) > entry_price:
+            return float(val)
+    return None
+
+
+def _calc_warmup(rules: StrategyRules) -> int:
+    """Calcula las barras de warmup necesarias según los indicadores usados."""
+    max_period = 50  # mínimo razonable
+    for group in [rules.entry, rules.exit]:
+        for cond in group.conditions:
+            for operand in [cond.left, cond.right]:
+                if operand.type == ConditionOperandType.indicator and operand.params:
+                    for k, v in operand.params.items():
+                        if k in ("length", "slow", "period") and isinstance(v, (int, float)):
+                            max_period = max(max_period, int(v))
+            if cond.right_upper and cond.right_upper.type == ConditionOperandType.indicator and cond.right_upper.params:
+                for k, v in cond.right_upper.params.items():
+                    if k in ("length", "slow", "period") and isinstance(v, (int, float)):
+                        max_period = max(max_period, int(v))
+    return max_period + 20  # extra buffer
+
+
 def _simulate(
     df: pd.DataFrame,
     rules: StrategyRules,
@@ -579,92 +753,181 @@ def _simulate(
     initial_capital: float,
     commission_pct: float,
     position_size_pct: float,
+    sim_start_idx: int = 0,
 ) -> tuple[list[dict], list[EquityPoint]]:
-    """Ejecuta la simulación de backtesting."""
+    """Ejecuta la simulación de backtesting. Soporta long y short."""
     capital = initial_capital
-    position = None  # {"entry_date", "entry_price", "quantity"}
+    position = None  # {"entry_date", "entry_price", "quantity", "stop_price", "commission_in"}
     trades = []
     equity_curve = []
 
+    is_short = rules.side == StrategySide.short
     stop_loss_pct = rules.risk_management.stop_loss_pct
+    stop_loss_type = rules.risk_management.stop_loss_type
     take_profit_pct = rules.risk_management.take_profit_pct
+    max_risk_pct = rules.risk_management.max_risk_pct
 
     for i in range(len(df)):
         row = df.iloc[i]
         current_date = df.index[i].to_pydatetime()
         close = float(row["Close"])
 
+        # Solo registrar equity y operar desde sim_start_idx
+        if i < sim_start_idx:
+            continue
+
         if position is None:
-            # Sin posición: evaluar entrada
+            # Evaluar entrada
             if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
-                invest = capital * (position_size_pct / 100)
-                commission = invest * (commission_pct / 100)
-                quantity = (invest - commission) / close
+                # Determinar stop price
+                stop_price = None
+                if stop_loss_type == StopLossType.fractal:
+                    if is_short:
+                        stop_price = _find_last_fractal_resistance(indicator_data, i, close)
+                    else:
+                        stop_price = _find_last_fractal_support(indicator_data, i, close)
+                    if stop_price is None and stop_loss_pct:
+                        # Fallback a stop fijo
+                        stop_price = close * (1 + stop_loss_pct / 100) if is_short else close * (1 - stop_loss_pct / 100)
+                elif stop_loss_pct:
+                    stop_price = close * (1 + stop_loss_pct / 100) if is_short else close * (1 - stop_loss_pct / 100)
+
+                # Calcular tamaño de posición
+                if max_risk_pct and stop_price:
+                    risk_per_share = abs(close - stop_price)
+                    if risk_per_share > 0:
+                        risk_amount = capital * (max_risk_pct / 100)
+                        quantity = risk_amount / risk_per_share
+                        invest = quantity * close
+                        if invest > capital * (position_size_pct / 100):
+                            invest = capital * (position_size_pct / 100)
+                            commission = invest * (commission_pct / 100)
+                            quantity = (invest - commission) / close
+                        else:
+                            commission = invest * (commission_pct / 100)
+                            invest += commission
+                            if invest > capital:
+                                invest = capital
+                                commission = invest * (commission_pct / 100)
+                                quantity = (invest - commission) / close
+                    else:
+                        invest = capital * (position_size_pct / 100)
+                        commission = invest * (commission_pct / 100)
+                        quantity = (invest - commission) / close
+                else:
+                    invest = capital * (position_size_pct / 100)
+                    commission = invest * (commission_pct / 100)
+                    quantity = (invest - commission) / close
+
                 if quantity > 0:
                     position = {
                         "entry_date": current_date,
                         "entry_price": close,
                         "quantity": quantity,
                         "commission_in": commission,
+                        "stop_price": stop_price,
+                        "invested": min(invest, capital),
                     }
-                    capital -= invest
+                    capital -= min(invest, capital)
         else:
-            # Con posición: evaluar salida
-            pnl_pct_current = (close - position["entry_price"]) / position["entry_price"] * 100
+            # Evaluar salida
             exit_reason = None
+            entry_price = position["entry_price"]
 
-            if stop_loss_pct and pnl_pct_current <= -stop_loss_pct:
-                exit_reason = "stop_loss"
-            elif take_profit_pct and pnl_pct_current >= take_profit_pct:
-                exit_reason = "take_profit"
-            elif _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+            # Check stop loss
+            stop_price = position.get("stop_price")
+            if stop_price:
+                if is_short and close >= stop_price:
+                    exit_reason = "stop_loss"
+                elif not is_short and close <= stop_price:
+                    exit_reason = "stop_loss"
+
+            if not exit_reason and stop_loss_pct and not stop_price:
+                if is_short:
+                    pnl_pct_current = (entry_price - close) / entry_price * 100
+                else:
+                    pnl_pct_current = (close - entry_price) / entry_price * 100
+                if pnl_pct_current <= -stop_loss_pct:
+                    exit_reason = "stop_loss"
+
+            # Check take profit
+            if not exit_reason and take_profit_pct:
+                if is_short:
+                    pnl_pct_current = (entry_price - close) / entry_price * 100
+                else:
+                    pnl_pct_current = (close - entry_price) / entry_price * 100
+                if pnl_pct_current >= take_profit_pct:
+                    exit_reason = "take_profit"
+
+            # Check signal exit
+            if not exit_reason and _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
                 exit_reason = "signal"
 
             if exit_reason:
-                revenue = position["quantity"] * close
-                commission = revenue * (commission_pct / 100)
-                capital += revenue - commission
+                commission = position["quantity"] * close * (commission_pct / 100)
+                if is_short:
+                    pnl = (entry_price - close) * position["quantity"] - position["commission_in"] - commission
+                    pnl_pct = (entry_price - close) / entry_price * 100
+                    # Return invested margin + pnl
+                    capital += position["invested"] + pnl
+                else:
+                    revenue = position["quantity"] * close
+                    capital += revenue - commission
+                    pnl = (close - entry_price) * position["quantity"] - position["commission_in"] - commission
+                    pnl_pct = (close - entry_price) / entry_price * 100
 
-                pnl = (close - position["entry_price"]) * position["quantity"] - position["commission_in"] - commission
                 duration = (current_date - position["entry_date"]).days
-
                 trades.append({
-                    "type": "buy",
+                    "type": "sell" if is_short else "buy",
                     "entry_date": position["entry_date"],
-                    "entry_price": position["entry_price"],
+                    "entry_price": entry_price,
                     "exit_date": current_date,
                     "exit_price": close,
                     "quantity": position["quantity"],
                     "pnl": pnl,
-                    "pnl_pct": (close - position["entry_price"]) / position["entry_price"] * 100,
+                    "pnl_pct": pnl_pct,
                     "exit_reason": exit_reason,
                     "duration_days": duration,
                 })
                 position = None
 
-        # Calcular equity
-        pos_value = position["quantity"] * close if position else 0
+        # Equity
+        if position:
+            if is_short:
+                unrealized = (position["entry_price"] - close) * position["quantity"]
+                pos_value = position["invested"] + unrealized
+            else:
+                pos_value = position["quantity"] * close
+        else:
+            pos_value = 0
         equity = capital + pos_value
         equity_curve.append(EquityPoint(date=current_date.date(), equity=round(equity, 2)))
 
-    # Si queda posición abierta al final, cerrarla
+    # Cerrar posición abierta al final
     if position:
         close = float(df.iloc[-1]["Close"])
         current_date = df.index[-1].to_pydatetime()
-        revenue = position["quantity"] * close
-        commission = revenue * (commission_pct / 100)
-        capital += revenue - commission
-        pnl = (close - position["entry_price"]) * position["quantity"] - position["commission_in"] - commission
+        commission = position["quantity"] * close * (commission_pct / 100)
+        entry_price = position["entry_price"]
+        if is_short:
+            pnl = (entry_price - close) * position["quantity"] - position["commission_in"] - commission
+            pnl_pct = (entry_price - close) / entry_price * 100
+            capital += position["invested"] + pnl
+        else:
+            revenue = position["quantity"] * close
+            capital += revenue - commission
+            pnl = (close - entry_price) * position["quantity"] - position["commission_in"] - commission
+            pnl_pct = (close - entry_price) / entry_price * 100
 
         trades.append({
-            "type": "buy",
+            "type": "sell" if is_short else "buy",
             "entry_date": position["entry_date"],
-            "entry_price": position["entry_price"],
+            "entry_price": entry_price,
             "exit_date": current_date,
             "exit_price": close,
             "quantity": position["quantity"],
             "pnl": pnl,
-            "pnl_pct": (close - position["entry_price"]) / position["entry_price"] * 100,
+            "pnl_pct": pnl_pct,
             "exit_reason": "signal",
             "duration_days": (current_date - position["entry_date"]).days,
         })

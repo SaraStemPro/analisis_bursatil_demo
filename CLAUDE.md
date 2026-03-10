@@ -36,7 +36,7 @@ backend/app/schemas/
 ├── course.py        ← Course CRUD
 ├── market.py        ← Search, Quote, OHLCV, HistoryQuery, DetailedQuote, ScreenerFilters, ScreenerResponse
 ├── indicators.py    ← Catalog, Calculate, Presets (max 5 indicadores)
-├── demo.py          ← Portfolio, Orders, Performance, ClosePosition, PortfolioSummary (paper trading)
+├── demo.py          ← Portfolio, Orders, Performance, ClosePosition, PortfolioSummary, Carteras
 ├── tutor.py         ← Chat, Conversations, Documents, FAQ
 └── backtest.py      ← Strategy rules, BacktestRun, Trades, Compare
 ```
@@ -67,14 +67,15 @@ backend/app/schemas/
 - Connection string en `.env` como `DATABASE_URL`
 - SQLAlchemy apunta a Supabase PostgreSQL
 - Para desarrollo local se puede usar SQLite cambiando `DATABASE_URL`
+- Precisión numérica: `Numeric(14, 5)` para precios (forex necesita 5 decimales)
 
 ## Fases de implementación
 1. ✅ Schemas Pydantic
 2. ✅ Estructura + Auth (FastAPI, config, database, JWT, modelos SQLAlchemy)
 3. ✅ Gráficos (yfinance: search, quote, history OHLCV)
 4. ✅ Indicadores (catálogo 10 indicadores, cálculo, presets)
-5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset, short selling, close-all)
-6. ✅ Backtesting (motor completo, 6 templates, constructor, simulación, métricas, comparación)
+5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset, short selling, close-all, carteras)
+6. ✅ Backtesting (motor completo, 6 templates, constructor visual, long/short, timeframes, offset, patrones de velas, fractales, Bollinger bands seleccionables)
 7. ✅ Tutor IA (RAG: PDF upload, chunking, FAISS/keyword search, chat con LLM, FAQ)
 8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
    - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott, hline, vline) con Primitives API
@@ -93,20 +94,35 @@ backend/app/schemas/
    - Dibujo en gráficos de osciladores (cada chart tiene DrawingManager propio, activeChartId en store)
    - VWAP oculto del catálogo (aún disponible en backend)
    - Botón "Comprar" en Charts → navega a Paper Trading con ticker pre-rellenado
+   - Formato inteligente de precios: 5 decimales para <10 (forex), 4 para <100, 2 para >=100
+   - Eje X intradiario en hora de Madrid (CET/CEST automático)
    - Paper Trading mejorado:
      - Buy = abrir LONG, Sell = abrir SHORT (posiciones simultáneas long/short permitidas)
      - Cerrar posición (total o parcial) con modal de confirmación
      - Botón "Cerrar todo" para liquidar todas las posiciones
      - Posiciones en formato tabla/lista (no tarjetas)
-     - Resumen portfolio con diversificación (Shannon entropy) y distribución sectorial
+     - Resumen portfolio con diversificación (Shannon entropy penalizada) y distribución sectorial
      - Buscador de tickers con autocompletado en formulario de orden
+     - Sistema de carteras nombradas (portfolio_group):
+       - Compra desde el simulador del Screener → crea cartera con nombre
+       - Ejecución secuencial (evita race conditions en balance)
+       - Carteras se muestran en recuadro independiente con borde cyan
+       - Diversity score penalizado (min 5 posiciones, min 3 sectores, concentración >40%)
+       - Cerrar cartera completa o posiciones individuales para rebalanceo
+       - Auto-navegación a Paper Trading tras compra de cartera
    - Stock Screener (página independiente `/screener`):
-     - 9 universos: S&P 500 (~128), IBEX 35 (34), Tech (41), Healthcare (28), Finance (26), Energy (19), Industrials, Consumer, All
-     - 7 filtros: Sector, Market Cap, P/E, Dividendo%, Precio, Cambio%, Beta
-     - Tabla sorteable con 12 columnas + búsqueda por texto
-     - Simulador de portfolio: seleccionar acciones, ver distribución sectorial, diversity score, comprar todo
+     - 11 universos: S&P 500 (~130), IBEX 35 (35), Tech (42), Healthcare (28), Finance (28), Energy (20), Industrials (23), Consumer (22), Indices (12), Divisas (10), Materias Primas (12), All
+     - 9 filtros: Precio, Cambio%, Sector, Market Cap, P/E, Dividendo%, Beta, ROE, Volatilidad
+     - Tabla sorteable con scroll horizontal (barra arriba) + búsqueda por texto
+     - Columnas adaptativas: oculta Market Cap, Sector, P/E, Div%, ROE para universos no-equity
+     - Simulador de portfolio: cantidades por activo, precios en tiempo real, diversity score penalizado
+     - Comprar cartera → ejecución secuencial → navega a Paper Trading
      - Navegación: ticker → Charts, carrito → Paper Trading con ticker pre-rellenado
-9. Pulido (UI/UX, ranking, deploy)
+   - Dashboard:
+     - 4 tarjetas principales (Gráficos, Paper Trading, Backtesting, Screener)
+     - Tutor IA como bloque grande independiente debajo
+     - Stats del portfolio si hay posiciones abiertas
+9. 🔄 Pulido (UI/UX, ranking, deploy)
 
 ## Indicadores — 10 en catálogo backend
 ```
@@ -133,8 +149,19 @@ lib/drawings/DrawingManager.ts            ← Gestiona primitivas de dibujo en u
 lib/drawings/primitives/*.ts              ← 7 primitivas + PreviewPrimitive + renderers
 lib/patterns.ts                           ← Detección de patrones de velas (client-side)
 lib/recentTickers.ts                      ← localStorage para tickers recientes
-lib/chartUtils.ts                         ← CHART_THEME, toChartTime(), INDICATOR_COLORS
+lib/chartUtils.ts                         ← CHART_THEME, toChartTime() (Madrid TZ), INDICATOR_COLORS
 ```
+
+### Formato inteligente de precios
+- `fmtPrice(val)`: 5 decimales si <10 (forex), 4 si <100, 2 si >=100
+- `fmtChange(val, refPrice)`: misma lógica, basada en precio de referencia
+- `getPriceFormat(price)`: devuelve `{precision, minMove}` para configurar ejes del chart
+- Se aplica en: eje Y del candlestick, cabecera de quote, valores de indicadores, tablas de posiciones
+
+### Zona horaria
+- Eje X intradiario (1m, 5m, 15m, 1h) ajustado a hora de Madrid (Europe/Madrid)
+- `getMadridOffsetSec(date)` calcula offset CET/CEST automáticamente via `toLocaleString`
+- Charts diarios y superiores no se ven afectados (solo muestran fecha YYYY-MM-DD)
 
 ### Patrones de sincronización (osciladores)
 - Cada OscillatorChart tiene una **serie spacer invisible** con todos los timestamps del main chart
@@ -149,19 +176,22 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime(), INDICA
 - PreviewPrimitive: dibuja preview en vivo durante crosshair move
 - `activeChartId` en store determina qué chart recibe clics de dibujo ('main' | 'osc-RSI' | etc.)
 
-## API — 39 rutas implementadas
+## API — 42 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
 Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
             POST screener | GET screener/sectors/{universe}
 Indicators: GET catalog | POST calculate | GET/POST presets
-Demo:       GET portfolio, orders, performance, portfolio/summary
-            POST order, close-position, close-all, reset
+Demo:       GET portfolio, orders, performance, portfolio/summary, carteras
+            POST order, close-position, close-all, close-cartera/{name}, reset
 Backtest:   GET templates, strategies, strategies/{id} | POST strategies
             PUT/DELETE strategies/{id}
             POST run | GET runs, runs/{id}, runs/{id}/trades | DELETE runs/{id}
             POST compare
-Tutor:      POST chat | GET conversations | POST/GET documents | GET faq
+Tutor:      POST chat | GET conversations, conversations/{id}/messages
+            DELETE conversations/{id}
+            POST/GET documents | GET documents/{id}/download | DELETE documents/{id}
+            GET faq
 Health:     GET /api/health
 ```
 
@@ -173,31 +203,105 @@ Health:     GET /api/health
 - `close` → cierra posición (total o parcial), campo `side` indica si cierra long o short
 - Un mismo ticker puede tener posición LONG y SHORT simultáneamente
 
+### Sistema de carteras (portfolio_group)
+- Las órdenes pueden llevar `portfolio_group` (string) para agruparse en una cartera nombrada
+- `GET /demo/carteras` devuelve las carteras con posiciones, P&L, diversity score
+- `POST /demo/close-cartera/{name}` cierra todas las posiciones de una cartera
+- Diversity score penalizado: Shannon entropy + penalizaciones (min 5 posiciones, min 3 sectores, concentración >40%)
+- Compra secuencial (`for...of await`) para evitar race conditions en el balance
+- Precio explícito: se pasa `price` del screener para evitar discrepancias con yfinance
+
 ### Archivos clave
 ```
-pages/Demo.tsx                             ← Página principal, tabla de posiciones, botón cerrar-todo
+pages/Demo.tsx                             ← Página principal, tabla posiciones individuales + carteras, botón cerrar-todo
 components/demo/OrderForm.tsx              ← Formulario con buscador de tickers, botones Long/Short
 components/demo/TickerSearchInput.tsx       ← Autocompletado con market.search() + debounce
 components/demo/ClosePositionDialog.tsx     ← Modal cierre parcial/total con slider
-components/demo/PortfolioSummaryPanel.tsx   ← Sectores + diversity score (Shannon entropy)
+components/demo/PortfolioSummaryPanel.tsx   ← Sectores + diversity score (Shannon entropy penalizada)
 components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde, sell rojo, close amber)
 ```
 
 ### Modelo de datos (Order)
 - Columna `side` (String(10), nullable): "long" | "short"
+- Columna `portfolio_group` (String(100), nullable): nombre de cartera
+- Precisión: `Numeric(14, 5)` en todos los campos de precio
 - Migration automática en `main.py` (ALTER TABLE si columna no existe)
 
 ## Arquitectura de Screener
 
 ### Backend
-- Universos curados en `market_service.py`: SP500 (~128), IBEX35 (34), Tech, Healthcare, Finance, Energy, Industrials, Consumer
+- 11 universos en `market_service.py`: SP500, IBEX35, Tech, Healthcare, Finance, Energy, Industrials, Consumer, Indices, Currencies, Commodities
 - Cache multinivel: `_info_cache` (30min TTL) para yf.Ticker().info, `_screener_cache` (5min TTL) por universo
 - **IMPORTANTE**: resultados vacíos NO se cachean (evita envenenamiento de cache por fallos de yfinance)
-- Filtrado server-side: `_apply_filters()` aplica sector, market_cap, P/E, dividend, price, change%, beta
+- Filtrado server-side: `_apply_filters()` aplica sector, market_cap, P/E, dividend, price, change%, beta, ROE
 
 ### Frontend
 ```
 pages/Screener.tsx  ← Página completa: filtros + tabla sorteable + simulador de portfolio
+```
+- Columnas adaptativas: `isEquity` oculta Market Cap, Sector, P/E, Div%, ROE para índices/divisas/materias primas
+- Scroll horizontal con barra arriba (CSS `rotateX(180deg)` trick)
+- Simulador con cantidades por activo, precios en tiempo real, diversity score penalizado, tips
+- Compra secuencial → navega a Paper Trading automáticamente
+
+## Arquitectura de Backtesting
+
+### Enums y tipos (schemas/common.py)
+```
+ConditionOperandType: indicator, price, volume, value, candle_pattern
+CandlePattern: bullish_engulfing, bearish_engulfing, bullish_hammer, bearish_hammer,
+               bullish_marubozu, bearish_marubozu, bullish_long_line, bearish_long_line
+StopLossType: fixed (%), fractal (soporte/resistencia dinámico)
+StrategySide: long, short
+Comparator: greater_than, less_than, crosses_above, crosses_below, between, outside
+```
+
+### Estructura de una estrategia (StrategyRules)
+```json
+{
+  "entry": { "operator": "AND", "conditions": [...] },
+  "exit": { "operator": "AND", "conditions": [...] },
+  "risk_management": {
+    "stop_loss_pct": 5, "stop_loss_type": "fixed|fractal",
+    "take_profit_pct": 15, "position_size_pct": 100, "max_risk_pct": 2
+  },
+  "side": "long|short"
+}
+```
+
+### Condition con offset
+```json
+{
+  "left": {"type": "candle_pattern", "pattern": "bullish_hammer"},
+  "comparator": "greater_than",
+  "right": {"type": "value", "value": 0},
+  "offset": 4
+}
+```
+`offset: 4` → evalúa la condición 4 velas atrás
+
+### BBANDS con selector de banda
+```json
+{"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "lower|mid|upper"}}
+```
+
+### Motor de simulación (backtest_service.py)
+- **Warmup**: descarga datos extra antes del start_date según el máximo período de indicador
+- **Long/Short**: `side` en StrategyRules determina la dirección
+  - Long: PnL = (exit - entry) × qty; stop si precio BAJA
+  - Short: PnL = (entry - exit) × qty; stop si precio SUBE
+- **Fractal stop**: Long usa fractal_down (soporte), Short usa fractal_up (resistencia)
+- **Risk-based sizing**: `max_risk_pct` limita pérdida por trade como % del capital
+- **Timeframes**: interval configurable (1m, 5m, 15m, 1h, 4h, 1d, 1wk)
+- **Patrones de velas**: 8 patrones detectados con OHLC math nativo (sin pandas-ta)
+
+### Archivos clave
+```
+components/backtest/StrategyBuilder.tsx  ← Constructor visual completo
+pages/Backtest.tsx                       ← Página principal, inline editor, resultados
+backend/app/services/backtest_service.py ← Motor: templates, simulación, métricas
+backend/app/schemas/backtest.py          ← Schemas Pydantic para reglas y resultados
+backend/app/schemas/common.py           ← Enums: CandlePattern, StopLossType, StrategySide
 ```
 
 ## Comandos útiles

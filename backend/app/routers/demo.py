@@ -76,6 +76,25 @@ def portfolio_summary(
     return demo_service.get_portfolio_summary(db, current_user.id)
 
 
+@router.get("/carteras")
+def get_carteras(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get list of named portfolio groups (carteras)."""
+    return demo_service.get_carteras(db, current_user.id)
+
+
+@router.post("/close-cartera/{cartera_name}", response_model=list[OrderResponse])
+def close_cartera(
+    cartera_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Close all positions in a named cartera."""
+    return demo_service.close_cartera(db, current_user.id, cartera_name)
+
+
 @router.post("/reset", response_model=PortfolioResponse)
 def reset(
     body: PortfolioResetRequest = PortfolioResetRequest(),

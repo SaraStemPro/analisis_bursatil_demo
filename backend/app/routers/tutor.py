@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -80,6 +81,20 @@ def list_documents(
         course_id = course.id if course else None
 
     return tutor_service.get_documents(db, course_id)
+
+
+@router.get("/documents/{document_id}/download")
+def download_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = tutor_service.get_document_for_download(db, document_id)
+    return FileResponse(
+        path=doc["file_path"],
+        filename=doc["filename"],
+        media_type="application/pdf",
+    )
 
 
 @router.delete("/documents/{document_id}", status_code=204)

@@ -66,11 +66,9 @@ export default function Tutor() {
           onNew={handleNewConversation}
         />
 
-        {isProfessor && (
-          <div className="mt-4 pt-4 border-t border-slate-700">
-            <DocumentPanel />
-          </div>
-        )}
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <DocumentPanel readOnly={!isProfessor} />
+        </div>
       </div>
 
       {/* Chat */}

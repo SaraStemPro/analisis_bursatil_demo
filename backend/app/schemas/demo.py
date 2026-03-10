@@ -13,9 +13,10 @@ class OrderCreateRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=20)
     type: OrderType
     quantity: int = Field(gt=0, le=100_000)
-    price: Decimal | None = Field(default=None, gt=0, decimal_places=2)
-    stop_loss: Decimal | None = Field(default=None, gt=0, decimal_places=2)
-    take_profit: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+    price: Decimal | None = Field(default=None, gt=0, decimal_places=5)
+    stop_loss: Decimal | None = Field(default=None, gt=0, decimal_places=5)
+    take_profit: Decimal | None = Field(default=None, gt=0, decimal_places=5)
+    portfolio_group: str | None = None
 
 
 class ClosePositionRequest(BaseModel):
@@ -29,7 +30,7 @@ class PortfolioResetRequest(BaseModel):
         default=Decimal("100000.00"),
         gt=0,
         le=Decimal("10000000.00"),
-        decimal_places=2,
+        decimal_places=5,
     )
 
 
@@ -43,6 +44,7 @@ class PositionResponse(BaseModel):
     pnl: Decimal
     pnl_pct: Decimal
     side: str = "long"  # "long" | "short"
+    portfolio_group: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -71,6 +73,7 @@ class OrderResponse(BaseModel):
     status: OrderStatus
     side: str | None = None
     pnl: Decimal | None = None
+    portfolio_group: str | None = None
     created_at: datetime
     closed_at: datetime | None = None
 

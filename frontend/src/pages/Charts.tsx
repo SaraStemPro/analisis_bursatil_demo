@@ -25,6 +25,28 @@ const ALL_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
 const MAX_PERIOD_DAYS: Record<string, number> = { '1m': 7, '5m': 60, '15m': 60, '1h': 730 }
 const PERIOD_DAYS: Record<string, number> = { '1d': 1, '5d': 5, '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365, '5y': 1825, 'max': 99999 }
 
+// Smart price formatting: 5 decimals for small prices (forex), 4 for mid, 2 for normal stocks
+function fmtPrice(val: number): string {
+  const n = Number(val)
+  if (n < 10) return n.toFixed(5)
+  if (n < 100) return n.toFixed(4)
+  return n.toFixed(2)
+}
+
+function fmtChange(val: number, refPrice: number): string {
+  const n = Number(val)
+  if (refPrice < 10) return n.toFixed(5)
+  if (refPrice < 100) return n.toFixed(4)
+  return n.toFixed(2)
+}
+
+// Get precision config for price axis based on price magnitude
+function getPriceFormat(price: number) {
+  if (price < 10) return { precision: 5, minMove: 0.00001 }
+  if (price < 100) return { precision: 4, minMove: 0.0001 }
+  return { precision: 2, minMove: 0.01 }
+}
+
 function validIntervals(period: string): string[] {
   const pDays = PERIOD_DAYS[period] ?? 99999
   return ALL_INTERVALS.filter((iv) => {
@@ -294,10 +316,12 @@ export default function Charts() {
       rightPriceScale: { borderColor: '#334155', mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
     })
 
+    const firstPrice = history.data[0]?.close ?? 100
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981', downColor: '#ef4444',
       borderDownColor: '#ef4444', borderUpColor: '#10b981',
       wickDownColor: '#ef4444', wickUpColor: '#10b981',
+      priceFormat: { type: 'price', ...getPriceFormat(firstPrice) },
     })
 
     chartInstanceRef.current = chart
@@ -671,9 +695,9 @@ export default function Charts() {
               <p className="text-xs text-slate-500">{quote.exchange} · {quote.market_state}</p>
             </div>
             <div className="text-right">
-              <p className="text-xl font-bold">{quote.price.toFixed(2)} {quote.currency}</p>
+              <p className="text-xl font-bold">{fmtPrice(quote.price)} {quote.currency}</p>
               <p className={`text-sm ${quote.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent.toFixed(2)}%)
+                {quote.change >= 0 ? '+' : ''}{fmtChange(quote.change, quote.price)} ({quote.change_percent.toFixed(2)}%)
               </p>
             </div>
           </div>
@@ -887,7 +911,7 @@ export default function Charts() {
                   <div className="text-xs text-slate-400 space-x-3">
                     {Object.entries(indData.data).map(([key, vals]) => {
                       const last = [...vals].reverse().find((v) => v !== null)
-                      return <span key={key}>{key}: <span className="text-slate-200">{last?.toFixed(2) ?? 'N/A'}</span></span>
+                      return <span key={key}>{key}: <span className="text-slate-200">{last != null ? fmtPrice(last) : 'N/A'}</span></span>
                     })}
                   </div>
                 )}

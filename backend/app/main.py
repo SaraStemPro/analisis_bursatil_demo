@@ -16,6 +16,9 @@ with engine.connect() as conn:
         if "side" not in columns:
             conn.execute(text("ALTER TABLE orders ADD COLUMN side VARCHAR(10)"))
             conn.commit()
+        if "portfolio_group" not in columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN portfolio_group VARCHAR(100)"))
+            conn.commit()
 
 app = FastAPI(
     title=settings.app_name,

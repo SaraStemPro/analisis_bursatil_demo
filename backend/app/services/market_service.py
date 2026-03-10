@@ -1,5 +1,7 @@
+import math
 import time
 
+import numpy as np
 import yfinance as yf
 from fastapi import HTTPException, status
 
@@ -20,6 +22,9 @@ _SCREENER_TTL = 300  # 5 minutes
 
 _info_cache: dict[str, tuple[float, dict]] = {}
 _INFO_TTL = 1800  # 30 minutes
+
+_volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
+_VOLATILITY_TTL = 300  # 5 minutes, same as screener
 
 # Universe of tickers for screening
 SP500_TICKERS = [
@@ -98,6 +103,21 @@ CONSUMER_TICKERS = [
     "K", "HSY", "MDLZ", "DIS", "ABNB", "DASH", "F", "GM",
 ]
 
+INDICES_TICKERS = [
+    "^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX", "^FTSE", "^GDAXI", "^FCHI",
+    "^N225", "^HSI", "^STOXX50E", "^IBEX",
+]
+
+CURRENCIES_TICKERS = [
+    "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X", "USDCAD=X",
+    "NZDUSD=X", "EURGBP=X", "EURJPY=X", "GBPJPY=X",
+]
+
+COMMODITIES_TICKERS = [
+    "GC=F", "SI=F", "CL=F", "NG=F", "HG=F", "PL=F",
+    "ZW=F", "ZC=F", "ZS=F", "KC=F", "CT=F", "SB=F",
+]
+
 UNIVERSES: dict[str, list[str]] = {
     "sp500": SP500_TICKERS,
     "ibex35": IBEX35_TICKERS,
@@ -107,8 +127,58 @@ UNIVERSES: dict[str, list[str]] = {
     "energy": ENERGY_TICKERS,
     "industrials": INDUSTRIALS_TICKERS,
     "consumer": CONSUMER_TICKERS,
-    "all": list(set(SP500_TICKERS + IBEX35_TICKERS + TECH_TICKERS + HEALTHCARE_TICKERS + FINANCE_TICKERS + ENERGY_TICKERS + INDUSTRIALS_TICKERS + CONSUMER_TICKERS)),
+    "indices": INDICES_TICKERS,
+    "currencies": CURRENCIES_TICKERS,
+    "commodities": COMMODITIES_TICKERS,
+    "all": list(set(SP500_TICKERS + IBEX35_TICKERS + TECH_TICKERS + HEALTHCARE_TICKERS + FINANCE_TICKERS + ENERGY_TICKERS + INDUSTRIALS_TICKERS + CONSUMER_TICKERS + INDICES_TICKERS + CURRENCIES_TICKERS + COMMODITIES_TICKERS)),
 }
+
+
+def _calculate_volatilities(tickers: list[str]) -> dict[str, float]:
+    """Batch-calculate annualized volatility for a list of tickers.
+
+    Returns dict mapping ticker -> annualized volatility as a decimal (e.g. 0.25 = 25%).
+    Uses yf.download for efficiency. Results are cached.
+    """
+    now = time.time()
+    cache_key = ",".join(sorted(tickers))
+    if cache_key in _volatility_cache:
+        cached_time, cached_data = _volatility_cache[cache_key]
+        if now - cached_time < _VOLATILITY_TTL:
+            return cached_data
+
+    result: dict[str, float] = {}
+    try:
+        df = yf.download(tickers, period="1y", interval="1d", progress=False, threads=True)
+        if df.empty:
+            return result
+
+        # yf.download returns MultiIndex columns (field, ticker) when multiple tickers
+        # For single ticker it returns single-level columns
+        if len(tickers) == 1:
+            close = df["Close"].dropna()
+            if len(close) > 1:
+                log_returns = np.log(close / close.shift(1)).dropna()
+                vol = float(log_returns.std() * math.sqrt(252))
+                result[tickers[0]] = round(vol, 4)
+        else:
+            close = df["Close"] if "Close" in df.columns else df.get("Close")
+            if close is not None:
+                for ticker in tickers:
+                    try:
+                        series = close[ticker].dropna()
+                        if len(series) > 1:
+                            log_returns = np.log(series / series.shift(1)).dropna()
+                            vol = float(log_returns.std() * math.sqrt(252))
+                            result[ticker] = round(vol, 4)
+                    except (KeyError, TypeError):
+                        continue
+    except Exception:
+        pass
+
+    if result:
+        _volatility_cache[cache_key] = (now, result)
+    return result
 
 
 def search_tickers(query: str) -> list[TickerSearchResult]:
@@ -232,6 +302,12 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
         except Exception:
             continue
 
+    # Enrich with volatility data
+    if stocks:
+        volatilities = _calculate_volatilities(tickers)
+        for stock in stocks:
+            stock.volatility = volatilities.get(stock.symbol)
+
     # Only cache if we got results — avoid poisoning cache with empty data
     if stocks:
         _screener_cache[cache_key] = (now, stocks)
@@ -333,6 +409,18 @@ def _apply_filters(
 
     if filters.beta_max is not None:
         result = [s for s in result if s.beta and s.beta <= filters.beta_max]
+
+    if filters.volatility_min is not None:
+        result = [s for s in result if s.volatility and s.volatility >= filters.volatility_min]
+
+    if filters.volatility_max is not None:
+        result = [s for s in result if s.volatility is not None and s.volatility <= filters.volatility_max]
+
+    if filters.roe_min is not None:
+        result = [s for s in result if s.roe and s.roe >= filters.roe_min]
+
+    if filters.roe_max is not None:
+        result = [s for s in result if s.roe is not None and s.roe <= filters.roe_max]
 
     return result
 

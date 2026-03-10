@@ -6,12 +6,15 @@ from pydantic import BaseModel, Field, model_validator
 
 from .common import (
     BacktestStatus,
+    CandlePattern,
     Comparator,
     ConditionOperandType,
     ExitReason,
     LogicalOperator,
     OrderType,
     PriceField,
+    StopLossType,
+    StrategySide,
 )
 
 
@@ -23,9 +26,9 @@ class ConditionOperand(BaseModel):
         default=None,
         description="Nombre del indicador (requerido si type='indicator')",
     )
-    params: dict[str, float | int] | None = Field(
+    params: dict[str, float | int | str] | None = Field(
         default=None,
-        description="Parámetros del indicador (ej: {'period': 14})",
+        description="Parámetros del indicador (ej: {'period': 14, 'band': 'lower'})",
     )
     field: PriceField | None = Field(
         default=None,
@@ -34,6 +37,10 @@ class ConditionOperand(BaseModel):
     value: float | None = Field(
         default=None,
         description="Valor numérico (requerido si type='value')",
+    )
+    pattern: CandlePattern | None = Field(
+        default=None,
+        description="Patrón de vela (requerido si type='candle_pattern')",
     )
 
     @model_validator(mode="after")
@@ -47,6 +54,9 @@ class ConditionOperand(BaseModel):
         elif self.type == ConditionOperandType.value:
             if self.value is None:
                 raise ValueError("'value' es requerido para operandos de tipo 'value'")
+        elif self.type == ConditionOperandType.candle_pattern:
+            if not self.pattern:
+                raise ValueError("'pattern' es requerido para operandos de tipo 'candle_pattern'")
         return self
 
 
@@ -57,6 +67,12 @@ class Condition(BaseModel):
     right_upper: ConditionOperand | None = Field(
         default=None,
         description="Límite superior para comparador 'between' / 'outside'",
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Evaluar la condición N velas atrás (0 = vela actual)",
     )
 
     @model_validator(mode="after")
@@ -79,15 +95,18 @@ class ConditionGroup(BaseModel):
 
 
 class RiskManagement(BaseModel):
-    stop_loss_pct: float | None = Field(default=None, gt=0, le=100)
+    stop_loss_pct: float | None = Field(default=None, gt=0, le=100, description="Stop loss fijo (%)")
+    stop_loss_type: StopLossType = Field(default=StopLossType.fixed, description="Tipo: 'fixed' (%) o 'fractal' (soporte dinámico)")
     take_profit_pct: float | None = Field(default=None, gt=0, le=1000)
-    position_size_pct: float = Field(default=10.0, gt=0, le=100)
+    position_size_pct: float = Field(default=100.0, gt=0, le=100, description="% del capital disponible por operación")
+    max_risk_pct: float | None = Field(default=None, gt=0, le=100, description="Riesgo máx. por trade como % del capital (ej: 2%). Ajusta el tamaño de posición automáticamente.")
 
 
 class StrategyRules(BaseModel):
     entry: ConditionGroup
     exit: ConditionGroup
     risk_management: RiskManagement = Field(default_factory=RiskManagement)
+    side: StrategySide = Field(default=StrategySide.long, description="'long' o 'short'")
 
 
 # --- Requests ---
@@ -109,6 +128,10 @@ class BacktestRunRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=20)
     start_date: date
     end_date: date
+    interval: str = Field(
+        default="1d",
+        description="Intervalo: 1m, 5m, 15m, 1h, 4h, 1d, 1wk",
+    )
     initial_capital: Decimal = Field(
         default=Decimal("100000.00"),
         gt=0,
@@ -124,6 +147,14 @@ class BacktestRunRequest(BaseModel):
     def validate_dates(self):
         if self.end_date <= self.start_date:
             raise ValueError("'end_date' debe ser posterior a 'start_date'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        valid = {"1m", "5m", "15m", "1h", "4h", "1d", "1wk"}
+        if self.interval not in valid:
+            raise ValueError(f"'interval' debe ser uno de: {', '.join(sorted(valid))}")
+        return self
         return self
 
 

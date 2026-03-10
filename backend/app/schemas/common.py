@@ -55,6 +55,7 @@ class ConditionOperandType(str, Enum):
     price = "price"
     volume = "volume"
     value = "value"
+    candle_pattern = "candle_pattern"
 
 
 class PriceField(str, Enum):
@@ -62,3 +63,24 @@ class PriceField(str, Enum):
     high = "high"
     low = "low"
     close = "close"
+
+
+class CandlePattern(str, Enum):
+    bullish_engulfing = "bullish_engulfing"
+    bearish_engulfing = "bearish_engulfing"
+    bullish_hammer = "bullish_hammer"
+    bearish_hammer = "bearish_hammer"
+    bullish_marubozu = "bullish_marubozu"
+    bearish_marubozu = "bearish_marubozu"
+    bullish_long_line = "bullish_long_line"
+    bearish_long_line = "bearish_long_line"
+
+
+class StrategySide(str, Enum):
+    long = "long"
+    short = "short"
+
+
+class StopLossType(str, Enum):
+    fixed = "fixed"
+    fractal = "fractal"

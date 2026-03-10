@@ -5,10 +5,10 @@ import { market, demo } from '../api'
 import type { ScreenerFilters, DetailedQuote } from '../types'
 import {
   Search, Filter, TrendingUp, TrendingDown, ArrowUpDown, PieChart,
-  ShoppingCart, Eye, ChevronDown, ChevronUp, X, Plus, Trash2,
+  ShoppingCart, Eye, ChevronDown, ChevronUp, X, Plus, Trash2, Info,
 } from 'lucide-react'
 
-type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe'
+type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility'
 
 type Universe = ScreenerFilters['universe']
 
@@ -21,6 +21,9 @@ const UNIVERSE_OPTIONS: { key: Universe; label: string }[] = [
   { key: 'energy', label: 'Energía' },
   { key: 'industrials', label: 'Industria' },
   { key: 'consumer', label: 'Consumo' },
+  { key: 'indices', label: 'Índices' },
+  { key: 'currencies', label: 'Divisas' },
+  { key: 'commodities', label: 'Materias Primas' },
   { key: 'all', label: 'Todos' },
 ]
 
@@ -35,6 +38,12 @@ function formatMarketCap(val: number | null): string {
 function formatPct(val: number | null | undefined): string {
   if (val == null) return '-'
   return `${(val * 100).toFixed(2)}%`
+}
+
+function formatPrice(val: number): string {
+  if (val < 10) return val.toFixed(5)
+  if (val < 100) return val.toFixed(4)
+  return val.toFixed(2)
 }
 
 const MARKET_CAP_OPTIONS = [
@@ -59,6 +68,29 @@ const SECTOR_COLORS: Record<string, string> = {
   'Basic Materials': '#eab308',
 }
 
+function InfoTooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span className="relative inline-block ml-1">
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow(!show)}
+        className="text-slate-500 hover:text-slate-300 transition-colors"
+        type="button"
+      >
+        <Info size={12} />
+      </button>
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-700 text-slate-200 text-xs rounded-lg shadow-lg w-56 leading-relaxed pointer-events-none">
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-700" />
+        </span>
+      )}
+    </span>
+  )
+}
+
 export default function Screener() {
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -77,6 +109,10 @@ export default function Screener() {
   const [changeMax, setChangeMax] = useState('')
   const [betaMin, setBetaMin] = useState('')
   const [betaMax, setBetaMax] = useState('')
+  const [volMin, setVolMin] = useState('')
+  const [volMax, setVolMax] = useState('')
+  const [roeMin, setRoeMin] = useState('')
+  const [roeMax, setRoeMax] = useState('')
   const [showFilters, setShowFilters] = useState(true)
 
   // Table state
@@ -85,8 +121,9 @@ export default function Screener() {
   const [searchText, setSearchText] = useState('')
 
   // Portfolio simulator
-  const [portfolio, setPortfolio] = useState<Map<string, DetailedQuote>>(new Map())
+  const [portfolio, setPortfolio] = useState<Map<string, { stock: DetailedQuote; qty: number }>>(new Map())
   const [showSimulator, setShowSimulator] = useState(false)
+  const [carteraName, setCarteraName] = useState('')
 
   // Build filters object
   const filters: ScreenerFilters = useMemo(() => {
@@ -106,8 +143,12 @@ export default function Screener() {
       change_max: changeMax ? Number(changeMax) : undefined,
       beta_min: betaMin ? Number(betaMin) : undefined,
       beta_max: betaMax ? Number(betaMax) : undefined,
+      volatility_min: volMin ? Number(volMin) / 100 : undefined,
+      volatility_max: volMax ? Number(volMax) / 100 : undefined,
+      roe_min: roeMin ? Number(roeMin) / 100 : undefined,
+      roe_max: roeMax ? Number(roeMax) / 100 : undefined,
     }
-  }, [universe, selectedSectors, capIndex, peMin, peMax, divMin, divMax, priceMin, priceMax, changeMin, changeMax, betaMin, betaMax])
+  }, [universe, selectedSectors, capIndex, peMin, peMax, divMin, divMax, priceMin, priceMax, changeMin, changeMax, betaMin, betaMax, volMin, volMax, roeMin, roeMax])
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['screener', filters],
@@ -122,10 +163,11 @@ export default function Screener() {
   })
 
   const buyMut = useMutation({
-    mutationFn: (data: { ticker: string; type: string; quantity: number }) => demo.createOrder(data),
+    mutationFn: (data: { ticker: string; type: string; quantity: number; portfolio_group?: string }) => demo.createOrder(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['carteras'] })
     },
   })
 
@@ -154,7 +196,7 @@ export default function Screener() {
   }
 
   const addToPortfolio = (stock: DetailedQuote) => {
-    setPortfolio((prev) => { const m = new Map(prev); m.set(stock.symbol, stock); return m })
+    setPortfolio((prev) => { const m = new Map(prev); m.set(stock.symbol, { stock, qty: 1 }); return m })
     setShowSimulator(true)
   }
 
@@ -162,15 +204,25 @@ export default function Screener() {
     setPortfolio((prev) => { const m = new Map(prev); m.delete(symbol); return m })
   }
 
+  const setQty = (symbol: string, qty: number) => {
+    setPortfolio((prev) => {
+      const m = new Map(prev)
+      const entry = m.get(symbol)
+      if (entry) m.set(symbol, { ...entry, qty: Math.max(1, qty) })
+      return m
+    })
+  }
+
   // Portfolio simulator calculations
-  const portfolioStocks = Array.from(portfolio.values())
+  const portfolioEntries = Array.from(portfolio.values())
+  const portfolioStocks = portfolioEntries.map((e) => e.stock)
   const sectorAlloc = useMemo(() => {
     const map: Record<string, { count: number; value: number }> = {}
-    portfolioStocks.forEach((s) => {
+    portfolioEntries.forEach(({ stock: s, qty }) => {
       const sec = s.sector || 'Otros'
       if (!map[sec]) map[sec] = { count: 0, value: 0 }
-      map[sec].count++
-      map[sec].value += s.price
+      map[sec].count += qty
+      map[sec].value += s.price * qty
     })
     const total = Object.values(map).reduce((a, b) => a + b.value, 0)
     return Object.entries(map)
@@ -181,35 +233,61 @@ export default function Screener() {
         pct: total > 0 ? (value / total) * 100 : 0,
       }))
       .sort((a, b) => b.pct - a.pct)
-  }, [portfolioStocks])
+  }, [portfolioEntries])
 
+  const totalPortfolioValue = useMemo(() =>
+    portfolioEntries.reduce((a, { stock, qty }) => a + stock.price * qty, 0),
+    [portfolioEntries])
+
+  // Diversity score: Shannon entropy penalized by minimum positions/sectors
   const diversityScore = useMemo(() => {
-    if (sectorAlloc.length <= 1) return 0
+    const nPositions = portfolioEntries.reduce((a, e) => a + e.qty, 0)
+    const nSectors = sectorAlloc.length
+    if (nSectors <= 1) return 0
+
+    // Shannon entropy normalizada
     const weights = sectorAlloc.map((s) => s.pct / 100)
     const entropy = -weights.reduce((a, w) => a + (w > 0 ? w * Math.log(w) : 0), 0)
-    const maxEntropy = Math.log(sectorAlloc.length)
-    return maxEntropy > 0 ? Math.round((entropy / maxEntropy) * 100) : 0
-  }, [sectorAlloc])
+    const maxEntropy = Math.log(nSectors)
+    const entropyScore = maxEntropy > 0 ? entropy / maxEntropy : 0
 
-  const diversityLabel = diversityScore >= 60 ? 'Diversificado' : diversityScore >= 30 ? 'Moderado' : 'Concentrado'
-  const diversityColor = diversityScore >= 60 ? 'text-emerald-400' : diversityScore >= 30 ? 'text-amber-400' : 'text-red-400'
-  const diversityBarColor = diversityScore >= 60 ? 'bg-emerald-500' : diversityScore >= 30 ? 'bg-amber-500' : 'bg-red-500'
+    // Penalización: mínimo 5 posiciones y 3 sectores para diversificación real
+    const positionPenalty = Math.min(nPositions / 5, 1)
+    const sectorPenalty = Math.min(nSectors / 3, 1)
 
-  const SortHeader = ({ k, label, right }: { k: SortKey; label: string; right?: boolean }) => (
+    // Concentración máxima: penalizar si un sector > 40%
+    const maxWeight = Math.max(...weights)
+    const concentrationPenalty = maxWeight > 0.4 ? 1 - (maxWeight - 0.4) : 1
+
+    return Math.round(entropyScore * positionPenalty * sectorPenalty * concentrationPenalty * 100)
+  }, [sectorAlloc, portfolioEntries])
+
+  const diversityLabel = diversityScore >= 70 ? 'Diversificado' : diversityScore >= 40 ? 'Moderado' : 'Concentrado'
+  const diversityColor = diversityScore >= 70 ? 'text-emerald-400' : diversityScore >= 40 ? 'text-amber-400' : 'text-red-400'
+  const diversityBarColor = diversityScore >= 70 ? 'bg-emerald-500' : diversityScore >= 40 ? 'bg-amber-500' : 'bg-red-500'
+
+  // Hide equity-specific columns for non-equity universes
+  const isEquity = !['indices', 'currencies', 'commodities'].includes(universe)
+
+  const SortHeader = ({ k, label, right, tooltip }: { k: SortKey; label: string; right?: boolean; tooltip?: string }) => (
     <th
       className={`px-3 pb-2 pt-2 cursor-pointer hover:text-white select-none whitespace-nowrap ${right ? 'text-right' : ''}`}
       onClick={() => handleSort(k)}
     >
       <span className={`inline-flex items-center gap-1 ${right ? 'justify-end' : ''}`}>
-        {label} {sortKey === k && <ArrowUpDown size={12} />}
+        {label} {sortKey === k && <ArrowUpDown size={12} />}{tooltip && <InfoTooltip text={tooltip} />}
       </span>
     </th>
   )
 
-  const buyAllFromSimulator = () => {
-    portfolioStocks.forEach((s) => {
-      buyMut.mutate({ ticker: s.symbol, type: 'buy', quantity: 1 })
-    })
+  const buyAllFromSimulator = async () => {
+    const groupName = carteraName.trim() || `Cartera ${new Date().toLocaleDateString('es-ES')}`
+    // Sequential to avoid race condition on balance
+    for (const { stock, qty } of portfolioEntries) {
+      await buyMut.mutateAsync({ ticker: stock.symbol, type: 'buy', quantity: qty, price: stock.price, portfolio_group: groupName })
+    }
+    qc.invalidateQueries({ queryKey: ['carteras'] })
+    navigate('/demo')
   }
 
   return (
@@ -253,7 +331,7 @@ export default function Screener() {
         ))}
         {result && (
           <span className="flex items-center text-sm text-slate-500 ml-2">
-            {result.filtered} de {result.total} acciones
+            {result.filtered} de {result.total} productos
           </span>
         )}
       </div>
@@ -272,9 +350,27 @@ export default function Screener() {
 
           {showFilters && (
             <div className="space-y-4 bg-slate-900 rounded-lg p-4 border border-slate-700">
+              {/* Price range */}
+              <div>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">Precio ($)<InfoTooltip text="Precio actual de la acción. El precio por sí solo no indica si una acción es cara o barata — hay que compararlo con sus fundamentales (P/E, P/B, etc.)." /></h3>
+                <div className="flex gap-1">
+                  <input placeholder="Min" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" />
+                  <input placeholder="Max" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" />
+                </div>
+              </div>
+
+              {/* Change % */}
+              <div>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">Cambio %<InfoTooltip text="Variación porcentual del precio en la última sesión. Movimientos grandes pueden indicar noticias relevantes o alta volatilidad." /></h3>
+                <div className="flex gap-1">
+                  <input placeholder="Min" value={changeMin} onChange={(e) => setChangeMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.5" />
+                  <input placeholder="Max" value={changeMax} onChange={(e) => setChangeMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.5" />
+                </div>
+              </div>
+
               {/* Sectors */}
               <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Sector</h3>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">Sector<InfoTooltip text="Diversificar por sectores reduce el riesgo de concentración. Sectores como tecnología, energía o salud reaccionan de forma distinta ante cambios de ciclo económico." /></h3>
                 <div className="space-y-1 max-h-48 overflow-y-auto">
                   {(sectorsData?.sectors || []).map((s) => (
                     <label key={s} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-800 px-1 rounded">
@@ -292,7 +388,7 @@ export default function Screener() {
 
               {/* Market Cap */}
               <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Market Cap</h3>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">Market Cap<InfoTooltip text="Capitalización bursátil = precio × acciones en circulación. Las empresas grandes (large cap) suelen ser más estables; las pequeñas (small cap) más volátiles pero con mayor potencial de crecimiento." /></h3>
                 <select
                   value={capIndex}
                   onChange={(e) => setCapIndex(Number(e.target.value))}
@@ -306,7 +402,7 @@ export default function Screener() {
 
               {/* P/E Ratio */}
               <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">P/E Ratio</h3>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">P/E Ratio<InfoTooltip text="Price-to-Earnings: cuántas veces el beneficio anual estás pagando por la acción. Un P/E alto puede indicar expectativas de crecimiento; uno bajo puede señalar infravaloración o problemas." /></h3>
                 <div className="flex gap-1">
                   <input placeholder="Min" value={peMin} onChange={(e) => setPeMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" />
                   <input placeholder="Max" value={peMax} onChange={(e) => setPeMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" />
@@ -315,37 +411,40 @@ export default function Screener() {
 
               {/* Dividend Yield */}
               <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Dividendo %</h3>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">Dividendo %<InfoTooltip text="Rentabilidad por dividendo anual respecto al precio actual. Útil para estrategias de generación de rentas. Empresas maduras suelen pagar más dividendo." /></h3>
                 <div className="flex gap-1">
                   <input placeholder="Min" value={divMin} onChange={(e) => setDivMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.1" />
                   <input placeholder="Max" value={divMax} onChange={(e) => setDivMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.1" />
                 </div>
               </div>
 
-              {/* Price range */}
+              {/* ROE */}
               <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Precio ($)</h3>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">ROE %<InfoTooltip text="Return on Equity: beneficio neto / fondos propios. Mide la rentabilidad que genera la empresa sobre el capital de los accionistas. Un ROE alto indica eficiencia en el uso del capital." /></h3>
                 <div className="flex gap-1">
-                  <input placeholder="Min" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" />
-                  <input placeholder="Max" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" />
-                </div>
-              </div>
-
-              {/* Change % */}
-              <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Cambio %</h3>
-                <div className="flex gap-1">
-                  <input placeholder="Min" value={changeMin} onChange={(e) => setChangeMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.5" />
-                  <input placeholder="Max" value={changeMax} onChange={(e) => setChangeMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.5" />
+                  <input placeholder="Min" value={roeMin} onChange={(e) => setRoeMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="1" />
+                  <input placeholder="Max" value={roeMax} onChange={(e) => setRoeMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="1" />
                 </div>
               </div>
 
               {/* Beta */}
               <div>
-                <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Beta</h3>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">Beta<InfoTooltip text="Sensibilidad de la acción respecto al mercado (benchmark). β=1 se mueve igual que el mercado, β>1 amplifica movimientos (más agresiva), β<1 es más defensiva." /></h3>
                 <div className="flex gap-1">
                   <input placeholder="Min" value={betaMin} onChange={(e) => setBetaMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.1" />
                   <input placeholder="Max" value={betaMax} onChange={(e) => setBetaMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="0.1" />
+                </div>
+              </div>
+
+              {/* Volatility */}
+              <div>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">
+                  Volatilidad %
+                  <InfoTooltip text="Desviación típica anualizada de los retornos diarios (σ). Mide cuánto oscila el precio. Mayor volatilidad = mayor riesgo pero también mayor potencial de movimiento. Se usa para dimensionar posiciones y controlar el riesgo de cartera." />
+                </h3>
+                <div className="flex gap-1">
+                  <input placeholder="Min" value={volMin} onChange={(e) => setVolMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="5" />
+                  <input placeholder="Max" value={volMax} onChange={(e) => setVolMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="5" />
                 </div>
               </div>
 
@@ -355,6 +454,7 @@ export default function Screener() {
                   setSelectedSectors([]); setCapIndex(0); setPeMin(''); setPeMax('')
                   setDivMin(''); setDivMax(''); setPriceMin(''); setPriceMax('')
                   setChangeMin(''); setChangeMax(''); setBetaMin(''); setBetaMax('')
+                  setVolMin(''); setVolMax(''); setRoeMin(''); setRoeMax('')
                 }}
                 className="w-full text-center text-xs text-slate-500 hover:text-white py-1"
               >
@@ -367,20 +467,26 @@ export default function Screener() {
         {/* Main content area */}
         <div className="flex-1 min-w-0">
           {/* Portfolio simulator panel */}
-          {showSimulator && portfolioStocks.length > 0 && (
+          {showSimulator && portfolioEntries.length > 0 && (
             <div className="bg-slate-900 rounded-lg p-5 border border-emerald-700/50 mb-4">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold flex items-center gap-2">
                   <PieChart size={18} className="text-emerald-400" />
-                  Simulador de portfolio
+                  Simulador de cartera
                 </h2>
                 <div className="flex items-center gap-2">
+                  <input
+                    value={carteraName}
+                    onChange={(e) => setCarteraName(e.target.value)}
+                    placeholder="Nombre de la cartera..."
+                    className="px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-44"
+                  />
                   <button
                     onClick={buyAllFromSimulator}
                     disabled={buyMut.isPending}
                     className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded text-white text-sm font-medium"
                   >
-                    <ShoppingCart size={14} /> Comprar todo (1 ud. cada)
+                    <ShoppingCart size={14} /> Comprar cartera
                   </button>
                   <button onClick={() => setPortfolio(new Map())} className="text-slate-400 hover:text-red-400 text-sm">
                     Limpiar
@@ -389,28 +495,45 @@ export default function Screener() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Selected stocks */}
+                {/* Selected stocks with quantity */}
                 <div>
-                  <h3 className="text-xs font-medium text-slate-400 uppercase mb-2">Acciones seleccionadas ({portfolioStocks.length})</h3>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {portfolioStocks.map((s) => (
-                      <div key={s.symbol} className="flex items-center justify-between bg-slate-800 rounded px-2 py-1 text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-white">{s.symbol}</span>
-                          <span className="text-slate-400 text-xs truncate max-w-[100px]">{s.sector || 'Otros'}</span>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-xs font-medium text-slate-400">Acciones seleccionadas ({portfolioEntries.length})</h3>
+                    <span className="text-xs text-slate-500">Total: ${totalPortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                  </div>
+                  <div className="space-y-1 max-h-52 overflow-y-auto">
+                    {portfolioEntries.map(({ stock: s, qty }) => {
+                      const weight = totalPortfolioValue > 0 ? (s.price * qty / totalPortfolioValue * 100) : 0
+                      return (
+                        <div key={s.symbol} className="flex items-center justify-between bg-slate-800 rounded px-2 py-1.5 text-sm">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="font-medium text-white w-12 flex-shrink-0">{s.symbol}</span>
+                            <span className="text-slate-500 text-xs truncate max-w-[70px]">{s.sector || 'Otros'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs w-10 text-right">{weight.toFixed(0)}%</span>
+                            <span className="text-slate-300 text-xs w-16 text-right">${formatPrice(s.price)}</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={qty}
+                              onChange={(e) => setQty(s.symbol, parseInt(e.target.value) || 1)}
+                              className="w-14 px-1 py-0.5 bg-slate-700 border border-slate-600 rounded text-sm text-white text-center"
+                            />
+                            <button onClick={() => removeFromPortfolio(s.symbol)} className="text-slate-500 hover:text-red-400">
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
-                        <button onClick={() => removeFromPortfolio(s.symbol)} className="text-slate-500 hover:text-red-400">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
 
-                {/* Sector pie chart (bar representation) + diversity */}
+                {/* Sector distribution + diversity */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-xs font-medium text-slate-400 uppercase">Distribucion sectorial</h3>
+                    <h3 className="text-xs font-medium text-slate-400">Distribucion sectorial</h3>
                     <span className={`text-sm font-medium ${diversityColor}`}>
                       {diversityLabel} ({diversityScore}%)
                     </span>
@@ -442,10 +565,19 @@ export default function Screener() {
                       <div key={s.sector} className="flex items-center gap-2 text-xs">
                         <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SECTOR_COLORS[s.sector] || '#64748b' }} />
                         <span className="text-slate-300 flex-1">{s.sector}</span>
-                        <span className="text-slate-400">{s.count} ({s.pct.toFixed(0)}%)</span>
+                        <span className="text-slate-400">{s.count} uds ({s.pct.toFixed(0)}%)</span>
                       </div>
                     ))}
                   </div>
+
+                  {/* Diversity tips */}
+                  {diversityScore < 70 && (
+                    <div className="mt-3 p-2 bg-slate-800 rounded text-xs text-slate-400">
+                      {sectorAlloc.length < 3 && <p>Necesitas al menos 3 sectores para diversificar.</p>}
+                      {portfolioEntries.reduce((a, e) => a + e.qty, 0) < 5 && <p>Incluye al menos 5 posiciones.</p>}
+                      {sectorAlloc.length > 0 && sectorAlloc[0].pct > 40 && <p>{sectorAlloc[0].sector} pesa {sectorAlloc[0].pct.toFixed(0)}% — reduce concentracion.</p>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -477,21 +609,22 @@ export default function Screener() {
             </div>
           ) : (
             <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="scrollbar-top" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #1e293b' }}>
+                <table className="w-full text-sm" style={{ minWidth: isEquity ? '1100px' : '600px' }}>
                   <thead>
                     <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-900/80">
                       <th className="px-3 py-2 w-8"></th>
                       <SortHeader k="symbol" label="Ticker" />
                       <th className="px-3 pb-2 pt-2">Nombre</th>
-                      <SortHeader k="price" label="Precio" right />
-                      <SortHeader k="change_percent" label="Cambio" right />
-                      <SortHeader k="market_cap" label="Market Cap" right />
-                      <th className="px-3 pb-2 pt-2 min-w-[120px]">Sector</th>
-                      <SortHeader k="pe_ratio" label="P/E" right />
-                      <SortHeader k="dividend_yield" label="Div%" right />
-                      <SortHeader k="beta" label="Beta" right />
-                      <SortHeader k="roe" label="ROE" right />
+                      <SortHeader k="price" label="Precio" right tooltip="Último precio de cotización" />
+                      <SortHeader k="change_percent" label="Cambio" right tooltip="Variación % en la última sesión" />
+                      {isEquity && <SortHeader k="market_cap" label="Market Cap" right tooltip="Capitalización bursátil total" />}
+                      {isEquity && <th className="px-3 pb-2 pt-2 min-w-[120px]">Sector</th>}
+                      {isEquity && <SortHeader k="pe_ratio" label="P/E" right tooltip="Precio / Beneficio por acción" />}
+                      {isEquity && <SortHeader k="dividend_yield" label="Div%" right tooltip="Rentabilidad por dividendo anual" />}
+                      <SortHeader k="beta" label="Beta" right tooltip="Sensibilidad al mercado (β)" />
+                      {isEquity && <SortHeader k="roe" label="ROE" right tooltip="Return on Equity: beneficio neto / fondos propios. Mide la rentabilidad sobre el capital de los accionistas." />}
+                      <SortHeader k="volatility" label="Vol σ" right tooltip="Volatilidad anualizada: desviación típica de retornos diarios × √252" />
                       <th className="px-3 pb-2 pt-2 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -515,19 +648,20 @@ export default function Screener() {
                           </button>
                         </td>
                         <td className="px-3 py-2 text-slate-300 max-w-[140px] truncate">{s.name}</td>
-                        <td className="px-3 py-2 text-right text-white">{s.price.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right text-white">{formatPrice(s.price)}</td>
                         <td className="px-3 py-2 text-right">
                           <span className={`inline-flex items-center gap-0.5 ${s.change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {s.change_percent >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                             {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-300">{formatMarketCap(s.market_cap)}</td>
-                        <td className="px-3 py-2 text-slate-400 min-w-[120px] text-xs">{s.sector || '-'}</td>
-                        <td className="px-3 py-2 text-right text-slate-300">{s.pe_ratio ? s.pe_ratio.toFixed(1) : '-'}</td>
-                        <td className="px-3 py-2 text-right text-slate-300">{formatPct(s.dividend_yield)}</td>
+                        {isEquity && <td className="px-3 py-2 text-right text-slate-300">{formatMarketCap(s.market_cap)}</td>}
+                        {isEquity && <td className="px-3 py-2 text-slate-400 min-w-[120px] text-xs">{s.sector || '-'}</td>}
+                        {isEquity && <td className="px-3 py-2 text-right text-slate-300">{s.pe_ratio ? s.pe_ratio.toFixed(1) : '-'}</td>}
+                        {isEquity && <td className="px-3 py-2 text-right text-slate-300">{formatPct(s.dividend_yield)}</td>}
                         <td className="px-3 py-2 text-right text-slate-300">{s.beta ? s.beta.toFixed(2) : '-'}</td>
-                        <td className="px-3 py-2 text-right text-slate-300">{formatPct(s.roe)}</td>
+                        {isEquity && <td className="px-3 py-2 text-right text-slate-300">{formatPct(s.roe)}</td>}
+                        <td className="px-3 py-2 text-right text-slate-300">{s.volatility != null ? `${(s.volatility * 100).toFixed(1)}%` : '-'}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button

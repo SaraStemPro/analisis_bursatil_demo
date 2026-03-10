@@ -6,8 +6,10 @@ export type BacktestStatus = 'running' | 'completed' | 'failed'
 export type ExitReason = 'signal' | 'stop_loss' | 'take_profit'
 export type Comparator = 'greater_than' | 'less_than' | 'crosses_above' | 'crosses_below' | 'between' | 'outside'
 export type LogicalOperator = 'AND' | 'OR'
-export type ConditionOperandType = 'indicator' | 'price' | 'volume' | 'value'
+export type ConditionOperandType = 'indicator' | 'price' | 'volume' | 'value' | 'candle_pattern'
 export type PriceField = 'open' | 'high' | 'low' | 'close'
+export type CandlePattern = 'bullish_engulfing' | 'bearish_engulfing' | 'bullish_hammer' | 'bearish_hammer' | 'bullish_marubozu' | 'bearish_marubozu' | 'bullish_long_line' | 'bearish_long_line'
+export type StopLossType = 'fixed' | 'fractal'
 
 // --- Auth ---
 export interface User {
@@ -110,6 +112,7 @@ export interface Position {
   pnl: number
   pnl_pct: number
   side: 'long' | 'short'
+  portfolio_group: string | null
 }
 
 export interface Portfolio {
@@ -134,8 +137,20 @@ export interface Order {
   status: OrderStatus
   side: string | null
   pnl: number | null
+  portfolio_group: string | null
   created_at: string
   closed_at: string | null
+}
+
+export interface Cartera {
+  name: string
+  positions: { ticker: string; quantity: number; avg_price: number; current_price: number; pnl: number; pnl_pct: number; side: string }[]
+  total_invested: number
+  total_current: number
+  total_pnl: number
+  total_pnl_pct: number
+  sectors: number
+  diversity_score: number
 }
 
 export interface SectorAllocation {
@@ -174,10 +189,11 @@ export interface DetailedQuote {
   fifty_two_week_high: number | null
   fifty_two_week_low: number | null
   avg_volume: number | null
+  volatility: number | null
 }
 
 export interface ScreenerFilters {
-  universe: 'sp500' | 'ibex35' | 'tech' | 'healthcare' | 'finance' | 'energy' | 'industrials' | 'consumer' | 'all'
+  universe: 'sp500' | 'ibex35' | 'tech' | 'healthcare' | 'finance' | 'energy' | 'industrials' | 'consumer' | 'indices' | 'currencies' | 'commodities' | 'all'
   sectors?: string[]
   market_cap_min?: number
   market_cap_max?: number
@@ -191,6 +207,10 @@ export interface ScreenerFilters {
   change_max?: number
   beta_min?: number
   beta_max?: number
+  volatility_min?: number
+  volatility_max?: number
+  roe_min?: number
+  roe_max?: number
 }
 
 export interface ScreenerResult {
@@ -261,9 +281,10 @@ export interface ConversationMessages {
 export interface ConditionOperand {
   type: ConditionOperandType
   name?: string
-  params?: Record<string, number>
+  params?: Record<string, number | string>
   field?: PriceField
   value?: number
+  pattern?: CandlePattern
 }
 
 export interface Condition {
@@ -271,6 +292,7 @@ export interface Condition {
   comparator: Comparator
   right: ConditionOperand
   right_upper?: ConditionOperand
+  offset?: number
 }
 
 export interface ConditionGroup {
@@ -280,14 +302,19 @@ export interface ConditionGroup {
 
 export interface RiskManagement {
   stop_loss_pct: number | null
+  stop_loss_type: StopLossType
   take_profit_pct: number | null
   position_size_pct: number
+  max_risk_pct: number | null
 }
+
+export type StrategySide = 'long' | 'short'
 
 export interface StrategyRules {
   entry: ConditionGroup
   exit: ConditionGroup
   risk_management: RiskManagement
+  side?: StrategySide
 }
 
 export interface Strategy {

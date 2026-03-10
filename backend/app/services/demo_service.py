@@ -100,6 +100,7 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
         side=side,
         pnl=None,
         closed_at=None,
+        portfolio_group=body.portfolio_group,
     )
 
     db.add(order)
@@ -284,14 +285,25 @@ def get_portfolio_summary(db: Session, user_id: str) -> PortfolioSummaryResponse
         weight = (value / total_positions_value * 100) if total_positions_value > 0 else 0
         sectors.append(SectorAllocation(sector=sector, weight_pct=round(weight, 1), value=round(value, 2)))
 
-    # Diversity score: Shannon entropy normalized to 0-100
+    # Diversity score: Shannon entropy with penalizations
     diversity_score = 0.0
-    if len(sectors) > 1 and total_positions_value > 0:
+    n_positions = sum(p.quantity for p in positions)
+    n_sectors = len(sectors)
+    if n_sectors > 1 and total_positions_value > 0:
         weights = [s.weight_pct / 100 for s in sectors]
         entropy = -sum(w * math.log(w) for w in weights if w > 0)
-        max_entropy = math.log(len(sectors))
-        diversity_score = round((entropy / max_entropy) * 100, 1) if max_entropy > 0 else 0
-    elif len(sectors) == 1:
+        max_entropy = math.log(n_sectors)
+        entropy_score = (entropy / max_entropy) if max_entropy > 0 else 0
+
+        position_penalty = min(n_positions / 5, 1)
+        sector_penalty = min(n_sectors / 3, 1)
+        max_weight = max(weights)
+        concentration_penalty = 1 - (max_weight - 0.4) if max_weight > 0.4 else 1
+
+        diversity_score = round(
+            entropy_score * position_penalty * sector_penalty * concentration_penalty * 100, 1
+        )
+    elif n_sectors == 1:
         diversity_score = 0.0
 
     return PortfolioSummaryResponse(
@@ -302,6 +314,96 @@ def get_portfolio_summary(db: Session, user_id: str) -> PortfolioSummaryResponse
         sectors=sectors,
         diversity_score=diversity_score,
     )
+
+
+def get_carteras(db: Session, user_id: str) -> list[dict]:
+    """Get named portfolio groups (carteras) with their positions."""
+    portfolio = get_or_create_portfolio(db, user_id)
+    positions = _calculate_positions(db, portfolio)
+
+    # Group positions by portfolio_group
+    groups: dict[str, list[PositionResponse]] = {}
+    for p in positions:
+        if p.portfolio_group:
+            groups.setdefault(p.portfolio_group, []).append(p)
+
+    result = []
+    for name, group_positions in groups.items():
+        total_invested = sum(float(p.avg_price) * p.quantity for p in group_positions)
+        total_current = sum(float(p.current_price) * p.quantity for p in group_positions)
+        total_pnl = total_current - total_invested
+
+        # Sector diversity for this cartera
+        sector_map: dict[str, float] = {}
+        for p in group_positions:
+            sec = _get_sector(p.ticker)
+            sector_map[sec] = sector_map.get(sec, 0) + float(p.current_price) * p.quantity
+        n_sectors = len(sector_map)
+
+        # Shannon entropy diversity score with penalizations
+        diversity_score = 0.0
+        n_positions = sum(p.quantity for p in group_positions)
+        if n_sectors > 1 and total_current > 0:
+            weights = [v / total_current for v in sector_map.values()]
+            entropy = -sum(w * math.log(w) for w in weights if w > 0)
+            max_entropy = math.log(n_sectors)
+            entropy_score = (entropy / max_entropy) if max_entropy > 0 else 0
+
+            # Penalize: min 5 positions and 3 sectors for real diversification
+            position_penalty = min(n_positions / 5, 1)
+            sector_penalty = min(n_sectors / 3, 1)
+            # Concentration: penalize if one sector > 40%
+            max_weight = max(weights)
+            concentration_penalty = 1 - (max_weight - 0.4) if max_weight > 0.4 else 1
+
+            diversity_score = round(
+                entropy_score * position_penalty * sector_penalty * concentration_penalty * 100, 1
+            )
+
+        result.append({
+            "name": name,
+            "positions": [
+                {
+                    "ticker": p.ticker,
+                    "quantity": p.quantity,
+                    "avg_price": float(p.avg_price),
+                    "current_price": float(p.current_price),
+                    "pnl": float(p.pnl),
+                    "pnl_pct": float(p.pnl_pct),
+                    "side": p.side,
+                }
+                for p in group_positions
+            ],
+            "total_invested": round(total_invested, 2),
+            "total_current": round(total_current, 2),
+            "total_pnl": round(total_pnl, 2),
+            "total_pnl_pct": round(total_pnl / total_invested * 100, 2) if total_invested > 0 else 0,
+            "sectors": n_sectors,
+            "diversity_score": diversity_score,
+        })
+
+    return sorted(result, key=lambda x: x["name"])
+
+
+def close_cartera(db: Session, user_id: str, cartera_name: str) -> list[OrderResponse]:
+    """Close all open positions in a named cartera."""
+    portfolio = get_or_create_portfolio(db, user_id)
+    positions = _calculate_positions(db, portfolio)
+
+    cartera_positions = [p for p in positions if p.portfolio_group == cartera_name]
+    if not cartera_positions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No hay posiciones abiertas en la cartera '{cartera_name}'",
+        )
+
+    results = []
+    for p in cartera_positions:
+        body = ClosePositionRequest(ticker=p.ticker, quantity=p.quantity, side=p.side)
+        result = close_position(db, user_id, body)
+        results.append(result)
+
+    return results
 
 
 def reset_portfolio(db: Session, user_id: str, initial_balance: Decimal) -> PortfolioResponse:
@@ -327,6 +429,7 @@ def reset_portfolio(db: Session, user_id: str, initial_balance: Decimal) -> Port
     )
 
 
+
 # --- Helpers ---
 
 def _order_to_response(o: Order) -> OrderResponse:
@@ -341,6 +444,7 @@ def _order_to_response(o: Order) -> OrderResponse:
         status=o.status,
         side=o.side,
         pnl=o.pnl,
+        portfolio_group=o.portfolio_group,
         created_at=o.created_at,
         closed_at=o.closed_at,
     )
@@ -444,15 +548,22 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
             pnl = (current_price - avg_price) * long_held
             pnl_pct = (pnl / (avg_price * long_held) * 100) if avg_price else Decimal(0)
 
+            # Get portfolio_group from first buy order for this ticker
+            first_buy = next(
+                (o for o in all_orders if o.ticker == ticker and o.type == "buy"),
+                None,
+            )
+
             positions.append(
                 PositionResponse(
                     ticker=ticker,
                     quantity=long_held,
-                    avg_price=round(avg_price, 2),
-                    current_price=round(current_price, 2),
-                    pnl=round(pnl, 2),
+                    avg_price=round(avg_price, 5),
+                    current_price=round(current_price, 5),
+                    pnl=round(pnl, 5),
                     pnl_pct=round(pnl_pct, 2),
                     side="long",
+                    portfolio_group=first_buy.portfolio_group if first_buy else None,
                 )
             )
 
@@ -468,15 +579,22 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
             pnl = (avg_price - current_price) * short_held
             pnl_pct = (pnl / (avg_price * short_held) * 100) if avg_price else Decimal(0)
 
+            # Get portfolio_group from first sell order for this ticker
+            first_sell = next(
+                (o for o in all_orders if o.ticker == ticker and o.type == "sell"),
+                None,
+            )
+
             positions.append(
                 PositionResponse(
                     ticker=ticker,
                     quantity=short_held,
-                    avg_price=round(avg_price, 2),
-                    current_price=round(current_price, 2),
-                    pnl=round(pnl, 2),
+                    avg_price=round(avg_price, 5),
+                    current_price=round(current_price, 5),
+                    pnl=round(pnl, 5),
                     pnl_pct=round(pnl_pct, 2),
                     side="short",
+                    portfolio_group=first_sell.portfolio_group if first_sell else None,
                 )
             )
 
