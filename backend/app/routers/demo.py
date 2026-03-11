@@ -102,3 +102,8 @@ def reset(
     current_user: User = Depends(get_current_user),
 ):
     return demo_service.reset_portfolio(db, current_user.id, body.initial_balance)
+
+
+@router.get("/ranking")
+def ranking(db: Session = Depends(get_db)):
+    return demo_service.get_ranking(db)

@@ -122,7 +122,13 @@ backend/app/schemas/
      - 4 tarjetas principales (Gráficos, Paper Trading, Backtesting, Screener)
      - Tutor IA como bloque grande independiente debajo
      - Stats del portfolio si hay posiciones abiertas
-9. 🔄 Pulido (UI/UX, ranking, deploy)
+     - Ranking de usuarios por valor de portfolio (tabla con posición, usuario, valor, rendimiento)
+   - Backtesting:
+     - Buscador de tickers con autocompletado (reutiliza TickerSearchInput)
+     - Ejecución de plantillas sin crear estrategias temporales (rules inline)
+     - Tabla de operaciones muestra columna "Lado" (Long/Short) y "Cierre" (Señal/Stop/TP)
+     - Modo "Long + Short" (both): señal entrada → Long, señal salida → Short, independientes
+9. 🔄 Pulido (UI/UX, deploy)
 
 ## Indicadores — 10 en catálogo backend
 ```
@@ -176,13 +182,20 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime() (Madrid
 - PreviewPrimitive: dibuja preview en vivo durante crosshair move
 - `activeChartId` en store determina qué chart recibe clics de dibujo ('main' | 'osc-RSI' | etc.)
 
-## API — 42 rutas implementadas
+## Usuarios demo (auto-seed al arrancar)
+```
+Profesor:   profesor@demo.com / Demo1234
+Alumna:     sara@demo.com / Demo1234
+Código de invitación: AB_2026
+```
+
+## API — 43 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
 Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
             POST screener | GET screener/sectors/{universe}
 Indicators: GET catalog | POST calculate | GET/POST presets
-Demo:       GET portfolio, orders, performance, portfolio/summary, carteras
+Demo:       GET portfolio, orders, performance, portfolio/summary, carteras, ranking
             POST order, close-position, close-all, close-cartera/{name}, reset
 Backtest:   GET templates, strategies, strategies/{id} | POST strategies
             PUT/DELETE strategies/{id}
@@ -252,7 +265,7 @@ ConditionOperandType: indicator, price, volume, value, candle_pattern
 CandlePattern: bullish_engulfing, bearish_engulfing, bullish_hammer, bearish_hammer,
                bullish_marubozu, bearish_marubozu, bullish_long_line, bearish_long_line
 StopLossType: fixed (%), fractal (soporte/resistencia dinámico)
-StrategySide: long, short
+StrategySide: long, short, both
 Comparator: greater_than, less_than, crosses_above, crosses_below, between, outside
 ```
 
@@ -265,7 +278,7 @@ Comparator: greater_than, less_than, crosses_above, crosses_below, between, outs
     "stop_loss_pct": 5, "stop_loss_type": "fixed|fractal",
     "take_profit_pct": 15, "position_size_pct": 100, "max_risk_pct": 2
   },
-  "side": "long|short"
+  "side": "long|short|both"
 }
 ```
 
@@ -294,6 +307,9 @@ Comparator: greater_than, less_than, crosses_above, crosses_below, between, outs
 - **Risk-based sizing**: `max_risk_pct` limita pérdida por trade como % del capital
 - **Timeframes**: interval configurable (1m, 5m, 15m, 1h, 4h, 1d, 1wk)
 - **Patrones de velas**: 8 patrones detectados con OHLC math nativo (sin pandas-ta)
+- **Modo both**: señal entrada → Long, señal salida → Short, cada uno se cierra independientemente
+- **Inline rules**: `BacktestRunRequest` acepta `rules` directamente (sin crear estrategia temporal)
+- **Buscador de tickers**: autocompletado con `TickerSearchInput` reutilizado de Demo
 
 ### Archivos clave
 ```

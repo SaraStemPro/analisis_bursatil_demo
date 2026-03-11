@@ -19,7 +19,7 @@ if db.query(User).filter(User.email == "profesor@demo.com").first():
     print("Ya existe datos de seed. Usuarios disponibles:")
     print("  Profesor: profesor@demo.com / Demo1234")
     print("  Alumna:   sara@demo.com / Demo1234")
-    print("  Código de invitación: DEMO2025")
+    print("  Código de invitación: AB_2026")
     db.close()
     sys.exit(0)
 
@@ -27,7 +27,7 @@ if db.query(User).filter(User.email == "profesor@demo.com").first():
 prof = User(
     email="profesor@demo.com",
     password_hash=hash_password("Demo1234"),
-    name="Profesor Demo",
+    name="Profesor",
     role="professor",
 )
 db.add(prof)
@@ -35,9 +35,9 @@ db.flush()
 
 # Create course with invite code
 course = Course(
-    name="Análisis Bursátil - Máster Demo",
+    name="Análisis Bursátil 2026",
     professor_id=prof.id,
-    invite_code="DEMO2025",
+    invite_code="AB_2026",
 )
 db.add(course)
 db.flush()
@@ -58,4 +58,4 @@ db.close()
 print("Seed completado. Usuarios creados:")
 print("  Profesor: profesor@demo.com / Demo1234")
 print("  Alumna:   sara@demo.com / Demo1234")
-print("  Código de invitación: DEMO2025 (para registrar más alumnos)")
+print("  Código de invitación: AB_2026 (para registrar más alumnos)")

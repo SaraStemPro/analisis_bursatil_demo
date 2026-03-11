@@ -52,6 +52,7 @@ export const demo = {
   reset: (initial_balance = 100000) => api.post<Portfolio>('/demo/reset', { initial_balance }),
   carteras: () => api.get<Cartera[]>('/demo/carteras'),
   closeCartera: (name: string) => api.post<Order[]>(`/demo/close-cartera/${encodeURIComponent(name)}`, {}),
+  ranking: () => api.get<{ username: string; total_value: number; total_pnl_pct: number; positions_count: number; updated_at: string }[]>('/demo/ranking'),
 }
 
 // --- Tutor ---

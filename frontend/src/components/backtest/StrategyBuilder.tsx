@@ -422,7 +422,9 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
               {risk.stop_loss_type === 'fractal'
                 ? side === 'short'
                   ? 'El stop se coloca en el último fractal de resistencia (máximo local)'
-                  : 'El stop se coloca en el último fractal de soporte (mínimo local)'
+                  : side === 'both'
+                    ? 'Long: stop en fractal de soporte. Short: stop en fractal de resistencia'
+                    : 'El stop se coloca en el último fractal de soporte (mínimo local)'
                 : 'El stop se activa cuando la pérdida alcanza el % indicado'}
             </p>
           </div>
@@ -439,7 +441,7 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
               className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
             />
             {risk.stop_loss_type === 'fractal' && (
-              <p className="text-xs text-slate-500 mt-1">Se usa si no hay fractal de soporte disponible</p>
+              <p className="text-xs text-slate-500 mt-1">Se usa si no hay fractal disponible</p>
             )}
           </div>
         </div>

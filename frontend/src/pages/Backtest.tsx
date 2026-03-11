@@ -5,6 +5,7 @@ import type { Strategy, BacktestRun, BacktestRunSummary, StrategyRules, Conditio
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { FlaskConical, Play, Trash2, Plus, Pencil, Settings2 } from 'lucide-react'
 import StrategyBuilder from '../components/backtest/StrategyBuilder'
+import TickerSearchInput from '../components/demo/TickerSearchInput'
 
 // Helper: describe a condition operand in Spanish
 function describeOperand(op: ConditionOperand): string {
@@ -321,7 +322,7 @@ export default function Backtest() {
                           className="block w-full mt-0.5 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white"
                         >
                           <option value="fixed">Fijo (%)</option>
-                          <option value="fractal">Fractal (soporte)</option>
+                          <option value="fractal">Fractal (dinámico)</option>
                         </select>
                       </div>
                       <div>
@@ -374,7 +375,10 @@ export default function Backtest() {
                     </div>
                     {customRules.risk_management.stop_loss_type === 'fractal' && (
                       <p className="text-xs text-slate-500 mt-1.5">
-                        Stop en último fractal de {customRules.side === 'short' ? 'resistencia' : 'soporte'}. Si no hay fractal, usa el % de fallback.
+                        {customRules.side === 'both'
+                          ? 'Long: stop en fractal de soporte. Short: stop en fractal de resistencia.'
+                          : `Stop en último fractal de ${customRules.side === 'short' ? 'resistencia' : 'soporte'}.`
+                        } Si no hay fractal, usa el % de fallback.
                       </p>
                     )}
                     {customRules.risk_management.max_risk_pct && (
@@ -385,10 +389,7 @@ export default function Backtest() {
 
                 {/* Right: Ticker, dates, run button */}
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-sm text-slate-400">Ticker</label>
-                    <input value={ticker} onChange={(e) => setTicker(e.target.value.toUpperCase())} className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-emerald-500" />
-                  </div>
+                  <TickerSearchInput value={ticker} onChange={(t) => setTicker(t)} />
                   <div>
                     <label className="text-sm text-slate-400">Fecha inicio</label>
                     <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-emerald-500" />
@@ -490,16 +491,18 @@ export default function Backtest() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="text-slate-400 text-left border-b border-slate-700">
-                    <th className="pb-2 px-2">Entrada</th><th className="pb-2 px-2">Salida</th><th className="pb-2 px-2 text-right">P. entrada</th><th className="pb-2 px-2 text-right">P. salida</th><th className="pb-2 px-2 text-right">P&L</th><th className="pb-2 px-2 text-right">%</th><th className="pb-2 px-2">Motivo</th><th className="pb-2 px-2 text-right">Días</th>
+                    <th className="pb-2 px-2">Lado</th><th className="pb-2 px-2">Entrada</th><th className="pb-2 px-2">Salida</th><th className="pb-2 px-2 text-right">P. entrada</th><th className="pb-2 px-2 text-right">P. salida</th><th className="pb-2 px-2 text-right">P&L</th><th className="pb-2 px-2 text-right">%</th><th className="pb-2 px-2">Cierre</th><th className="pb-2 px-2 text-right">Días</th>
                   </tr></thead>
                   <tbody>
                     {activeRun.trades.map((t) => {
                       const pnl = t.pnl ? Number(t.pnl) : null
                       const pnlPct = t.pnl_pct ? Number(t.pnl_pct) : null
-                      const exitReasonLabel = t.exit_reason === 'stop_loss' ? 'Stop Loss' : t.exit_reason === 'take_profit' ? 'Take Profit' : t.exit_reason === 'signal' ? 'Señal' : '-'
+                      const exitReasonLabel = t.exit_reason === 'stop_loss' ? 'Stop Loss' : t.exit_reason === 'take_profit' ? 'Take Profit' : t.exit_reason === 'signal' ? 'Señal salida' : '-'
+                      const isShort = t.type === 'sell'
                       return (
                         <tr key={t.id} className="border-b border-slate-800">
-                          <td className="py-1.5 px-2">{t.entry_date?.split('T')[0]}</td>
+                          <td className="py-1.5 px-2"><span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isShort ? 'bg-red-900/50 text-red-300' : 'bg-emerald-900/50 text-emerald-300'}`}>{isShort ? 'Short' : 'Long'}</span></td>
+                          <td className="px-2">{t.entry_date?.split('T')[0]}</td>
                           <td className="px-2">{t.exit_date?.split('T')[0] ?? '-'}</td>
                           <td className="px-2 text-right">{Number(t.entry_price).toFixed(2)}</td>
                           <td className="px-2 text-right">{t.exit_price ? Number(t.exit_price).toFixed(2) : '-'}</td>

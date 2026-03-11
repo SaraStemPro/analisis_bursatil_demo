@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..models.order import Order
 from ..models.portfolio import Portfolio
+from ..models.user import User
 from ..schemas.demo import (
     ClosePositionRequest,
     OrderCreateRequest,
@@ -613,3 +614,26 @@ def _get_sector(ticker: str) -> str:
     except Exception:
         _sector_cache[ticker] = None
         return "Otros"
+
+
+def get_ranking(db: Session) -> list[dict]:
+    """Ranking de todos los usuarios por valor total del portfolio."""
+    portfolios = db.query(Portfolio).all()
+    ranking = []
+    for p in portfolios:
+        user = db.query(User).filter(User.id == p.user_id).first()
+        if not user or user.role != "student":
+            continue
+        positions = _calculate_positions(db, p)
+        total_positions_value = sum(float(pos.current_price * pos.quantity) for pos in positions)
+        total_value = float(p.balance) + total_positions_value
+        total_pnl_pct = (total_value - float(p.initial_balance)) / float(p.initial_balance) * 100 if p.initial_balance else 0
+        ranking.append({
+            "username": user.name,
+            "total_value": round(total_value, 2),
+            "total_pnl_pct": round(total_pnl_pct, 2),
+            "positions_count": len(positions),
+            "updated_at": p.created_at.isoformat(),
+        })
+    ranking.sort(key=lambda x: x["total_value"], reverse=True)
+    return ranking

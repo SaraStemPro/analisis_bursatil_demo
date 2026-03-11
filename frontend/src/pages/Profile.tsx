@@ -13,7 +13,7 @@ export default function Profile() {
 
       <div className="bg-slate-900 rounded-lg p-6 border border-slate-700 space-y-4">
         <div>
-          <p className="text-sm text-slate-400">Nombre</p>
+          <p className="text-sm text-slate-400">Usuario</p>
           <p className="font-medium">{user.name}</p>
         </div>
         <div>

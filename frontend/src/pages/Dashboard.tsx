@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../context/auth-store'
 import { demo } from '../api'
-import { BookOpen, FlaskConical, LineChart, MessageCircle, Search, TrendingUp } from 'lucide-react'
+import { BookOpen, FlaskConical, LineChart, MessageCircle, Search, Trophy, TrendingUp } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuthStore()
   const { data: portfolio } = useQuery({ queryKey: ['portfolio'], queryFn: demo.portfolio })
+  const { data: ranking } = useQuery({ queryKey: ['ranking'], queryFn: demo.ranking, refetchInterval: 60000 })
 
   const cards = [
     { to: '/charts', label: 'Gráficos', desc: 'Analiza acciones con velas japonesas e indicadores', icon: LineChart, color: 'bg-blue-600' },
@@ -70,6 +71,53 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {/* Ranking */}
+      {ranking && ranking.length > 0 && (
+        <div className="bg-slate-900 rounded-lg p-5 border border-amber-700/50">
+          <div className="flex items-center gap-2 mb-4">
+            <Trophy size={20} className="text-amber-400" />
+            <h2 className="font-semibold">Ranking</h2>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-400 text-left border-b border-slate-700">
+                <th className="pb-2 px-2 w-10">#</th>
+                <th className="pb-2 px-2">Usuario</th>
+                <th className="pb-2 px-2 text-right">Valor portfolio</th>
+                <th className="pb-2 px-2 text-right">Rendimiento</th>
+                <th className="pb-2 px-2 text-right">Posiciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranking.map((r, idx) => {
+                const isMe = r.username === user?.name
+                return (
+                  <tr key={r.username} className={`border-b border-slate-800 ${isMe ? 'bg-emerald-900/20' : ''}`}>
+                    <td className="py-2 px-2 font-medium">
+                      {idx === 0 ? <span className="text-amber-400">1</span>
+                        : idx === 1 ? <span className="text-slate-300">2</span>
+                        : idx === 2 ? <span className="text-amber-700">3</span>
+                        : idx + 1}
+                    </td>
+                    <td className="py-2 px-2">
+                      <span className={`font-medium ${isMe ? 'text-emerald-400' : ''}`}>{r.username}</span>
+                      {isMe && <span className="text-xs text-emerald-600 ml-1.5">(tú)</span>}
+                    </td>
+                    <td className="py-2 px-2 text-right font-medium">
+                      {r.total_value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                    </td>
+                    <td className={`py-2 px-2 text-right font-medium ${r.total_pnl_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {r.total_pnl_pct >= 0 ? '+' : ''}{r.total_pnl_pct.toFixed(2)}%
+                    </td>
+                    <td className="py-2 px-2 text-right text-slate-400">{r.positions_count}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Tutor IA — bloque destacado */}
       <Link

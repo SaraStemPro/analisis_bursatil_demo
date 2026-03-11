@@ -860,7 +860,14 @@ def _simulate(
     position_size_pct: float,
     sim_start_idx: int = 0,
 ) -> tuple[list[dict], list[EquityPoint]]:
-    """Ejecuta la simulación. Soporta long, short y both (flip)."""
+    """Ejecuta la simulación. Soporta long, short y both.
+
+    Modo both:
+    - Señal de entrada → abre Long
+    - Señal de salida → abre Short
+    - Cada posición se cierra por su señal contraria, stop o take profit
+    - Si al cerrar una posición la señal opuesta está activa, abre la contraria
+    """
     capital = initial_capital
     position = None
     trades = []
@@ -879,12 +886,25 @@ def _simulate(
             continue
 
         if position is None:
-            # Evaluar entrada → long (o long en modo both)
-            if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
-                open_short = side == StrategySide.short
-                position, capital = _open_position(
-                    capital, close, open_short, rules, indicator_data, i,
-                    current_date, commission_pct, position_size_pct)
+            # Sin posición → evaluar si hay señal para abrir
+            if is_both:
+                # Señal de entrada → Long, señal de salida → Short
+                entry_signal = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
+                exit_signal = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                if entry_signal:
+                    position, capital = _open_position(
+                        capital, close, False, rules, indicator_data, i,
+                        current_date, commission_pct, position_size_pct)
+                elif exit_signal:
+                    position, capital = _open_position(
+                        capital, close, True, rules, indicator_data, i,
+                        current_date, commission_pct, position_size_pct)
+            else:
+                if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
+                    open_short = side == StrategySide.short
+                    position, capital = _open_position(
+                        capital, close, open_short, rules, indicator_data, i,
+                        current_date, commission_pct, position_size_pct)
         else:
             exit_reason = None
             pos_is_short = position["is_short"]
@@ -916,8 +936,17 @@ def _simulate(
                     exit_reason = "take_profit"
 
             # Check signal exit
-            if not exit_reason and _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
-                exit_reason = "signal"
+            if not exit_reason:
+                if is_both:
+                    # Long se cierra con señal de salida, Short se cierra con señal de entrada
+                    if pos_is_short:
+                        signal_exit = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
+                    else:
+                        signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                else:
+                    signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                if signal_exit:
+                    exit_reason = "signal"
 
             if exit_reason:
                 trade, capital_back = _close_position(position, close, current_date, commission_pct, exit_reason)
@@ -925,12 +954,18 @@ def _simulate(
                 trades.append(trade)
                 position = None
 
-                # Modo both: al cerrar por señal, abrir posición opuesta
+                # Modo both: tras cerrar, si la señal opuesta está activa, abrir
                 if is_both and exit_reason == "signal":
-                    flip_short = not pos_is_short
-                    position, capital = _open_position(
-                        capital, close, flip_short, rules, indicator_data, i,
-                        current_date, commission_pct, position_size_pct)
+                    if pos_is_short:
+                        # Cerré short por señal de entrada → la entrada está activa → abrir Long
+                        position, capital = _open_position(
+                            capital, close, False, rules, indicator_data, i,
+                            current_date, commission_pct, position_size_pct)
+                    else:
+                        # Cerré long por señal de salida → la salida está activa → abrir Short
+                        position, capital = _open_position(
+                            capital, close, True, rules, indicator_data, i,
+                            current_date, commission_pct, position_size_pct)
 
         # Equity
         if position:
