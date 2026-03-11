@@ -13,7 +13,7 @@ export default function TickerSearchInput({ value, onChange }: Props) {
   useEffect(() => { setQuery(value) }, [value])
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
   useEffect(() => {

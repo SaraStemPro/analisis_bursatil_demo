@@ -27,7 +27,7 @@ export default function OrderForm({ initialTicker }: Props) {
   })
 
   const orderMut = useMutation({
-    mutationFn: (data: { ticker: string; type: string; quantity: number }) => demo.createOrder(data),
+    mutationFn: (data: { ticker: string; type: string; quantity: number; notes?: string }) => demo.createOrder(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })

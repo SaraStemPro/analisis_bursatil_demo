@@ -43,6 +43,7 @@ class ElliottPaneView implements IPrimitivePaneView {
 
 export class ElliottWavePrimitive implements ISeriesPrimitive<Time> {
   drawing: ElliottWaveDrawing
+  isSelected = false
   _chart: SeriesAttachedParameter<Time, SeriesType>['chart'] | null = null
   _series: SeriesAttachedParameter<Time, SeriesType>['series'] | null = null
   _paneView = new ElliottPaneView()

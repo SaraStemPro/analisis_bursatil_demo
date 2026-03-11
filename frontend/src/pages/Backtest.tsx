@@ -7,18 +7,6 @@ import { FlaskConical, Play, Trash2, Plus, Pencil, Settings2 } from 'lucide-reac
 import StrategyBuilder from '../components/backtest/StrategyBuilder'
 import TickerSearchInput from '../components/demo/TickerSearchInput'
 
-// Helper: describe a condition operand in Spanish
-function describeOperand(op: ConditionOperand): string {
-  if (op.type === 'indicator') {
-    const p = op.params ? Object.entries(op.params).map(([k, v]) => `${k}=${v}`).join(', ') : ''
-    return `${op.name}(${p})`
-  }
-  if (op.type === 'price') return `Precio ${op.field || 'close'}`
-  if (op.type === 'volume') return 'Volumen'
-  if (op.type === 'value') return String(op.value ?? 0)
-  if (op.type === 'candle_pattern') return op.pattern || '?'
-  return '?'
-}
 
 const COMP_LABELS: Record<string, string> = {
   greater_than: '>', less_than: '<', crosses_above: '↗ cruza encima', crosses_below: '↘ cruza debajo', between: 'entre', outside: 'fuera de',
@@ -477,7 +465,7 @@ export default function Backtest() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
                   <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} domain={['auto', 'auto']} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} labelStyle={{ color: '#94a3b8' }} formatter={(v: number) => [`${v.toLocaleString('es-ES', { minimumFractionDigits: 2 })}€`, 'Equity']} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} labelStyle={{ color: '#94a3b8' }} formatter={(v: number | undefined) => [`${(v ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}€`, 'Equity']} />
                   <Line type="monotone" dataKey="equity" stroke="#10b981" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>

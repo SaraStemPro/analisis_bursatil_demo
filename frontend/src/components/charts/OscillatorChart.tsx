@@ -178,10 +178,11 @@ export default function OscillatorChart({
     })
 
     if (firstSeries) {
-      seriesRef.current = firstSeries
-      drawingManagerRef.current.attach(chart, firstSeries)
+      const series = firstSeries as ISeriesApi<SeriesType, Time>
+      seriesRef.current = series
+      drawingManagerRef.current.attach(chart, series)
       drawingManagerRef.current.syncDrawings(chartDrawings)
-      firstSeries.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
+      series.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
     }
 
     // Click handlers

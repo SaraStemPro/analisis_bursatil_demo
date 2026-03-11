@@ -24,6 +24,7 @@ class ArrowPaneView implements IPrimitivePaneView {
 
 export class ArrowPrimitive implements ISeriesPrimitive<Time> {
   drawing: ArrowDrawing
+  isSelected = false
   _chart: SeriesAttachedParameter<Time, SeriesType>['chart'] | null = null
   _series: SeriesAttachedParameter<Time, SeriesType>['series'] | null = null
   _paneView = new ArrowPaneView()

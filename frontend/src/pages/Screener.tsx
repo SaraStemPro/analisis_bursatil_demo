@@ -163,7 +163,7 @@ export default function Screener() {
   })
 
   const buyMut = useMutation({
-    mutationFn: (data: { ticker: string; type: string; quantity: number; portfolio_group?: string }) => demo.createOrder(data),
+    mutationFn: (data: { ticker: string; type: string; quantity: number; portfolio_group?: string; price?: number }) => demo.createOrder(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })
@@ -215,7 +215,6 @@ export default function Screener() {
 
   // Portfolio simulator calculations
   const portfolioEntries = Array.from(portfolio.values())
-  const portfolioStocks = portfolioEntries.map((e) => e.stock)
   const sectorAlloc = useMemo(() => {
     const map: Record<string, { count: number; value: number }> = {}
     portfolioEntries.forEach(({ stock: s, qty }) => {

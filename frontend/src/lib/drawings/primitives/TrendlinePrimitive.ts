@@ -25,6 +25,7 @@ class TrendlinePaneView implements IPrimitivePaneView {
 
 export class TrendlinePrimitive implements ISeriesPrimitive<Time> {
   drawing: TrendlineDrawing
+  isSelected = false
   _chart: SeriesAttachedParameter<Time, SeriesType>['chart'] | null = null
   _series: SeriesAttachedParameter<Time, SeriesType>['series'] | null = null
   _paneView = new TrendlinePaneView()
