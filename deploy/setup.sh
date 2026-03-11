@@ -29,7 +29,7 @@ APP_DIR="/opt/analisis-bursatil"
 BACKEND_DIR="$APP_DIR/backend"
 FRONTEND_DIR="$APP_DIR/frontend"
 SERVICE_USER="analisis"
-DOMAIN="sarastem.com"
+DOMAIN="plataforma-trading.sarastem.com"
 
 echo "============================================"
 echo " Desplegando Plataforma de Analisis Bursatil"
@@ -209,7 +209,7 @@ rm -f /etc/nginx/sites-enabled/default
 cat > /etc/nginx/sites-available/analisis-bursatil << EOF
 server {
     listen 80;
-    server_name $DOMAIN www.$DOMAIN;
+    server_name $DOMAIN;
 
     # --- Frontend: archivos estaticos de Vite ---
     root $FRONTEND_DIR/dist;
@@ -300,12 +300,12 @@ if [[ "$DOMAIN" != "_" ]]; then
 
     if [[ "$RESOLVED_IP" == "$MY_IP" ]]; then
         log "Dominio $DOMAIN apunta a este servidor. Configurando HTTPS..."
-        certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos --email admin@"$DOMAIN" --redirect
+        certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email admin@sarastem.com --redirect
         log "HTTPS configurado con Let's Encrypt."
     else
         warn "El dominio $DOMAIN aun no apunta a este servidor ($RESOLVED_IP vs $MY_IP)."
         warn "Cuando lo configures en Arsys, ejecuta:"
-        warn "  certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+        warn "  certbot --nginx -d $DOMAIN"
     fi
 else
     warn "Sin dominio configurado. Accede por IP: http://$MY_IP"

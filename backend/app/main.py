@@ -131,10 +131,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://sarastem.com",
-        "https://www.sarastem.com",
-        "http://sarastem.com",
-        "http://www.sarastem.com",
+        "https://plataforma-trading.sarastem.com",
+        "http://plataforma-trading.sarastem.com",
         "http://212.227.134.30",
     ],
     allow_credentials=True,
