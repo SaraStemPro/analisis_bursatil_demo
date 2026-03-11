@@ -14,12 +14,16 @@ export default function MessageBubble({ message }: Props) {
       }`}>
         <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
         {message.sources && message.sources.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-slate-700">
-            <p className="text-xs text-slate-400 mb-1">Fuentes:</p>
+          <div className="mt-3 pt-2 border-t border-slate-700">
+            <p className="text-xs font-semibold text-cyan-400 mb-2">Basado en tu material de clase:</p>
             {message.sources.map((s, i) => (
-              <p key={i} className="text-xs text-slate-500">
-                {s.filename}{s.page ? `, p.${s.page}` : ''}
-              </p>
+              <div key={i} className="flex items-start gap-2 mb-1">
+                <span className="text-cyan-500 text-xs mt-0.5">&#128196;</span>
+                <p className="text-xs text-slate-300">
+                  <span className="font-medium">{s.filename}</span>
+                  {s.page ? <span className="text-slate-400"> — pag. {s.page}</span> : ''}
+                </p>
+              </div>
             ))}
           </div>
         )}
