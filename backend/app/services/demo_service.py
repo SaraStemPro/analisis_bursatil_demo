@@ -102,6 +102,7 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
         pnl=None,
         closed_at=None,
         portfolio_group=body.portfolio_group,
+        notes=body.notes,
     )
 
     db.add(order)
@@ -446,6 +447,7 @@ def _order_to_response(o: Order) -> OrderResponse:
         side=o.side,
         pnl=o.pnl,
         portfolio_group=o.portfolio_group,
+        notes=o.notes,
         created_at=o.created_at,
         closed_at=o.closed_at,
     )
@@ -623,6 +625,8 @@ def get_ranking(db: Session) -> list[dict]:
     for p in portfolios:
         user = db.query(User).filter(User.id == p.user_id).first()
         if not user or user.role != "student":
+            continue
+        if user.email in ("profesor@demo.com", "sara@demo.com"):
             continue
         positions = _calculate_positions(db, p)
         total_positions_value = sum(float(pos.current_price * pos.quantity) for pos in positions)

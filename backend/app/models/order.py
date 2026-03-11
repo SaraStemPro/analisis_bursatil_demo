@@ -25,6 +25,7 @@ class Order(Base):
     side: Mapped[str | None] = mapped_column(String(10), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     portfolio_group: Mapped[str | None] = mapped_column(String(100), nullable=True)  # Named cartera group
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)  # Trading diary
 
     portfolio: Mapped["Portfolio"] = relationship(back_populates="orders")
 

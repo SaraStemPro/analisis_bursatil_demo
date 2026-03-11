@@ -17,6 +17,7 @@ export default function OrderForm({ initialTicker }: Props) {
   }, [initialTicker])
   const [tickerName, setTickerName] = useState('')
   const [quantity, setQuantity] = useState(1)
+  const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
 
   const { data: quote } = useQuery({
@@ -32,6 +33,10 @@ export default function OrderForm({ initialTicker }: Props) {
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['performance'] })
       qc.invalidateQueries({ queryKey: ['portfolioSummary'] })
+      setTicker('')
+      setTickerName('')
+      setQuantity(1)
+      setNotes('')
       setError('')
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Error'),
@@ -39,7 +44,7 @@ export default function OrderForm({ initialTicker }: Props) {
 
   const handleOrder = (type: 'buy' | 'sell') => {
     if (!ticker) return
-    orderMut.mutate({ ticker, type, quantity })
+    orderMut.mutate({ ticker, type, quantity, notes: notes.trim() || undefined })
   }
 
   return (
@@ -89,6 +94,19 @@ export default function OrderForm({ initialTicker }: Props) {
           </p>
         </div>
       )}
+
+      {/* Diario de operaciones */}
+      <div className="mt-3">
+        <label className="text-sm text-slate-400">Diario — ¿por qué abres esta posición?</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder="Ej: Soporte en media de 200, RSI sobrevendido, patrón de martillo..."
+          className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-emerald-500 resize-none placeholder:text-slate-500"
+        />
+      </div>
 
       {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
     </div>

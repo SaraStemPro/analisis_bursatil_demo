@@ -10,6 +10,7 @@ interface Props {
 
 export default function TickerSearchInput({ value, onChange }: Props) {
   const [query, setQuery] = useState(value)
+  useEffect(() => { setQuery(value) }, [value])
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()

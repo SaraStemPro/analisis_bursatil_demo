@@ -20,7 +20,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Hola, {user?.name}</h1>
-        <p className="text-slate-400 mt-1">Bienvenido a tu plataforma de análisis bursátil</p>
+        <p className="text-slate-400 mt-1">Bienvenid@ a tu plataforma de análisis bursátil.</p>
       </div>
 
       {portfolio && (
@@ -72,9 +72,25 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Tutor IA — bloque destacado */}
+      <Link
+        to="/tutor"
+        className="block bg-slate-900 rounded-lg p-6 border border-amber-700/50 hover:border-amber-500/70 transition-colors group"
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <div className="bg-amber-600 p-3 rounded">
+            <MessageCircle size={24} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold group-hover:text-amber-400 transition-colors">Tutor IA</h3>
+            <p className="text-sm text-slate-400">Pregunta al tutor basado en los apuntes del curso. Sube PDFs, consulta dudas y repasa conceptos clave de análisis bursátil.</p>
+          </div>
+        </div>
+      </Link>
+
       {/* Ranking */}
       {ranking && ranking.length > 0 && (
-        <div className="bg-slate-900 rounded-lg p-5 border border-amber-700/50">
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <div className="flex items-center gap-2 mb-4">
             <Trophy size={20} className="text-amber-400" />
             <h2 className="font-semibold">Ranking</h2>
@@ -118,22 +134,6 @@ export default function Dashboard() {
           </table>
         </div>
       )}
-
-      {/* Tutor IA — bloque destacado */}
-      <Link
-        to="/tutor"
-        className="block bg-slate-900 rounded-lg p-6 border border-amber-700/50 hover:border-amber-500/70 transition-colors group"
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="bg-amber-600 p-3 rounded">
-            <MessageCircle size={24} className="text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold group-hover:text-amber-400 transition-colors">Tutor IA</h3>
-            <p className="text-sm text-slate-400">Pregunta al tutor basado en los apuntes del curso. Sube PDFs, consulta dudas y repasa conceptos clave de análisis bursátil.</p>
-          </div>
-        </div>
-      </Link>
     </div>
   )
 }

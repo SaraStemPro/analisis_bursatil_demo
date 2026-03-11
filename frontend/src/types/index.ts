@@ -138,6 +138,7 @@ export interface Order {
   side: string | null
   pnl: number | null
   portfolio_group: string | null
+  notes: string | null
   created_at: string
   closed_at: string | null
 }

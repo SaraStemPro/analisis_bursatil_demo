@@ -64,10 +64,11 @@ backend/app/schemas/
 
 ## Base de Datos
 - **Supabase** (PostgreSQL gestionado) — solo como BD, no usamos Supabase Auth ni Storage
-- Connection string en `.env` como `DATABASE_URL`
+- Connection string en `.env` como `DATABASE_URL` (Session Pooler, IPv4 compatible)
 - SQLAlchemy apunta a Supabase PostgreSQL
 - Para desarrollo local se puede usar SQLite cambiando `DATABASE_URL`
 - Precisión numérica: `Numeric(14, 5)` para precios (forex necesita 5 decimales)
+- **7 vistas SQL** para el profesor: `v_orders`, `v_backtest_runs`, `v_conversations`, `v_messages`, `v_documents`, `v_strategies`, `v_portfolios` — todas incluyen `username` y `user_email`
 
 ## Fases de implementación
 1. ✅ Schemas Pydantic
@@ -103,6 +104,8 @@ backend/app/schemas/
      - Posiciones en formato tabla/lista (no tarjetas)
      - Resumen portfolio con diversificación (Shannon entropy penalizada) y distribución sectorial
      - Buscador de tickers con autocompletado en formulario de orden
+     - Diario de operaciones: campo `notes` (500 chars) para justificar cada orden
+     - Formulario se resetea tras ejecutar orden (ticker, cantidad, notas)
      - Sistema de carteras nombradas (portfolio_group):
        - Compra desde el simulador del Screener → crea cartera con nombre
        - Ejecución secuencial (evita race conditions en balance)
@@ -122,7 +125,7 @@ backend/app/schemas/
      - 4 tarjetas principales (Gráficos, Paper Trading, Backtesting, Screener)
      - Tutor IA como bloque grande independiente debajo
      - Stats del portfolio si hay posiciones abiertas
-     - Ranking de usuarios por valor de portfolio (tabla con posición, usuario, valor, rendimiento)
+     - Ranking de usuarios por valor de portfolio (excluye demo users, debajo del Tutor IA)
    - Backtesting:
      - Buscador de tickers con autocompletado (reutiliza TickerSearchInput)
      - Ejecución de plantillas sin crear estrategias temporales (rules inline)
@@ -237,6 +240,7 @@ components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde
 ### Modelo de datos (Order)
 - Columna `side` (String(10), nullable): "long" | "short"
 - Columna `portfolio_group` (String(100), nullable): nombre de cartera
+- Columna `notes` (String(500), nullable): diario de operaciones
 - Precisión: `Numeric(14, 5)` en todos los campos de precio
 - Migration automática en `main.py` (ALTER TABLE si columna no existe)
 

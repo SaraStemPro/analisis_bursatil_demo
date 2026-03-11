@@ -32,6 +32,7 @@ export default function OrderHistory() {
               <th className="pb-2">Precio</th>
               <th className="pb-2">P&L</th>
               <th className="pb-2">Estado</th>
+              <th className="pb-2">Notas</th>
             </tr>
           </thead>
           <tbody>
@@ -60,6 +61,9 @@ export default function OrderHistory() {
                     }`}>
                       {o.status === 'open' ? 'Abierta' : 'Cerrada'}
                     </span>
+                  </td>
+                  <td className="py-2 text-slate-400 max-w-[200px] truncate" title={o.notes || ''}>
+                    {o.notes || '-'}
                   </td>
                 </tr>
               )
