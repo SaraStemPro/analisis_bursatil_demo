@@ -292,15 +292,22 @@ def delete_strategy(db: Session, user_id: str, strategy_id: str) -> None:
 # ──────────────────────────────────────
 
 def run_backtest(db: Session, user_id: str, body: BacktestRunRequest) -> BacktestRunResponse:
-    # Obtener reglas de la estrategia
-    strategy_id = str(body.strategy_id)
-    strategy_resp = get_strategy(db, user_id, strategy_id)
-    rules = strategy_resp.rules
+    # Obtener reglas: inline o desde estrategia guardada
+    if body.rules:
+        rules = body.rules
+        strategy_id = str(body.strategy_id) if body.strategy_id else None
+        strategy_name = body.strategy_name or "Prueba rápida"
+    else:
+        strategy_id = str(body.strategy_id)
+        strategy_resp = get_strategy(db, user_id, strategy_id)
+        rules = strategy_resp.rules
+        strategy_name = strategy_resp.name
 
     # Crear registro del run
     run = BacktestRun(
         user_id=user_id,
         strategy_id=strategy_id,
+        strategy_name=strategy_name,
         ticker=body.ticker.upper(),
         start_date=body.start_date,
         end_date=body.end_date,
@@ -404,8 +411,13 @@ def get_runs(db: Session, user_id: str) -> list[BacktestRunSummary]:
     )
     results = []
     for r in runs:
-        strategy = db.query(Strategy).filter(Strategy.id == r.strategy_id).first()
-        strategy_name = strategy.name if strategy else _get_template_name(r.strategy_id)
+        if r.strategy_name:
+            strategy_name = r.strategy_name
+        elif r.strategy_id:
+            strategy = db.query(Strategy).filter(Strategy.id == r.strategy_id).first()
+            strategy_name = strategy.name if strategy else _get_template_name(r.strategy_id)
+        else:
+            strategy_name = "Prueba rápida"
         metrics = r.metrics or {}
         results.append(BacktestRunSummary(
             id=r.id,
@@ -746,6 +758,99 @@ def _calc_warmup(rules: StrategyRules) -> int:
     return max_period + 20  # extra buffer
 
 
+def _open_position(capital: float, close: float, pos_is_short: bool, rules: StrategyRules,
+                   indicator_data: dict, i: int, current_date, commission_pct: float,
+                   position_size_pct: float):
+    """Abre una posición y devuelve (position_dict, capital_restante) o (None, capital)."""
+    stop_loss_pct = rules.risk_management.stop_loss_pct
+    stop_loss_type = rules.risk_management.stop_loss_type
+    max_risk_pct = rules.risk_management.max_risk_pct
+
+    stop_price = None
+    if stop_loss_type == StopLossType.fractal:
+        if pos_is_short:
+            stop_price = _find_last_fractal_resistance(indicator_data, i, close)
+        else:
+            stop_price = _find_last_fractal_support(indicator_data, i, close)
+        if stop_price is None and stop_loss_pct:
+            stop_price = close * (1 + stop_loss_pct / 100) if pos_is_short else close * (1 - stop_loss_pct / 100)
+    elif stop_loss_pct:
+        stop_price = close * (1 + stop_loss_pct / 100) if pos_is_short else close * (1 - stop_loss_pct / 100)
+
+    if max_risk_pct and stop_price:
+        risk_per_share = abs(close - stop_price)
+        if risk_per_share > 0:
+            risk_amount = capital * (max_risk_pct / 100)
+            quantity = risk_amount / risk_per_share
+            invest = quantity * close
+            if invest > capital * (position_size_pct / 100):
+                invest = capital * (position_size_pct / 100)
+                commission = invest * (commission_pct / 100)
+                quantity = (invest - commission) / close
+            else:
+                commission = invest * (commission_pct / 100)
+                invest += commission
+                if invest > capital:
+                    invest = capital
+                    commission = invest * (commission_pct / 100)
+                    quantity = (invest - commission) / close
+        else:
+            invest = capital * (position_size_pct / 100)
+            commission = invest * (commission_pct / 100)
+            quantity = (invest - commission) / close
+    else:
+        invest = capital * (position_size_pct / 100)
+        commission = invest * (commission_pct / 100)
+        quantity = (invest - commission) / close
+
+    if quantity <= 0:
+        return None, capital
+
+    pos = {
+        "entry_date": current_date,
+        "entry_price": close,
+        "quantity": quantity,
+        "commission_in": commission,
+        "stop_price": stop_price,
+        "invested": min(invest, capital),
+        "is_short": pos_is_short,
+    }
+    return pos, capital - min(invest, capital)
+
+
+def _close_position(position: dict, close: float, current_date, commission_pct: float,
+                    exit_reason: str) -> tuple[dict, float]:
+    """Cierra una posición y devuelve (trade_dict, capital_devuelto)."""
+    entry_price = position["entry_price"]
+    pos_is_short = position["is_short"]
+    commission = position["quantity"] * close * (commission_pct / 100)
+
+    if pos_is_short:
+        pnl = (entry_price - close) * position["quantity"] - position["commission_in"] - commission
+        pnl_pct = (entry_price - close) / entry_price * 100
+        capital_back = position["invested"] + pnl
+    else:
+        revenue = position["quantity"] * close
+        capital_back = revenue - commission
+        pnl = (close - entry_price) * position["quantity"] - position["commission_in"] - commission
+        pnl_pct = (close - entry_price) / entry_price * 100
+
+    duration = (current_date - position["entry_date"]).days
+    trade = {
+        "type": "sell" if pos_is_short else "buy",
+        "entry_date": position["entry_date"],
+        "entry_price": entry_price,
+        "exit_date": current_date,
+        "exit_price": close,
+        "quantity": position["quantity"],
+        "pnl": pnl,
+        "pnl_pct": pnl_pct,
+        "exit_reason": exit_reason,
+        "duration_days": duration,
+    }
+    return trade, capital_back
+
+
 def _simulate(
     df: pd.DataFrame,
     rules: StrategyRules,
@@ -755,108 +860,59 @@ def _simulate(
     position_size_pct: float,
     sim_start_idx: int = 0,
 ) -> tuple[list[dict], list[EquityPoint]]:
-    """Ejecuta la simulación de backtesting. Soporta long y short."""
+    """Ejecuta la simulación. Soporta long, short y both (flip)."""
     capital = initial_capital
-    position = None  # {"entry_date", "entry_price", "quantity", "stop_price", "commission_in"}
+    position = None
     trades = []
     equity_curve = []
 
-    is_short = rules.side == StrategySide.short
+    side = rules.side
+    is_both = side == StrategySide.both
     stop_loss_pct = rules.risk_management.stop_loss_pct
-    stop_loss_type = rules.risk_management.stop_loss_type
     take_profit_pct = rules.risk_management.take_profit_pct
-    max_risk_pct = rules.risk_management.max_risk_pct
 
     for i in range(len(df)):
-        row = df.iloc[i]
         current_date = df.index[i].to_pydatetime()
-        close = float(row["Close"])
+        close = float(df.iloc[i]["Close"])
 
-        # Solo registrar equity y operar desde sim_start_idx
         if i < sim_start_idx:
             continue
 
         if position is None:
-            # Evaluar entrada
+            # Evaluar entrada → long (o long en modo both)
             if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
-                # Determinar stop price
-                stop_price = None
-                if stop_loss_type == StopLossType.fractal:
-                    if is_short:
-                        stop_price = _find_last_fractal_resistance(indicator_data, i, close)
-                    else:
-                        stop_price = _find_last_fractal_support(indicator_data, i, close)
-                    if stop_price is None and stop_loss_pct:
-                        # Fallback a stop fijo
-                        stop_price = close * (1 + stop_loss_pct / 100) if is_short else close * (1 - stop_loss_pct / 100)
-                elif stop_loss_pct:
-                    stop_price = close * (1 + stop_loss_pct / 100) if is_short else close * (1 - stop_loss_pct / 100)
-
-                # Calcular tamaño de posición
-                if max_risk_pct and stop_price:
-                    risk_per_share = abs(close - stop_price)
-                    if risk_per_share > 0:
-                        risk_amount = capital * (max_risk_pct / 100)
-                        quantity = risk_amount / risk_per_share
-                        invest = quantity * close
-                        if invest > capital * (position_size_pct / 100):
-                            invest = capital * (position_size_pct / 100)
-                            commission = invest * (commission_pct / 100)
-                            quantity = (invest - commission) / close
-                        else:
-                            commission = invest * (commission_pct / 100)
-                            invest += commission
-                            if invest > capital:
-                                invest = capital
-                                commission = invest * (commission_pct / 100)
-                                quantity = (invest - commission) / close
-                    else:
-                        invest = capital * (position_size_pct / 100)
-                        commission = invest * (commission_pct / 100)
-                        quantity = (invest - commission) / close
-                else:
-                    invest = capital * (position_size_pct / 100)
-                    commission = invest * (commission_pct / 100)
-                    quantity = (invest - commission) / close
-
-                if quantity > 0:
-                    position = {
-                        "entry_date": current_date,
-                        "entry_price": close,
-                        "quantity": quantity,
-                        "commission_in": commission,
-                        "stop_price": stop_price,
-                        "invested": min(invest, capital),
-                    }
-                    capital -= min(invest, capital)
+                open_short = side == StrategySide.short
+                position, capital = _open_position(
+                    capital, close, open_short, rules, indicator_data, i,
+                    current_date, commission_pct, position_size_pct)
         else:
-            # Evaluar salida
             exit_reason = None
+            pos_is_short = position["is_short"]
             entry_price = position["entry_price"]
 
             # Check stop loss
             stop_price = position.get("stop_price")
             if stop_price:
-                if is_short and close >= stop_price:
+                if pos_is_short and close >= stop_price:
                     exit_reason = "stop_loss"
-                elif not is_short and close <= stop_price:
+                elif not pos_is_short and close <= stop_price:
                     exit_reason = "stop_loss"
 
             if not exit_reason and stop_loss_pct and not stop_price:
-                if is_short:
-                    pnl_pct_current = (entry_price - close) / entry_price * 100
+                if pos_is_short:
+                    pnl_pct_cur = (entry_price - close) / entry_price * 100
                 else:
-                    pnl_pct_current = (close - entry_price) / entry_price * 100
-                if pnl_pct_current <= -stop_loss_pct:
+                    pnl_pct_cur = (close - entry_price) / entry_price * 100
+                if pnl_pct_cur <= -stop_loss_pct:
                     exit_reason = "stop_loss"
 
             # Check take profit
             if not exit_reason and take_profit_pct:
-                if is_short:
-                    pnl_pct_current = (entry_price - close) / entry_price * 100
+                if pos_is_short:
+                    pnl_pct_cur = (entry_price - close) / entry_price * 100
                 else:
-                    pnl_pct_current = (close - entry_price) / entry_price * 100
-                if pnl_pct_current >= take_profit_pct:
+                    pnl_pct_cur = (close - entry_price) / entry_price * 100
+                if pnl_pct_cur >= take_profit_pct:
                     exit_reason = "take_profit"
 
             # Check signal exit
@@ -864,73 +920,36 @@ def _simulate(
                 exit_reason = "signal"
 
             if exit_reason:
-                commission = position["quantity"] * close * (commission_pct / 100)
-                if is_short:
-                    pnl = (entry_price - close) * position["quantity"] - position["commission_in"] - commission
-                    pnl_pct = (entry_price - close) / entry_price * 100
-                    # Return invested margin + pnl
-                    capital += position["invested"] + pnl
-                else:
-                    revenue = position["quantity"] * close
-                    capital += revenue - commission
-                    pnl = (close - entry_price) * position["quantity"] - position["commission_in"] - commission
-                    pnl_pct = (close - entry_price) / entry_price * 100
-
-                duration = (current_date - position["entry_date"]).days
-                trades.append({
-                    "type": "sell" if is_short else "buy",
-                    "entry_date": position["entry_date"],
-                    "entry_price": entry_price,
-                    "exit_date": current_date,
-                    "exit_price": close,
-                    "quantity": position["quantity"],
-                    "pnl": pnl,
-                    "pnl_pct": pnl_pct,
-                    "exit_reason": exit_reason,
-                    "duration_days": duration,
-                })
+                trade, capital_back = _close_position(position, close, current_date, commission_pct, exit_reason)
+                capital += capital_back
+                trades.append(trade)
                 position = None
+
+                # Modo both: al cerrar por señal, abrir posición opuesta
+                if is_both and exit_reason == "signal":
+                    flip_short = not pos_is_short
+                    position, capital = _open_position(
+                        capital, close, flip_short, rules, indicator_data, i,
+                        current_date, commission_pct, position_size_pct)
 
         # Equity
         if position:
-            if is_short:
+            if position["is_short"]:
                 unrealized = (position["entry_price"] - close) * position["quantity"]
                 pos_value = position["invested"] + unrealized
             else:
                 pos_value = position["quantity"] * close
         else:
             pos_value = 0
-        equity = capital + pos_value
-        equity_curve.append(EquityPoint(date=current_date.date(), equity=round(equity, 2)))
+        equity_curve.append(EquityPoint(date=current_date.date(), equity=round(capital + pos_value, 2)))
 
     # Cerrar posición abierta al final
     if position:
         close = float(df.iloc[-1]["Close"])
         current_date = df.index[-1].to_pydatetime()
-        commission = position["quantity"] * close * (commission_pct / 100)
-        entry_price = position["entry_price"]
-        if is_short:
-            pnl = (entry_price - close) * position["quantity"] - position["commission_in"] - commission
-            pnl_pct = (entry_price - close) / entry_price * 100
-            capital += position["invested"] + pnl
-        else:
-            revenue = position["quantity"] * close
-            capital += revenue - commission
-            pnl = (close - entry_price) * position["quantity"] - position["commission_in"] - commission
-            pnl_pct = (close - entry_price) / entry_price * 100
-
-        trades.append({
-            "type": "sell" if is_short else "buy",
-            "entry_date": position["entry_date"],
-            "entry_price": entry_price,
-            "exit_date": current_date,
-            "exit_price": close,
-            "quantity": position["quantity"],
-            "pnl": pnl,
-            "pnl_pct": pnl_pct,
-            "exit_reason": "signal",
-            "duration_days": (current_date - position["entry_date"]).days,
-        })
+        trade, capital_back = _close_position(position, close, current_date, commission_pct, "signal")
+        capital += capital_back
+        trades.append(trade)
 
     return trades, equity_curve
 

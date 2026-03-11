@@ -79,6 +79,7 @@ class CandlePattern(str, Enum):
 class StrategySide(str, Enum):
     long = "long"
     short = "short"
+    both = "both"
 
 
 class StopLossType(str, Enum):

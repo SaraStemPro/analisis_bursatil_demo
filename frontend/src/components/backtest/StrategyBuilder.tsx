@@ -367,15 +367,24 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
           onClick={() => setSide('long')}
           className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'long' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
         >
-          Long (comprar)
+          Long
         </button>
         <button
           onClick={() => setSide('short')}
           className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'short' ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
         >
-          Short (vender en corto)
+          Short
+        </button>
+        <button
+          onClick={() => setSide('both')}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'both' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+        >
+          Long + Short
         </button>
       </div>
+      {side === 'both' && (
+        <p className="text-xs text-slate-500 -mt-2">Señal de entrada → abre long. Señal de salida → cierra y abre short. Siguiente entrada → cierra short y abre long. Siempre en el mercado.</p>
+      )}
 
       {/* Entry conditions */}
       <ConditionGroupEditor
@@ -407,7 +416,7 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
               className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
             >
               <option value="fixed">Fijo (% de pérdida)</option>
-              <option value="fractal">{side === 'short' ? 'Dinámico (fractal de resistencia)' : 'Dinámico (fractal de soporte)'}</option>
+              <option value="fractal">{side === 'short' ? 'Dinámico (fractal de resistencia)' : side === 'both' ? 'Dinámico (fractal soporte/resistencia)' : 'Dinámico (fractal de soporte)'}</option>
             </select>
             <p className="text-xs text-slate-500 mt-1">
               {risk.stop_loss_type === 'fractal'

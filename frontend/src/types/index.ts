@@ -308,7 +308,7 @@ export interface RiskManagement {
   max_risk_pct: number | null
 }
 
-export type StrategySide = 'long' | 'short'
+export type StrategySide = 'long' | 'short' | 'both'
 
 export interface StrategyRules {
   entry: ConditionGroup
@@ -366,7 +366,7 @@ export interface BacktestTrade {
 export interface BacktestRun {
   id: string
   user_id: string
-  strategy_id: string
+  strategy_id: string | null
   ticker: string
   start_date: string
   end_date: string
@@ -383,7 +383,7 @@ export interface BacktestRun {
 
 export interface BacktestRunSummary {
   id: string
-  strategy_id: string
+  strategy_id: string | null
   strategy_name: string
   ticker: string
   start_date: string

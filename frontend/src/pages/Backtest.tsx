@@ -48,34 +48,33 @@ export default function Backtest() {
     }
   }, [selectedStrategy])
 
-  // For templates: create a temporary custom strategy, run it, then delete it
-  // For user strategies: update rules if modified, then run
+  // For templates: pass rules inline (no temp strategy created)
+  // For user strategies: update rules if modified, then run by ID
   const runMut = useMutation({
     mutationFn: async () => {
       if (!selectedStrategy || !customRules) throw new Error('No strategy selected')
 
-      let strategyId = selectedStrategy.id
-
-      // If template or rules were modified, create a temp strategy
       if (selectedStrategy.is_template) {
-        const tempName = `${selectedStrategy.name} (temp-${Date.now()})`
-        const created = await backtest.createStrategy({
-          name: tempName,
-          description: selectedStrategy.description || undefined,
+        // Pass rules inline — no strategy is created in "Mis estrategias"
+        return backtest.run({
           rules: customRules,
+          strategy_name: selectedStrategy.name,
+          ticker,
+          start_date: startDate,
+          end_date: endDate,
+          interval,
         })
-        strategyId = created.id
-      } else {
-        // For user strategies, update if rules changed
-        const rulesChanged = JSON.stringify(customRules) !== JSON.stringify(selectedStrategy.rules)
-        if (rulesChanged) {
-          await backtest.updateStrategy(selectedStrategy.id, { rules: customRules })
-          qc.invalidateQueries({ queryKey: ['strategies'] })
-        }
+      }
+
+      // For user strategies, update if rules changed
+      const rulesChanged = JSON.stringify(customRules) !== JSON.stringify(selectedStrategy.rules)
+      if (rulesChanged) {
+        await backtest.updateStrategy(selectedStrategy.id, { rules: customRules })
+        qc.invalidateQueries({ queryKey: ['strategies'] })
       }
 
       return backtest.run({
-        strategy_id: strategyId,
+        strategy_id: selectedStrategy.id,
         ticker,
         start_date: startDate,
         end_date: endDate,
@@ -254,10 +253,11 @@ export default function Backtest() {
                 <select
                   value={customRules.side || 'long'}
                   onChange={(e) => setCustomRules({ ...customRules, side: e.target.value as StrategySide })}
-                  className={`text-xs px-2 py-0.5 rounded border font-medium ${customRules.side === 'short' ? 'bg-red-900/50 border-red-600 text-red-300' : 'bg-emerald-900/50 border-emerald-600 text-emerald-300'}`}
+                  className={`text-xs px-2 py-0.5 rounded border font-medium ${customRules.side === 'short' ? 'bg-red-900/50 border-red-600 text-red-300' : customRules.side === 'both' ? 'bg-purple-900/50 border-purple-600 text-purple-300' : 'bg-emerald-900/50 border-emerald-600 text-emerald-300'}`}
                 >
                   <option value="long">Long</option>
                   <option value="short">Short</option>
+                  <option value="both">Long + Short</option>
                 </select>
               </div>
               {selectedStrategy.description && <p className="text-xs text-slate-400 -mt-2">{selectedStrategy.description}</p>}
@@ -456,8 +456,14 @@ export default function Backtest() {
               <div><p className="text-slate-400">Profit Factor</p><p className="font-bold">{activeRun.metrics.profit_factor?.toFixed(2) ?? 'N/A'}</p></div>
               <div><p className="text-slate-400">Trades</p><p className="font-bold">{activeRun.metrics.total_trades}</p></div>
               <div><p className="text-slate-400">Buy & Hold</p><p className="font-bold">{activeRun.metrics.buy_and_hold_return_pct?.toFixed(2) ?? 'N/A'}%</p></div>
-              <div><p className="text-slate-400">Mejor trade</p><p className={`font-bold ${activeRun.metrics.best_trade_pnl != null && activeRun.metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{activeRun.metrics.best_trade_pnl != null ? `${activeRun.metrics.best_trade_pnl >= 0 ? '+' : ''}${activeRun.metrics.best_trade_pnl.toFixed(2)}€` : 'N/A'}</p></div>
-              <div><p className="text-slate-400">Peor trade</p><p className={`font-bold ${activeRun.metrics.worst_trade_pnl != null && activeRun.metrics.worst_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{activeRun.metrics.worst_trade_pnl != null ? `${activeRun.metrics.worst_trade_pnl >= 0 ? '+' : ''}${activeRun.metrics.worst_trade_pnl.toFixed(2)}€` : 'N/A'}</p></div>
+              {activeRun.metrics.best_trade_pnl != null && activeRun.metrics.worst_trade_pnl != null && activeRun.metrics.best_trade_pnl === activeRun.metrics.worst_trade_pnl ? (
+                <div><p className="text-slate-400">Único trade</p><p className={`font-bold ${activeRun.metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{activeRun.metrics.best_trade_pnl >= 0 ? '+' : ''}{activeRun.metrics.best_trade_pnl.toFixed(2)}€</p></div>
+              ) : (
+                <>
+                  <div><p className="text-slate-400">Mejor trade</p><p className={`font-bold ${activeRun.metrics.best_trade_pnl != null && activeRun.metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{activeRun.metrics.best_trade_pnl != null ? `${activeRun.metrics.best_trade_pnl >= 0 ? '+' : ''}${activeRun.metrics.best_trade_pnl.toFixed(2)}€` : 'N/A'}</p></div>
+                  <div><p className="text-slate-400">Peor trade</p><p className={`font-bold ${activeRun.metrics.worst_trade_pnl != null && activeRun.metrics.worst_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{activeRun.metrics.worst_trade_pnl != null ? `${activeRun.metrics.worst_trade_pnl >= 0 ? '+' : ''}${activeRun.metrics.worst_trade_pnl.toFixed(2)}€` : 'N/A'}</p></div>
+                </>
+              )}
             </div>
           </div>
 

@@ -124,7 +124,9 @@ class StrategyUpdateRequest(BaseModel):
 
 
 class BacktestRunRequest(BaseModel):
-    strategy_id: UUID
+    strategy_id: UUID | None = Field(default=None, description="ID de estrategia guardada (opcional si se pasan rules)")
+    rules: StrategyRules | None = Field(default=None, description="Reglas inline (alternativa a strategy_id)")
+    strategy_name: str | None = Field(default=None, max_length=200, description="Nombre para mostrar en historial")
     ticker: str = Field(min_length=1, max_length=20)
     start_date: date
     end_date: date
@@ -144,6 +146,12 @@ class BacktestRunRequest(BaseModel):
     )
 
     @model_validator(mode="after")
+    def validate_strategy_source(self):
+        if not self.strategy_id and not self.rules:
+            raise ValueError("Debe proporcionar 'strategy_id' o 'rules'")
+        return self
+
+    @model_validator(mode="after")
     def validate_dates(self):
         if self.end_date <= self.start_date:
             raise ValueError("'end_date' debe ser posterior a 'start_date'")
@@ -154,7 +162,6 @@ class BacktestRunRequest(BaseModel):
         valid = {"1m", "5m", "15m", "1h", "4h", "1d", "1wk"}
         if self.interval not in valid:
             raise ValueError(f"'interval' debe ser uno de: {', '.join(sorted(valid))}")
-        return self
         return self
 
 
@@ -217,7 +224,7 @@ class BacktestTradeResponse(BaseModel):
 class BacktestRunResponse(BaseModel):
     id: UUID
     user_id: UUID
-    strategy_id: UUID
+    strategy_id: UUID | None = None
     ticker: str
     start_date: date
     end_date: date
@@ -236,7 +243,7 @@ class BacktestRunResponse(BaseModel):
 
 class BacktestRunSummary(BaseModel):
     id: UUID
-    strategy_id: UUID
+    strategy_id: UUID | None = None
     strategy_name: str
     ticker: str
     start_date: date

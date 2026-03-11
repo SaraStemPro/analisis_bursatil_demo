@@ -102,7 +102,7 @@ export const backtest = {
   updateStrategy: (id: string, data: { name?: string; description?: string; rules?: StrategyRules }) =>
     api.put<Strategy>(`/backtest/strategies/${id}`, data),
   deleteStrategy: (id: string) => api.delete<void>(`/backtest/strategies/${id}`),
-  run: (data: { strategy_id: string; ticker: string; start_date: string; end_date: string; interval?: string; initial_capital?: number; commission_pct?: number }) =>
+  run: (data: { strategy_id?: string; rules?: StrategyRules; strategy_name?: string; ticker: string; start_date: string; end_date: string; interval?: string; initial_capital?: number; commission_pct?: number }) =>
     api.post<BacktestRun>('/backtest/run', data),
   runs: () => api.get<BacktestRunSummary[]>('/backtest/runs'),
   getRun: (id: string) => api.get<BacktestRun>(`/backtest/runs/${id}`),

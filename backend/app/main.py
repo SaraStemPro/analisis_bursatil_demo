@@ -19,6 +19,18 @@ with engine.connect() as conn:
         if "portfolio_group" not in columns:
             conn.execute(text("ALTER TABLE orders ADD COLUMN portfolio_group VARCHAR(100)"))
             conn.commit()
+    if "backtest_runs" in inspector.get_table_names():
+        columns = [c["name"] for c in inspector.get_columns("backtest_runs")]
+        if "strategy_name" not in columns:
+            conn.execute(text("ALTER TABLE backtest_runs ADD COLUMN strategy_name VARCHAR(200)"))
+            conn.commit()
+        # Make strategy_id nullable (PostgreSQL only; SQLite ignores ALTER COLUMN)
+        db_url = str(engine.url)
+        if "postgresql" in db_url:
+            col_info = {c["name"]: c for c in inspector.get_columns("backtest_runs")}
+            if col_info.get("strategy_id", {}).get("nullable") is False:
+                conn.execute(text("ALTER TABLE backtest_runs ALTER COLUMN strategy_id DROP NOT NULL"))
+                conn.commit()
 
 app = FastAPI(
     title=settings.app_name,
