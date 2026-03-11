@@ -97,7 +97,7 @@ export default function OrderForm({ initialTicker }: Props) {
 
       {/* Diario de operaciones */}
       <div className="mt-3">
-        <label className="text-sm text-slate-400">Diario — ¿por qué abres esta posición?</label>
+        <label className="text-sm text-slate-400">Diario de trading — ¿por qué abres esta posición?</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
