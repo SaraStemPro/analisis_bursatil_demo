@@ -71,19 +71,20 @@ export const tutor = {
   deleteDocument: (id: string) => api.delete<void>(`/tutor/documents/${id}`),
   downloadDocument: (id: string) => {
     const token = localStorage.getItem('token')
-    const link = document.createElement('a')
-    link.href = `/api/tutor/documents/${id}/download`
-    // Use fetch with auth header to get the blob, then trigger download
     return fetch(`/api/tutor/documents/${id}/download`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then((res) => {
       if (!res.ok) throw new Error('Error al descargar')
-      return res.blob()
-    }).then((blob) => {
+      // Extract filename from Content-Disposition header
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const match = disposition.match(/filename="?([^"]+)"?/)
+      const filename = match ? match[1] : 'documento.pdf'
+      return res.blob().then((blob) => ({ blob, filename }))
+    }).then(({ blob, filename }) => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = '' // browser will use Content-Disposition filename
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

@@ -37,8 +37,9 @@ export default function DocumentPanel({ readOnly = false }: DocumentPanelProps) 
   }
 
   const handleDownload = (id: string) => {
-    tutor.downloadDocument(id).catch(() => {
-      // silently fail — could add toast later
+    tutor.downloadDocument(id).catch((err) => {
+      console.error('Error descargando documento:', err)
+      alert('Error al descargar el documento')
     })
   }
 
