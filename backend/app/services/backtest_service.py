@@ -520,35 +520,21 @@ def _detect_candle_patterns(df: pd.DataFrame) -> dict[str, pd.Series]:
         (full_range > 0)
     ).astype(float)
 
-    # Marubozu alcista: vela alcista con sombras muy pequeñas
-    patterns[CandlePattern.bullish_marubozu.value] = (
-        (c > o) &
-        (body >= 0.9 * full_range) &
-        (full_range > 0)
-    ).astype(float)
+    # Vela 20/20 alcista: marubozu (cuerpo >=90%) OR long line (cuerpo >=70% y significativo)
+    bullish_marubozu = (c > o) & (body >= 0.9 * full_range) & (full_range > 0)
+    bullish_longline = (
+        (c > o) & (body >= 0.7 * full_range) & (full_range > 0)
+        & (body > body.rolling(20, min_periods=1).mean() * 1.5)
+    )
+    patterns[CandlePattern.bullish_2020.value] = (bullish_marubozu | bullish_longline).astype(float)
 
-    # Marubozu bajista
-    patterns[CandlePattern.bearish_marubozu.value] = (
-        (c < o) &
-        (body >= 0.9 * full_range) &
-        (full_range > 0)
-    ).astype(float)
-
-    # Long line alcista: cuerpo grande (>70% del rango), alcista, sombras moderadas
-    patterns[CandlePattern.bullish_long_line.value] = (
-        (c > o) &
-        (body >= 0.7 * full_range) &
-        (full_range > 0) &
-        (body > body.rolling(20, min_periods=1).mean() * 1.5)
-    ).astype(float)
-
-    # Long line bajista
-    patterns[CandlePattern.bearish_long_line.value] = (
-        (c < o) &
-        (body >= 0.7 * full_range) &
-        (full_range > 0) &
-        (body > body.rolling(20, min_periods=1).mean() * 1.5)
-    ).astype(float)
+    # Vela 20/20 bajista
+    bearish_marubozu = (c < o) & (body >= 0.9 * full_range) & (full_range > 0)
+    bearish_longline = (
+        (c < o) & (body >= 0.7 * full_range) & (full_range > 0)
+        & (body > body.rolling(20, min_periods=1).mean() * 1.5)
+    )
+    patterns[CandlePattern.bearish_2020.value] = (bearish_marubozu | bearish_longline).astype(float)
 
     return {k: v.fillna(0.0) for k, v in patterns.items()}
 

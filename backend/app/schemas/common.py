@@ -70,10 +70,8 @@ class CandlePattern(str, Enum):
     bearish_engulfing = "bearish_engulfing"
     bullish_hammer = "bullish_hammer"
     bearish_hammer = "bearish_hammer"
-    bullish_marubozu = "bullish_marubozu"
-    bearish_marubozu = "bearish_marubozu"
-    bullish_long_line = "bullish_long_line"
-    bearish_long_line = "bearish_long_line"
+    bullish_2020 = "bullish_2020"
+    bearish_2020 = "bearish_2020"
 
 
 class StrategySide(str, Enum):

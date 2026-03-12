@@ -8,7 +8,7 @@ export type Comparator = 'greater_than' | 'less_than' | 'crosses_above' | 'cross
 export type LogicalOperator = 'AND' | 'OR'
 export type ConditionOperandType = 'indicator' | 'price' | 'volume' | 'value' | 'candle_pattern'
 export type PriceField = 'open' | 'high' | 'low' | 'close'
-export type CandlePattern = 'bullish_engulfing' | 'bearish_engulfing' | 'bullish_hammer' | 'bearish_hammer' | 'bullish_marubozu' | 'bearish_marubozu' | 'bullish_long_line' | 'bearish_long_line'
+export type CandlePattern = 'bullish_engulfing' | 'bearish_engulfing' | 'bullish_hammer' | 'bearish_hammer' | 'bullish_2020' | 'bearish_2020'
 export type StopLossType = 'fixed' | 'fractal'
 
 // --- Auth ---

@@ -22,10 +22,8 @@ const CANDLE_PATTERNS: { value: CandlePattern; label: string }[] = [
   { value: 'bearish_engulfing', label: 'Envolvente bajista' },
   { value: 'bullish_hammer', label: 'Martillo alcista' },
   { value: 'bearish_hammer', label: 'Martillo bajista' },
-  { value: 'bullish_marubozu', label: 'Marubozu alcista' },
-  { value: 'bearish_marubozu', label: 'Marubozu bajista' },
-  { value: 'bullish_long_line', label: 'Long line alcista' },
-  { value: 'bearish_long_line', label: 'Long line bajista' },
+  { value: 'bullish_2020', label: 'Vela 20/20 alcista' },
+  { value: 'bearish_2020', label: 'Vela 20/20 bajista' },
 ]
 
 const BBANDS_BANDS: { value: string; label: string }[] = [

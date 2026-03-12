@@ -2,8 +2,7 @@ import type { OHLCV } from '../types'
 
 export type PatternType =
   | 'bullish_engulfing' | 'bearish_engulfing'
-  | 'bullish_marubozu' | 'bearish_marubozu'
-  | 'bullish_longline' | 'bearish_longline'
+  | 'bullish_2020' | 'bearish_2020'
   | 'bullish_hammer' | 'bearish_hammer'
 
 export interface PatternMatch {
@@ -24,12 +23,10 @@ export interface PatternCatalogEntry {
 export const PATTERN_CATALOG: PatternCatalogEntry[] = [
   { type: 'bullish_engulfing', label: 'EA — Envolvente Alcista', description: 'La segunda vela alcista envuelve el cuerpo de la primera bajista' },
   { type: 'bearish_engulfing', label: 'EB — Envolvente Bajista', description: 'La segunda vela bajista envuelve el cuerpo de la primera alcista' },
-  { type: 'bullish_marubozu', label: 'MA — Marubozu Alcista', description: 'Vela alcista sin mechas (cuerpo ≥ 95% del rango)' },
-  { type: 'bearish_marubozu', label: 'MB — Marubozu Bajista', description: 'Vela bajista sin mechas (cuerpo ≥ 95% del rango)' },
-  { type: 'bullish_longline', label: 'LLA — Long Line Alcista', description: 'Vela alcista con cuerpo grande (70-95% del rango)' },
-  { type: 'bearish_longline', label: 'LLB — Long Line Bajista', description: 'Vela bajista con cuerpo grande (70-95% del rango)' },
+  { type: 'bullish_2020', label: 'V20A — Vela 20/20 Alcista', description: 'Vela alcista con cuerpo grande (≥ 70% del rango) — incluye marubozu y long line' },
+  { type: 'bearish_2020', label: 'V20B — Vela 20/20 Bajista', description: 'Vela bajista con cuerpo grande (≥ 70% del rango) — incluye marubozu y long line' },
   { type: 'bullish_hammer', label: 'MaA — Martillo Alcista', description: 'Cuerpo pequeño arriba, sombra inferior larga (señal de reversión alcista)' },
-  { type: 'bearish_hammer', label: 'MaB — Shooting Star', description: 'Cuerpo pequeño abajo, sombra superior larga (señal de reversión bajista)' },
+  { type: 'bearish_hammer', label: 'MaB — Martillo bajista', description: 'Cuerpo pequeño abajo, sombra superior larga (señal de reversión bajista)' },
 ]
 
 function bodySize(c: OHLCV): number {
@@ -96,45 +93,10 @@ function detectEngulfing(data: OHLCV[]): PatternMatch[] {
 }
 
 /**
- * Marubozu: vela con cuerpo >= 95% del rango total y cuerpo significativo.
- * Prácticamente sin mechas.
+ * Vela 20/20: marubozu (cuerpo >= 95% del rango) OR long line (cuerpo 70-95% y significativo).
+ * Unifica ambos patrones bajo un solo nombre.
  */
-function detectMarubozu(data: OHLCV[]): PatternMatch[] {
-  const results: PatternMatch[] = []
-  for (let i = 0; i < data.length; i++) {
-    const c = data[i]
-    const range = totalRange(c)
-    if (range === 0) continue
-
-    const body = bodySize(c)
-    if (body / range < 0.95) continue
-
-    const avg = avgBodySize(data, i, 20)
-    if (avg > 0 && body < avg * 1.5) continue
-
-    if (isBullish(c)) {
-      results.push({
-        index: i, date: c.date,
-        type: 'bullish_marubozu', label: 'MA',
-        color: '#10b981', position: 'belowBar',
-      })
-    } else if (isBearish(c)) {
-      results.push({
-        index: i, date: c.date,
-        type: 'bearish_marubozu', label: 'MB',
-        color: '#ef4444', position: 'aboveBar',
-      })
-    }
-  }
-  return results
-}
-
-/**
- * Long Line: vela con cuerpo grande (>= 70% del rango) y cuerpo significativo,
- * pero con mechas más visibles que el marubozu.
- * Se excluyen las velas que ya son marubozu (>= 95%).
- */
-function detectLongLine(data: OHLCV[]): PatternMatch[] {
+function detect2020(data: OHLCV[]): PatternMatch[] {
   const results: PatternMatch[] = []
   for (let i = 0; i < data.length; i++) {
     const c = data[i]
@@ -144,22 +106,24 @@ function detectLongLine(data: OHLCV[]): PatternMatch[] {
     const body = bodySize(c)
     const ratio = body / range
 
-    // Long line: 70%-95% body ratio (above 95% is marubozu)
-    if (ratio < 0.70 || ratio >= 0.95) continue
-
+    // Marubozu: cuerpo >= 95% del rango
+    const isMarubozu = ratio >= 0.95
+    // Long line: cuerpo 70-95% del rango y significativamente mayor que la media
     const avg = avgBodySize(data, i, 20)
-    if (avg > 0 && body < avg * 1.5) continue
+    const isLongLine = ratio >= 0.70 && ratio < 0.95 && (avg === 0 || body >= avg * 1.5)
+
+    if (!isMarubozu && !isLongLine) continue
 
     if (isBullish(c)) {
       results.push({
         index: i, date: c.date,
-        type: 'bullish_longline', label: 'LLA',
+        type: 'bullish_2020', label: 'V20A',
         color: '#10b981', position: 'belowBar',
       })
     } else if (isBearish(c)) {
       results.push({
         index: i, date: c.date,
-        type: 'bearish_longline', label: 'LLB',
+        type: 'bearish_2020', label: 'V20B',
         color: '#ef4444', position: 'aboveBar',
       })
     }
@@ -168,9 +132,9 @@ function detectLongLine(data: OHLCV[]): PatternMatch[] {
 }
 
 /**
- * Hammer / Shooting Star:
+ * Hammer / Martillo bajista:
  * - Martillo alcista (MaA): cuerpo < 35% del rango, sombra inferior >= 2x cuerpo, sombra superior <= 0.5x cuerpo
- * - Shooting star (MaB): cuerpo < 35% del rango, sombra superior >= 2x cuerpo, sombra inferior <= 0.5x cuerpo
+ * - Martillo bajista (MaB): cuerpo < 35% del rango, sombra superior >= 2x cuerpo, sombra inferior <= 0.5x cuerpo
  */
 function detectHammer(data: OHLCV[]): PatternMatch[] {
   const results: PatternMatch[] = []
@@ -196,7 +160,7 @@ function detectHammer(data: OHLCV[]): PatternMatch[] {
       })
     }
 
-    // Shooting star / martillo bajista: sombra superior larga, inferior corta
+    // Martillo bajista: sombra superior larga, inferior corta
     if (upperShadow >= 2 * body && lowerShadow <= 0.5 * body) {
       results.push({
         index: i, date: c.date,
@@ -212,8 +176,7 @@ export function detectPatterns(data: OHLCV[]): PatternMatch[] {
   if (data.length < 2) return []
   return [
     ...detectEngulfing(data),
-    ...detectMarubozu(data),
-    ...detectLongLine(data),
+    ...detect2020(data),
     ...detectHammer(data),
   ].sort((a, b) => a.index - b.index)
 }

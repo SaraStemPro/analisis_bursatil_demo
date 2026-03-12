@@ -568,8 +568,7 @@ function OperandDisplay({ operand, onParamChange, onValueChange }: {
     const patternLabels: Record<string, string> = {
       bullish_engulfing: 'Envolvente alcista', bearish_engulfing: 'Envolvente bajista',
       bullish_hammer: 'Martillo alcista', bearish_hammer: 'Martillo bajista',
-      bullish_marubozu: 'Marubozu alcista', bearish_marubozu: 'Marubozu bajista',
-      bullish_long_line: 'Long line alcista', bearish_long_line: 'Long line bajista',
+      bullish_2020: 'Vela 20/20 alcista', bearish_2020: 'Vela 20/20 bajista',
     }
     return <span className="bg-orange-900/60 rounded px-1.5 py-0.5 text-orange-300">{patternLabels[operand.pattern || ''] || operand.pattern}</span>
   }
