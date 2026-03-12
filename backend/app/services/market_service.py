@@ -1,8 +1,12 @@
+import logging
 import math
+import threading
 import time
 
 import numpy as np
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 from fastapi import HTTPException, status
 
 from ..schemas.market import (
@@ -27,10 +31,33 @@ _volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
 _VOLATILITY_TTL = 300  # 5 minutes, same as screener
 
 _quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
-_QUOTE_TTL = 30  # 30 seconds — fresh enough for educational use
+_QUOTE_TTL = 120  # 2 minutes — prevents Yahoo rate limiting with 13+ users
 
 _history_cache: dict[str, tuple[float, HistoryResponse]] = {}
-_HISTORY_TTL = 60  # 1 minute
+_HISTORY_TTL = 300  # 5 minutes — historical data doesn't change fast
+
+# Rate limiting protection
+_yf_lock = threading.Lock()
+_last_yf_call: float = 0
+_YF_MIN_INTERVAL = 0.5  # max 2 calls per second to Yahoo
+
+
+def _throttled_yf_call(fn, *args, **kwargs):
+    """Throttle yfinance calls to avoid Yahoo rate limiting."""
+    global _last_yf_call
+    with _yf_lock:
+        elapsed = time.time() - _last_yf_call
+        if elapsed < _YF_MIN_INTERVAL:
+            time.sleep(_YF_MIN_INTERVAL - elapsed)
+        _last_yf_call = time.time()
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        if "RateLimit" in type(e).__name__ or "Too Many Requests" in str(e):
+            logger.warning("Yahoo rate limited, waiting 5s...")
+            time.sleep(5)
+            return fn(*args, **kwargs)
+        raise
 
 # Universe of tickers for screening
 SP500_TICKERS = [
@@ -215,7 +242,7 @@ def get_quote(ticker: str) -> QuoteResponse:
         return cached[1]
 
     tk = yf.Ticker(ticker)
-    info = tk.info
+    info = _throttled_yf_call(lambda: tk.info)
 
     if not info or info.get("trailingPegRatio") is None and info.get("regularMarketPrice") is None:
         # yfinance devuelve un dict casi vacío si el ticker no existe
@@ -253,7 +280,7 @@ def get_history(ticker: str, period: str, interval: str) -> HistoryResponse:
         return cached[1]
 
     tk = yf.Ticker(ticker)
-    df = tk.history(period=period, interval=interval)
+    df = _throttled_yf_call(lambda: tk.history(period=period, interval=interval))
 
     if df.empty:
         raise HTTPException(
