@@ -103,12 +103,3 @@ npm run dev
 ## Despliegue
 
 Ver [deploy/DEPLOY.md](deploy/DEPLOY.md) para la guia completa de despliegue en VPS.
-
-## Usuarios demo
-
-| Rol | Email | Password |
-|-----|-------|----------|
-| Profesor | profesor@demo.com | Demo1234 |
-| Alumna | sara@demo.com | Demo1234 |
-
-Codigo de invitacion: `AB_2026`
