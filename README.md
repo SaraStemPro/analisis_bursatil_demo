@@ -53,30 +53,6 @@ Plataforma web educativa para estudiantes de Master que permite practicar analis
 - TailwindCSS, Lightweight Charts (TradingView)
 - TanStack Query, React Router, Zustand
 
-## Estructura del proyecto
-
-```
-backend/
-  app/
-    routers/        # Endpoints FastAPI (auth, market, indicators, demo, backtest, tutor)
-    services/       # Logica de negocio
-    models/         # Modelos SQLAlchemy
-    schemas/        # Schemas Pydantic (validacion)
-    utils/          # Procesamiento PDF
-
-frontend/
-  src/
-    pages/          # Paginas principales (Charts, Demo, Backtest, Screener, Tutor, Dashboard)
-    components/     # Componentes reutilizables
-    lib/            # Utilidades (dibujos, patrones, chart utils)
-    api/            # Cliente HTTP
-    types/          # Tipos TypeScript
-
-deploy/
-  setup.sh          # Script de despliegue automatizado
-  DEPLOY.md         # Guia de despliegue
-```
-
 ## Patrones de velas
 
 | Codigo | Nombre | Descripcion |
@@ -87,28 +63,3 @@ deploy/
 | V20B | Vela 20/20 Bajista | Vela bajista con cuerpo grande (marubozu + long line) |
 | MaA | Martillo Alcista | Cuerpo pequeno arriba, sombra inferior larga |
 | MaB | Martillo Bajista | Cuerpo pequeno abajo, sombra superior larga |
-
-## Desarrollo local
-
-```bash
-# Backend
-cd backend && pip install -e ".[dev]"
-uvicorn app.main:app --reload
-
-# Frontend
-cd frontend && npm install
-npm run dev
-```
-
-## Despliegue
-
-Ver [deploy/DEPLOY.md](deploy/DEPLOY.md) para la guia completa de despliegue en VPS.
-
-## Usuarios demo
-
-| Rol | Email | Password |
-|-----|-------|----------|
-| Profesor | profesor@demo.com | Demo1234 |
-| Alumna | sara@demo.com | Demo1234 |
-
-Codigo de invitacion: `AB_2026`
