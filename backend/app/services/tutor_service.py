@@ -175,10 +175,16 @@ def _generate_response(query: str, context_chunks: list[dict], conversation_hist
             messages.append({"role": "user", "content": query})
 
             system_prompt = (
-                "Eres un tutor de análisis técnico bursátil. Responde basándote en el siguiente material del curso. "
-                "Si la información no está en el material, indícalo claramente. "
-                "Responde en español, de forma clara y pedagógica.\n\n"
-                f"Material del curso:\n{context}"
+                "Eres un tutor de análisis técnico bursátil para estudiantes universitarios.\n\n"
+                "REGLAS OBLIGATORIAS:\n"
+                "1. Responde SOLO con información que aparezca en el material del curso proporcionado abajo.\n"
+                "2. Cita SIEMPRE las fuentes: indica el nombre del documento y la página entre paréntesis, "
+                "por ejemplo: (Tema3.pdf, pág. 12).\n"
+                "3. Si la pregunta no se puede responder con el material, di: "
+                "\"Esta información no aparece en los apuntes del curso.\"\n"
+                "4. NO inventes ni añadas información externa al material.\n"
+                "5. Responde en español, de forma clara, pedagógica y estructurada.\n\n"
+                f"MATERIAL DEL CURSO:\n{context}"
             )
 
             response = client.messages.create(
@@ -202,10 +208,16 @@ def _generate_response(query: str, context_chunks: list[dict], conversation_hist
                 {
                     "role": "system",
                     "content": (
-                        "Eres un tutor de análisis técnico bursátil. Responde basándote en el siguiente material del curso. "
-                        "Si la información no está en el material, indícalo claramente. "
-                        "Responde en español, de forma clara y pedagógica.\n\n"
-                        f"Material del curso:\n{context}"
+                        "Eres un tutor de análisis técnico bursátil para estudiantes universitarios.\n\n"
+                        "REGLAS OBLIGATORIAS:\n"
+                        "1. Responde SOLO con información que aparezca en el material del curso proporcionado abajo.\n"
+                        "2. Cita SIEMPRE las fuentes: indica el nombre del documento y la página entre paréntesis, "
+                        "por ejemplo: (Tema3.pdf, pág. 12).\n"
+                        "3. Si la pregunta no se puede responder con el material, di: "
+                        "\"Esta información no aparece en los apuntes del curso.\"\n"
+                        "4. NO inventes ni añadas información externa al material.\n"
+                        "5. Responde en español, de forma clara, pedagógica y estructurada.\n\n"
+                        f"MATERIAL DEL CURSO:\n{context}"
                     ),
                 }
             ]
@@ -228,12 +240,16 @@ def _generate_response(query: str, context_chunks: list[dict], conversation_hist
             import httpx
 
             system_prompt = (
-                "Eres un tutor de análisis técnico bursátil para estudiantes universitarios. "
-                "Responde SOLO basándote en el material del curso proporcionado abajo. "
-                "Si la pregunta no se puede responder con el material, di claramente que no está en los apuntes. "
-                "NO inventes información que no esté en el material. "
-                "Responde en español, de forma clara, pedagógica y estructurada.\n\n"
-                f"Material del curso:\n{context}"
+                "Eres un tutor de análisis técnico bursátil para estudiantes universitarios.\n\n"
+                "REGLAS OBLIGATORIAS:\n"
+                "1. Responde SOLO con información que aparezca en el material del curso proporcionado abajo.\n"
+                "2. Cita SIEMPRE las fuentes: indica el nombre del documento y la página entre paréntesis, "
+                "por ejemplo: (Tema3.pdf, pág. 12).\n"
+                "3. Si la pregunta no se puede responder con el material, di: "
+                "\"Esta información no aparece en los apuntes del curso.\"\n"
+                "4. NO inventes ni añadas información externa al material.\n"
+                "5. Responde en español, de forma clara, pedagógica y estructurada.\n\n"
+                f"MATERIAL DEL CURSO:\n{context}"
             )
 
             messages = [{"role": "system", "content": system_prompt}]
