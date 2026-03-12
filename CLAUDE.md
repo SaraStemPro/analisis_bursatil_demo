@@ -82,7 +82,7 @@ backend/app/schemas/
    - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott, hline, vline) con Primitives API
    - Edición de dibujos: seleccionar + mover + cambiar color (color picker en toolbar)
    - Preview en vivo mientras se dibuja (PreviewPrimitive + subscribeCrosshairMove)
-   - Detección de patrones de velas: envolvente, marubozu, long line, martillo (EA/EB, MA/MB, LLA/LLB, MaA/MaB)
+   - Detección de patrones de velas: envolvente, vela 20/20, martillo (EA/EB, V20A/V20B, MaA/MaB)
    - Selector de patrones por checkbox (activar/desactivar individualmente)
    - Indicadores overlay + oscilador con editor de parámetros y colores personalizables
    - Osciladores en ventanas separadas (OscillatorChart) con scroll sincronizado al main chart
@@ -267,7 +267,7 @@ pages/Screener.tsx  ← Página completa: filtros + tabla sorteable + simulador 
 ```
 ConditionOperandType: indicator, price, volume, value, candle_pattern
 CandlePattern: bullish_engulfing, bearish_engulfing, bullish_hammer, bearish_hammer,
-               bullish_marubozu, bearish_marubozu, bullish_long_line, bearish_long_line
+               bullish_2020, bearish_2020
 StopLossType: fixed (%), fractal (soporte/resistencia dinámico)
 StrategySide: long, short, both
 Comparator: greater_than, less_than, crosses_above, crosses_below, between, outside
@@ -310,7 +310,7 @@ Comparator: greater_than, less_than, crosses_above, crosses_below, between, outs
 - **Fractal stop**: Long usa fractal_down (soporte), Short usa fractal_up (resistencia)
 - **Risk-based sizing**: `max_risk_pct` limita pérdida por trade como % del capital
 - **Timeframes**: interval configurable (1m, 5m, 15m, 1h, 4h, 1d, 1wk)
-- **Patrones de velas**: 8 patrones detectados con OHLC math nativo (sin pandas-ta)
+- **Patrones de velas**: 6 patrones detectados con OHLC math nativo (sin pandas-ta)
 - **Modo both**: señal entrada → Long, señal salida → Short, cada uno se cierra independientemente
 - **Inline rules**: `BacktestRunRequest` acepta `rules` directamente (sin crear estrategia temporal)
 - **Buscador de tickers**: autocompletado con `TickerSearchInput` reutilizado de Demo
