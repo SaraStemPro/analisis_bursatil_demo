@@ -181,7 +181,7 @@ Group=$SERVICE_USER
 WorkingDirectory=$BACKEND_DIR
 Environment="PATH=$BACKEND_DIR/venv/bin:/usr/bin:/bin"
 EnvironmentFile=$BACKEND_DIR/.env
-ExecStart=$BACKEND_DIR/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+ExecStart=$BACKEND_DIR/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 4 --timeout-keep-alive 30
 Restart=always
 RestartSec=5
 StandardOutput=journal

@@ -26,6 +26,12 @@ _INFO_TTL = 1800  # 30 minutes
 _volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
 _VOLATILITY_TTL = 300  # 5 minutes, same as screener
 
+_quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
+_QUOTE_TTL = 30  # 30 seconds — fresh enough for educational use
+
+_history_cache: dict[str, tuple[float, HistoryResponse]] = {}
+_HISTORY_TTL = 60  # 1 minute
+
 # Universe of tickers for screening
 SP500_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B",
@@ -203,6 +209,11 @@ def search_tickers(query: str) -> list[TickerSearchResult]:
 
 def get_quote(ticker: str) -> QuoteResponse:
     """Obtiene cotización actual de un ticker."""
+    cache_key = ticker.upper()
+    cached = _quote_cache.get(cache_key)
+    if cached and time.time() - cached[0] < _QUOTE_TTL:
+        return cached[1]
+
     tk = yf.Ticker(ticker)
     info = tk.info
 
@@ -220,7 +231,7 @@ def get_quote(ticker: str) -> QuoteResponse:
     change = price - prev_close if price and prev_close else 0
     change_pct = (change / prev_close * 100) if prev_close else 0
 
-    return QuoteResponse(
+    result = QuoteResponse(
         symbol=info.get("symbol", ticker.upper()),
         name=info.get("shortName") or info.get("longName", ticker.upper()),
         price=price,
@@ -230,10 +241,17 @@ def get_quote(ticker: str) -> QuoteResponse:
         market_state=info.get("marketState", "UNKNOWN"),
         exchange=info.get("exchange", ""),
     )
+    _quote_cache[cache_key] = (time.time(), result)
+    return result
 
 
 def get_history(ticker: str, period: str, interval: str) -> HistoryResponse:
     """Obtiene datos OHLCV históricos de un ticker."""
+    cache_key = f"{ticker.upper()}:{period}:{interval}"
+    cached = _history_cache.get(cache_key)
+    if cached and time.time() - cached[0] < _HISTORY_TTL:
+        return cached[1]
+
     tk = yf.Ticker(ticker)
     df = tk.history(period=period, interval=interval)
 
@@ -258,12 +276,14 @@ def get_history(ticker: str, period: str, interval: str) -> HistoryResponse:
         for index, row in df.iterrows()
     ]
 
-    return HistoryResponse(
+    result = HistoryResponse(
         symbol=ticker.upper(),
         period=period,
         interval=interval,
         data=data,
     )
+    _history_cache[cache_key] = (time.time(), result)
+    return result
 
 
 def get_detailed_quote(ticker: str) -> DetailedQuoteResponse:
