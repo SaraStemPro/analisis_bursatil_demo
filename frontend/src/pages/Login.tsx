@@ -35,7 +35,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-emerald-400 text-center mb-8">BursatilEdu</h1>
+        <h1 className="text-2xl font-bold text-emerald-400 text-center mb-8">AnalisisBursatil</h1>
 
         <form onSubmit={handleSubmit} className="bg-slate-900 rounded-lg p-6 space-y-4 border border-slate-700">
           <h2 className="text-lg font-semibold text-white text-center">
