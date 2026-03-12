@@ -31,7 +31,8 @@ from ..utils.pdf_processor import process_pdf
 
 _vector_store: dict | None = None
 _chunks_db: list[dict] = []  # [{text, page, document_id, filename}]
-_CHUNKS_FILE = Path("uploads/chunks.json")
+_UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
+_CHUNKS_FILE = _UPLOADS_DIR / "chunks.json"
 
 
 def _get_vector_store():
@@ -472,7 +473,7 @@ async def upload_document(
         )
 
     # Guardar archivo
-    upload_dir = Path("uploads")
+    upload_dir = _UPLOADS_DIR
     upload_dir.mkdir(exist_ok=True)
 
     file_id = str(uuid.uuid4())
