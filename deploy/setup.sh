@@ -24,7 +24,7 @@ fi
 
 # --- Variables ---
 REPO_URL="https://github.com/SaraStemPro/analisis_bursatil_demo.git"
-BRANCH="claude/stock-analysis-education-2duIc"
+BRANCH="main"
 APP_DIR="/opt/analisis-bursatil"
 BACKEND_DIR="$APP_DIR/backend"
 FRONTEND_DIR="$APP_DIR/frontend"
