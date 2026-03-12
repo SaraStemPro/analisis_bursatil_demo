@@ -234,7 +234,7 @@ Estrategia
 - **Precio**: apertura, cierre, máximo, mínimo
 - **Volumen**: volumen de la barra
 - **Valor numérico**: constante (ej: 30, 70)
-- **Patrón de vela**: envolvente alcista/bajista, martillo alcista/bajista, marubozu alcista/bajista, long line alcista/bajista
+- **Patrón de vela**: envolvente alcista/bajista, martillo alcista/bajista, vela 20/20 alcista/bajista (unifica marubozu + long line)
 
 **Offset (velas atrás)**: cada condición puede evaluarse N velas atrás (0 = vela actual, 4 = hace 4 velas). Permite combinar condiciones en diferentes momentos temporales.
 
@@ -657,7 +657,7 @@ analisis_bursatil_demo/
 
 - [x] Un estudiante puede buscar una acción, ver su gráfico de velas y activar indicadores
 - [x] Un estudiante puede dibujar sobre el gráfico (trendlines, Fibonacci, Elliott, flechas, texto)
-- [x] Un estudiante puede detectar patrones de velas (envolvente, marubozu, martillo, long line)
+- [x] Un estudiante puede detectar patrones de velas (envolvente, vela 20/20, martillo)
 - [x] Un estudiante puede ver gráficos intradiarios con hora de Madrid
 - [x] Un estudiante puede practicar compra/venta (long/short) con dinero ficticio y ver su rendimiento
 - [x] Un estudiante puede crear carteras diversificadas desde el screener y gestionarlas en Paper Trading
@@ -675,5 +675,5 @@ analisis_bursatil_demo/
 - [x] Los datos bursátiles son reales y actualizados (Yahoo Finance)
 - [x] Precios forex/divisas se muestran con 5 decimales (no se truncan)
 - [ ] La aplicación funciona correctamente en móvil (responsive)
-- [ ] Ranking de estudiantes por rendimiento (gamificación)
-- [ ] Deploy a producción
+- [x] Ranking de estudiantes por rendimiento (gamificación)
+- [x] Deploy a producción (VPS IONOS, plataforma-trading.sarastem.com)
