@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # Supabase Storage (for PDF documents)
     supabase_url: str = ""
     supabase_service_key: str = ""
-    supabase_bucket: str = "documents"
+    supabase_bucket: str = "uploads"
 
     # Embeddings
     embedding_model: str = "all-MiniLM-L6-v2"
