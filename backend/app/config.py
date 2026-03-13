@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:14b"
 
+    # Supabase Storage (for PDF documents)
+    supabase_url: str = ""
+    supabase_service_key: str = ""
+    supabase_bucket: str = "documents"
+
     # Embeddings
     embedding_model: str = "all-MiniLM-L6-v2"
 

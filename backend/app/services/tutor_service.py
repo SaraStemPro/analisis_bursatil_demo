@@ -24,6 +24,7 @@ from ..schemas.tutor import (
     Source,
 )
 from ..utils.pdf_processor import process_pdf
+from . import storage
 
 # ──────────────────────────────────────
 # Vector store + chunk persistence
@@ -472,22 +473,17 @@ async def upload_document(
             detail="Solo se permiten archivos PDF",
         )
 
-    # Guardar archivo
-    upload_dir = _UPLOADS_DIR
-    upload_dir.mkdir(exist_ok=True)
-
+    # Guardar archivo (local + Supabase Storage si configurado)
     file_id = str(uuid.uuid4())
-    file_path = upload_dir / f"{file_id}.pdf"
-
+    storage_key = f"{file_id}.pdf"
     content = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    storage.upload(storage_key, content)
 
-    # Crear registro en BD (store relative path for portability)
+    # Crear registro en BD
     doc = Document(
         course_id=course_id,
         filename=file.filename,
-        file_path=f"{file_id}.pdf",
+        file_path=storage_key,
         uploaded_by=user_id,
         processed=False,
     )
@@ -496,8 +492,9 @@ async def upload_document(
     db.refresh(doc)
 
     # Procesar PDF
+    local_path = _UPLOADS_DIR / storage_key
     try:
-        chunks = process_pdf(str(file_path))
+        chunks = process_pdf(str(local_path))
         for chunk in chunks:
             _chunks_db.append({
                 "text": chunk["text"],
@@ -548,25 +545,14 @@ def get_documents(db: Session, course_id: str | None) -> list[DocumentResponse]:
     ]
 
 
-def _resolve_file_path(stored_path: str) -> Path:
-    """Resolve a stored file path — supports both relative and legacy absolute paths."""
-    p = Path(stored_path)
-    if p.is_absolute():
-        if p.exists():
-            return p
-        # Legacy absolute path from another machine — try filename in uploads dir
-        return _UPLOADS_DIR / p.name
-    return _UPLOADS_DIR / p
-
-
 def get_document_for_download(db: Session, document_id: str) -> dict:
     """Obtiene la ruta del archivo de un documento para descarga."""
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
 
-    file_path = _resolve_file_path(doc.file_path)
-    if not file_path.exists():
+    file_path = storage.download(doc.file_path)
+    if not file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado en el servidor")
 
     return {"file_path": str(file_path), "filename": doc.filename}
@@ -579,11 +565,9 @@ def delete_document(db: Session, user_id: str, document_id: str):
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
 
-    # Remove physical file
+    # Remove physical file (local + Supabase)
     try:
-        file_path = _resolve_file_path(doc.file_path)
-        if file_path.exists():
-            file_path.unlink()
+        storage.delete(doc.file_path)
     except Exception:
         pass
 
