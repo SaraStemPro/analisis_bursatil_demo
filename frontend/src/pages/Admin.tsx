@@ -24,6 +24,11 @@ export default function Admin() {
   const fmtMoney = (v: number) => v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
   const fmtPct = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
   const pnlColor = (v: number) => v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-slate-400'
+  const fmtPrice = (v: number) => {
+    if (v < 10) return v.toFixed(5)
+    if (v < 100) return v.toFixed(4)
+    return v.toFixed(2)
+  }
 
   if (isLoading) return <div className="text-slate-400 text-center py-12">Cargando posiciones...</div>
 
@@ -141,8 +146,8 @@ export default function Admin() {
                           {p.side === 'long' ? 'Long' : 'Short'}
                         </td>
                         <td className="py-1.5 text-right text-white">{p.quantity}</td>
-                        <td className="py-1.5 text-right text-slate-300">{p.avg_price.toFixed(2)}</td>
-                        <td className="py-1.5 text-right text-slate-300">{p.current_price.toFixed(2)}</td>
+                        <td className="py-1.5 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
+                        <td className="py-1.5 text-right text-slate-300">{fmtPrice(p.current_price)}</td>
                         <td className={`py-1.5 text-right font-medium ${pnlColor(p.pnl)}`}>{fmtMoney(p.pnl)}</td>
                         <td className={`py-1.5 text-right ${pnlColor(p.pnl_pct)}`}>{fmtPct(p.pnl_pct)}</td>
                         <td className="py-1.5 pl-3 text-slate-500 text-xs">{p.portfolio_group || '—'}</td>
