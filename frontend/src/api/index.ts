@@ -20,7 +20,7 @@ export const auth = {
 // --- Market ---
 export const market = {
   search: (q: string) => api.get<TickerSearchResult[]>(`/market/search?q=${encodeURIComponent(q)}`),
-  quote: (ticker: string) => api.get<Quote>(`/market/quote/${ticker}`),
+  quote: (ticker: string, force = false) => api.get<Quote>(`/market/quote/${ticker}${force ? '?force=true' : ''}`),
   history: (ticker: string, period = '1mo', interval = '1d') =>
     api.get<HistoryResponse>(`/market/history/${ticker}?period=${period}&interval=${interval}`),
   detailedQuote: (ticker: string) => api.get<DetailedQuote>(`/market/detailed-quote/${ticker}`),

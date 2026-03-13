@@ -20,8 +20,10 @@ def search(q: str = Query(min_length=1, max_length=50, description="Texto de bú
 
 
 @router.get("/quote/{ticker}", response_model=QuoteResponse)
-def quote(ticker: str):
+def quote(ticker: str, force: bool = Query(default=False)):
     market_service.track_ticker(ticker)
+    if force:
+        market_service.invalidate_quote_cache(ticker)
     return market_service.get_quote(ticker)
 
 

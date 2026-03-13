@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, createSeriesMarkers } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams, LogicalRange } from 'lightweight-charts'
 import { market, indicators } from '../api'
@@ -60,6 +60,7 @@ const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
 const LINE_DEFAULT_COLOR = '#f59e0b' // Lines (trendline, hline, vline) always start orange
 
 export default function Charts() {
+  const qc = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTicker = searchParams.get('ticker')?.toUpperCase() || 'AAPL'
 
@@ -151,7 +152,7 @@ export default function Charts() {
     enabled: searchQuery.length > 1,
   })
 
-  const { data: quote, refetch: refetchQuote, isFetching: quoteFetching } = useQuery({
+  const { data: quote, isFetching: quoteFetching } = useQuery({
     queryKey: ['quote', ticker],
     queryFn: () => market.quote(ticker),
     refetchInterval: 120_000, // 2 min — reduces Yahoo pressure with multiple users
@@ -706,7 +707,12 @@ export default function Charts() {
               <div className="flex items-center justify-end gap-2">
                 <p className="text-xl font-bold">{fmtPrice(quote.price)} {quote.currency}</p>
                 <button
-                  onClick={() => { refetchQuote(); refetchHistory() }}
+                  onClick={() => {
+                    // Invalidate cache and force fresh data
+                    qc.setQueryData(['quote', ticker], undefined)
+                    qc.fetchQuery({ queryKey: ['quote', ticker], queryFn: () => market.quote(ticker, true) })
+                    refetchHistory()
+                  }}
                   disabled={quoteFetching}
                   title="Refrescar precio"
                   className="text-slate-500 hover:text-emerald-400 disabled:animate-spin transition-colors"

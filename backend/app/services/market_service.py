@@ -36,6 +36,10 @@ _VOLATILITY_TTL = 300  # 5 minutes
 _quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
 _QUOTE_TTL = 300  # 5 minutes
 
+
+def invalidate_quote_cache(ticker: str):
+    _quote_cache.pop(ticker.upper(), None)
+
 _history_cache: dict[str, tuple[float, HistoryResponse]] = {}
 _HISTORY_TTL = 600  # 10 minutes
 
