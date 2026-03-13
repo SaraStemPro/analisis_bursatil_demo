@@ -707,10 +707,9 @@ export default function Charts() {
               <div className="flex items-center justify-end gap-2">
                 <p className="text-xl font-bold">{fmtPrice(quote.price)} {quote.currency}</p>
                 <button
-                  onClick={() => {
-                    // Invalidate cache and force fresh data
-                    qc.setQueryData(['quote', ticker], undefined)
-                    qc.fetchQuery({ queryKey: ['quote', ticker], queryFn: () => market.quote(ticker, true) })
+                  onClick={async () => {
+                    const fresh = await market.quote(ticker, true)
+                    qc.setQueryData(['quote', ticker], fresh)
                     refetchHistory()
                   }}
                   disabled={quoteFetching}
