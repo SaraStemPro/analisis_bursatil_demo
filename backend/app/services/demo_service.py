@@ -78,7 +78,7 @@ def get_or_create_portfolio(db: Session, user_id: str) -> Portfolio:
 def get_portfolio(db: Session, user_id: str) -> PortfolioResponse:
     portfolio = get_or_create_portfolio(db, user_id)
     positions = _calculate_positions(db, portfolio)
-    total_positions_value = sum(p.current_price * p.quantity for p in positions)
+    total_positions_value = Decimal(str(sum(_position_value(p) for p in positions)))
     total_value = portfolio.balance + total_positions_value
     total_pnl = total_value - portfolio.initial_balance
     total_pnl_pct = (
@@ -285,9 +285,9 @@ def get_performance(db: Session, user_id: str) -> PerformanceResponse:
 
     if not closed_orders:
         positions = _calculate_positions(db, portfolio)
-        total_positions_value = sum(p.current_price * p.quantity for p in positions)
-        total_value = portfolio.balance + total_positions_value
-        total_return = float(total_value - portfolio.initial_balance)
+        total_positions_value = sum(_position_value(p) for p in positions)
+        total_value = float(portfolio.balance) + total_positions_value
+        total_return = total_value - float(portfolio.initial_balance)
         total_return_pct = (
             total_return / float(portfolio.initial_balance) * 100
             if portfolio.initial_balance
@@ -353,14 +353,14 @@ def get_portfolio_summary(db: Session, user_id: str) -> PortfolioSummaryResponse
     portfolio = get_or_create_portfolio(db, user_id)
     positions = _calculate_positions(db, portfolio)
 
-    total_positions_value = float(sum(p.current_price * p.quantity for p in positions))
+    total_positions_value = sum(_position_value(p) for p in positions)
     total_value = float(portfolio.balance) + total_positions_value
 
     # Sector allocation
     sector_values: dict[str, float] = {}
     for p in positions:
         sector = _get_sector(p.ticker)
-        val = float(p.current_price * p.quantity)
+        val = _position_value(p)
         sector_values[sector] = sector_values.get(sector, 0) + val
 
     sectors = []
@@ -412,15 +412,19 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
 
     result = []
     for name, group_positions in groups.items():
-        total_invested = sum(float(p.avg_price) * p.quantity for p in group_positions)
-        total_current = sum(float(p.current_price) * p.quantity for p in group_positions)
-        total_pnl = total_current - total_invested
+        total_invested = sum(
+            float(_notional_value(p.ticker, Decimal(str(p.avg_price))) * p.quantity * _CFD_MARGIN_PCT)
+            if _is_cfd(p.ticker) else float(p.avg_price) * p.quantity
+            for p in group_positions
+        )
+        total_current = sum(_position_value(p) for p in group_positions)
+        total_pnl = sum(float(p.pnl) for p in group_positions)
 
         # Sector diversity for this cartera
         sector_map: dict[str, float] = {}
         for p in group_positions:
             sec = _get_sector(p.ticker)
-            sector_map[sec] = sector_map.get(sec, 0) + float(p.current_price) * p.quantity
+            sector_map[sec] = sector_map.get(sec, 0) + _position_value(p)
         n_sectors = len(sector_map)
 
         # Shannon entropy diversity score with penalizations
@@ -632,20 +636,15 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 current_price = avg_price
 
             if is_cfd:
-                # CFD: P&L on notional values
+                # CFD: P&L on notional values, prices show REAL value
                 notional_entry = _notional_value(ticker, avg_price) * long_held
                 notional_current = _notional_value(ticker, current_price) * long_held
                 pnl = notional_current - notional_entry
                 margin_invested = notional_entry * _CFD_MARGIN_PCT
                 pnl_pct = (pnl / margin_invested * 100) if margin_invested else Decimal(0)
-                # For display: avg_price and current_price show the margin per unit
-                display_avg = _notional_value(ticker, avg_price) * _CFD_MARGIN_PCT
-                display_current = _notional_value(ticker, current_price) * _CFD_MARGIN_PCT
             else:
                 pnl = (current_price - avg_price) * long_held
                 pnl_pct = (pnl / (avg_price * long_held) * 100) if avg_price else Decimal(0)
-                display_avg = avg_price
-                display_current = current_price
 
             first_buy = next(
                 (o for o in all_orders if o.ticker == ticker and o.type == "buy"),
@@ -656,8 +655,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 PositionResponse(
                     ticker=ticker,
                     quantity=long_held,
-                    avg_price=round(display_avg, 5),
-                    current_price=round(display_current, 5),
+                    avg_price=round(avg_price, 5),
+                    current_price=round(current_price, 5),
                     pnl=round(pnl, 5),
                     pnl_pct=round(pnl_pct, 2),
                     side="long",
@@ -680,13 +679,9 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 pnl = notional_entry - notional_current
                 margin_invested = notional_entry * _CFD_MARGIN_PCT
                 pnl_pct = (pnl / margin_invested * 100) if margin_invested else Decimal(0)
-                display_avg = _notional_value(ticker, avg_price) * _CFD_MARGIN_PCT
-                display_current = _notional_value(ticker, current_price) * _CFD_MARGIN_PCT
             else:
                 pnl = (avg_price - current_price) * short_held
                 pnl_pct = (pnl / (avg_price * short_held) * 100) if avg_price else Decimal(0)
-                display_avg = avg_price
-                display_current = current_price
 
             first_sell = next(
                 (o for o in all_orders if o.ticker == ticker and o.type == "sell"),
@@ -697,8 +692,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 PositionResponse(
                     ticker=ticker,
                     quantity=short_held,
-                    avg_price=round(display_avg, 5),
-                    current_price=round(display_current, 5),
+                    avg_price=round(avg_price, 5),
+                    current_price=round(current_price, 5),
                     pnl=round(pnl, 5),
                     pnl_pct=round(pnl_pct, 2),
                     side="short",
@@ -707,6 +702,20 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
             )
 
     return positions
+
+
+def _position_value(p: PositionResponse) -> float:
+    """Value of a position for portfolio totals.
+    CFDs: margin invested + unrealized P&L.
+    Stocks: current_price × quantity.
+    """
+    ticker = p.ticker
+    if _is_cfd(ticker):
+        avg = Decimal(str(p.avg_price))
+        notional_entry = _notional_value(ticker, avg) * p.quantity
+        margin = float(notional_entry * _CFD_MARGIN_PCT)
+        return margin + float(p.pnl)
+    return float(p.current_price) * p.quantity
 
 
 def _get_sector(ticker: str) -> str:
@@ -734,7 +743,7 @@ def get_ranking(db: Session) -> list[dict]:
         if user.email in ("profesor@demo.com", "sara@demo.com"):
             continue
         positions = _calculate_positions(db, p)
-        total_positions_value = sum(float(pos.current_price * pos.quantity) for pos in positions)
+        total_positions_value = sum(_position_value(pos) for pos in positions)
         total_value = float(p.balance) + total_positions_value
         total_pnl_pct = (total_value - float(p.initial_balance)) / float(p.initial_balance) * 100 if p.initial_balance else 0
         ranking.append({
