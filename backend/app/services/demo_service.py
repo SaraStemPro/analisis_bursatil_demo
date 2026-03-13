@@ -760,3 +760,47 @@ def get_ranking(db: Session) -> list[dict]:
         })
     ranking.sort(key=lambda x: x["total_value"], reverse=True)
     return ranking
+
+
+def get_admin_positions(db: Session) -> list[dict]:
+    """All students' open positions with real-time P&L. Professor-only."""
+    portfolios = db.query(Portfolio).all()
+    students = []
+    for p in portfolios:
+        user = db.query(User).filter(User.id == p.user_id).first()
+        if not user or user.role != "student":
+            continue
+        if user.email in ("profesor@demo.com", "sara@demo.com"):
+            continue
+        positions = _calculate_positions(db, p)
+        total_positions_value = sum(_position_value(pos) for pos in positions)
+        total_invested = sum(_invested_value(pos) for pos in positions)
+        total_value = float(p.balance) + total_positions_value
+        total_pnl = total_value - float(p.initial_balance)
+        total_pnl_pct = (total_pnl / float(p.initial_balance) * 100) if p.initial_balance else 0
+
+        students.append({
+            "username": user.name,
+            "email": user.email,
+            "balance": round(float(p.balance), 2),
+            "initial_balance": round(float(p.initial_balance), 2),
+            "invested": round(total_invested, 2),
+            "total_value": round(total_value, 2),
+            "total_pnl": round(total_pnl, 2),
+            "total_pnl_pct": round(total_pnl_pct, 2),
+            "positions": [
+                {
+                    "ticker": pos.ticker,
+                    "side": pos.side,
+                    "quantity": pos.quantity,
+                    "avg_price": float(pos.avg_price),
+                    "current_price": float(pos.current_price),
+                    "pnl": float(pos.pnl),
+                    "pnl_pct": float(pos.pnl_pct),
+                    "portfolio_group": pos.portfolio_group,
+                }
+                for pos in positions
+            ],
+        })
+    students.sort(key=lambda x: x["total_value"], reverse=True)
+    return students

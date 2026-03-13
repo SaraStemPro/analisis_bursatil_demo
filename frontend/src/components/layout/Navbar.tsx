@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../context/auth-store'
-import { BarChart3, BookOpen, FlaskConical, LineChart, LogOut, MessageCircle, Search, User } from 'lucide-react'
+import { BarChart3, BookOpen, FlaskConical, LineChart, LogOut, MessageCircle, Search, Shield, User } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
@@ -37,6 +37,19 @@ export default function Navbar() {
               <span className="hidden md:inline">{label}</span>
             </Link>
           ))}
+          {user?.role === 'professor' && (
+            <Link
+              to="/admin"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors ${
+                location.pathname === '/admin'
+                  ? 'bg-slate-700 text-amber-400'
+                  : 'text-amber-500/70 hover:bg-slate-800 hover:text-amber-400'
+              }`}
+            >
+              <Shield size={16} />
+              <span className="hidden md:inline">Admin</span>
+            </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

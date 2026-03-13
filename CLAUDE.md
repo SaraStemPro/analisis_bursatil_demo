@@ -201,13 +201,14 @@ Alumna:     sara@demo.com / Demo1234
 Código de invitación: AB_2026
 ```
 
-## API — 43 rutas implementadas
+## API — 44 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
 Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
             POST screener | GET screener/sectors/{universe}
 Indicators: GET catalog | POST calculate | GET/POST presets
 Demo:       GET portfolio, orders, performance, portfolio/summary, carteras, ranking
+            GET admin/positions (solo profesor)
             POST order, close-position, close-all, close-cartera/{name}, reset
 Backtest:   GET templates, strategies, strategies/{id} | POST strategies
             PUT/DELETE strategies/{id}
@@ -236,9 +237,18 @@ Health:     GET /api/health
 - Compra secuencial (`for...of await`) para evitar race conditions en el balance
 - Precio explícito: se pasa `price` del screener para evitar discrepancias con yfinance
 
+### Panel del profesor (Admin)
+- `GET /api/demo/admin/positions` — requiere rol `professor` o `admin`
+- Devuelve todos los estudiantes con posiciones abiertas, P&L en tiempo real, balance, invertido
+- Frontend: `/admin` — tabla expandible por alumno con detalle de posiciones
+- Solo visible en navbar para profesores (icono Shield, color amber)
+- Auto-refresh cada 60s + botón manual
+- Tarjetas resumen: P&L total clase, P&L medio, total invertido, posiciones abiertas
+
 ### Archivos clave
 ```
 pages/Demo.tsx                             ← Página principal, tabla posiciones individuales + carteras, botón cerrar-todo
+pages/Admin.tsx                            ← Panel profesor: posiciones de todos los alumnos con P&L real
 components/demo/OrderForm.tsx              ← Formulario con buscador de tickers, botones Long/Short
 components/demo/TickerSearchInput.tsx       ← Autocompletado con market.search() + debounce
 components/demo/ClosePositionDialog.tsx     ← Modal cierre parcial/total con slider

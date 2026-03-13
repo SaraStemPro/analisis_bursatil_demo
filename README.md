@@ -7,18 +7,22 @@ Plataforma web educativa para estudiantes de Master que permite practicar analis
 ## Funcionalidades
 
 ### Graficos interactivos
-- Graficos de velas con datos reales de Yahoo Finance
+- Graficos de velas con datos reales de Yahoo Finance (~15 min retraso)
 - 10 indicadores tecnicos: SMA, EMA, MACD, RSI, Estocastico, Bandas de Bollinger, ATR, OBV, VWAP, Fractales
 - 7 herramientas de dibujo: linea de tendencia, flecha, texto, Fibonacci, ondas de Elliott, linea horizontal, linea vertical
 - Deteccion automatica de 6 patrones de velas: Envolvente (EA/EB), Vela 20/20 (V20A/V20B), Martillo (MaA/MaB)
 - Soporte intradiario (1m, 5m, 15m, 1h) con hora de Madrid
+- Boton de refresco para actualizar precio y grafico en tiempo real
+- Info de spread (0.01%) y margen CFD visible junto al precio
 
 ### Paper Trading (simulador)
 - Operaciones Long y Short con dinero virtual (100.000 inicial)
 - Posiciones simultaneas long/short en el mismo ticker
+- Spread 0.01% y margen CFD 5% para indices, divisas y materias primas
 - Sistema de carteras nombradas con diversity score
-- Diario de Trading para justificar cada operacion
+- Diario de Trading obligatorio para justificar cada operacion
 - Ranking de estudiantes por rendimiento
+- Panel del profesor: posiciones abiertas de todos los alumnos con P&L en tiempo real
 
 ### Backtesting
 - 6 plantillas predefinidas (Cruce Dorado, RSI, MACD, etc.)

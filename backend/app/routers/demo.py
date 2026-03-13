@@ -13,7 +13,7 @@ from ..schemas.demo import (
     PortfolioSummaryResponse,
 )
 from ..services import demo_service
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/demo", tags=["demo"])
 
@@ -107,3 +107,11 @@ def reset(
 @router.get("/ranking")
 def ranking(db: Session = Depends(get_db)):
     return demo_service.get_ranking(db)
+
+
+@router.get("/admin/positions")
+def admin_positions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("professor", "admin")),
+):
+    return demo_service.get_admin_positions(db)

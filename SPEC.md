@@ -135,6 +135,8 @@ GET    /api/demo/portfolio/summary        → resumen con sectores y diversity s
 GET    /api/demo/carteras                 → carteras agrupadas con P&L y diversity score
 POST   /api/demo/close-cartera/{name}     → cerrar todas las posiciones de una cartera
 POST   /api/demo/reset                    → resetear portfolio a valores iniciales
+GET    /api/demo/ranking                  → ranking de estudiantes por valor portfolio
+GET    /api/demo/admin/positions          → posiciones de todos los alumnos (solo profesor)
 ```
 
 ### 4.4 Tutor IA 24/7 (RAG sobre PDFs)
@@ -581,6 +583,7 @@ analisis_bursatil_demo/
 │   │   │   ├── Demo.tsx
 │   │   │   ├── Tutor.tsx
 │   │   │   ├── Backtest.tsx          ← página principal de backtesting
+│   │   │   ├── Admin.tsx              ← panel profesor (posiciones alumnos)
 │   │   │   ├── Login.tsx
 │   │   │   └── Profile.tsx
 │   │   ├── hooks/
@@ -672,6 +675,7 @@ analisis_bursatil_demo/
 - [x] Un estudiante puede seleccionar la banda de Bollinger (inferior/media/superior) en condiciones
 - [x] Un estudiante puede comparar los resultados de distintas estrategias lado a lado
 - [x] Un profesor puede subir PDFs y ver las preguntas frecuentes de sus alumnos
+- [x] Un profesor puede ver las posiciones abiertas de todos los alumnos con P&L en tiempo real (panel admin)
 - [x] Los datos bursátiles son reales y actualizados (Yahoo Finance)
 - [x] Precios forex/divisas se muestran con 5 decimales (no se truncan)
 - [ ] La aplicación funciona correctamente en móvil (responsive)

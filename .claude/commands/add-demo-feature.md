@@ -17,11 +17,17 @@ Backend:
 Conceptos importantes:
 - Un ticker puede tener LONG y SHORT simultáneamente (posiciones independientes)
 - `_long_quantity()` / `_short_quantity()` calculan posiciones netas
-- Short selling deduce margen 100% del balance (simplificación educativa)
+- Spread 0.01% solo en ask: buy long entry + close short exit. Bid sin spread: sell short entry + close long exit
+- CFD/Futures: indices (^), materias primas (=F), divisas (=X) operan con margen 5%. Forex (<10) ×10000
+- `_is_cfd()`, `_notional_value()`, `_apply_spread()`, `_invested_value()`, `_position_value()` en demo_service.py
+- `_invested_value()`: margen fijo pagado (no cambia). `_position_value()`: margen + PnL (cambia con precio)
+- Frontend: `lib/cfdUtils.ts` replica la lógica CFD del backend
 - Diversity score = Shannon entropy penalizada (min 5 posiciones, min 3 sectores, concentración >40%)
 - Sector de cada ticker viene de `yf.Ticker().info["sector"]` con cache en `_sector_cache`
 - Precisión: Numeric(14, 5) para forex. Formato inteligente: fmtPrice() / fmtPnl()
 - Carteras: agrupadas por `portfolio_group`, se crean desde Screener, se cierran completas o por posición
+- Panel admin (`/admin`): solo profesor, muestra posiciones de todos los alumnos con P&L en tiempo real
+- Diario de trading OBLIGATORIO: `notes` min_length=1 en OrderCreateRequest
 
 Navegación cruzada:
 - Charts → Demo: `navigate('/demo?buy=TICKER')`, Demo lee `?buy=` con useSearchParams

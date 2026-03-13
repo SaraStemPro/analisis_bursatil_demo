@@ -53,6 +53,12 @@ export const demo = {
   carteras: () => api.get<Cartera[]>('/demo/carteras'),
   closeCartera: (name: string) => api.post<Order[]>(`/demo/close-cartera/${encodeURIComponent(name)}`, {}),
   ranking: () => api.get<{ username: string; total_value: number; total_pnl_pct: number; positions_count: number; updated_at: string }[]>('/demo/ranking'),
+  adminPositions: () => api.get<{
+    username: string; email: string; balance: number; initial_balance: number;
+    invested: number; total_value: number; total_pnl: number; total_pnl_pct: number;
+    positions: { ticker: string; side: string; quantity: number; avg_price: number;
+      current_price: number; pnl: number; pnl_pct: number; portfolio_group: string | null }[];
+  }[]>('/demo/admin/positions'),
 }
 
 // --- Tutor ---
