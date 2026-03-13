@@ -63,7 +63,7 @@ backend/app/schemas/
 - Responses siempre llevan `model_config = {"from_attributes": True}`
 
 ## Base de Datos
-- **Supabase** (PostgreSQL gestionado) — solo como BD, no usamos Supabase Auth ni Storage
+- **Supabase** (PostgreSQL gestionado) — BD + Storage para PDFs del tutor
 - Connection string en `.env` como `DATABASE_URL` (Session Pooler, IPv4 compatible)
 - SQLAlchemy apunta a Supabase PostgreSQL
 - Para desarrollo local se puede usar SQLite cambiando `DATABASE_URL`
@@ -90,6 +90,10 @@ backend/app/schemas/
    - Historial de 5 tickers recientes con botón X para eliminar
    - Botón "Hoy" (scroll to realtime), escala logarítmica (toggle LOG)
    - Enlace a Yahoo Finance por ticker, info de exchange y market state
+   - Precio ask con spread y margen CFD visibles junto al precio
+   - Botón refrescar precio + gráfico (invalida cache backend, fuerza dato fresco de Yahoo)
+   - Líneas de tendencia, horizontal y vertical: color naranja por defecto
+   - Confirmación al eliminar dibujos (botón X, Delete key, borrar todo)
    - Soporte intradiario (1m, 5m, 15m, 1h) con timestamps Unix + validación período/intervalo
    - Preservación de escala al añadir/quitar indicadores
    - Dibujo en gráficos de osciladores (cada chart tiene DrawingManager propio, activeChartId en store)
@@ -104,8 +108,11 @@ backend/app/schemas/
      - Posiciones en formato tabla/lista (no tarjetas)
      - Resumen portfolio con diversificación (Shannon entropy penalizada) y distribución sectorial
      - Buscador de tickers con autocompletado en formulario de orden
-     - Diario de operaciones: campo `notes` (500 chars) para justificar cada orden
+     - Diario de operaciones obligatorio: campo `notes` (500 chars) para justificar cada orden
      - Formulario se resetea tras ejecutar orden (ticker, cantidad, notas)
+     - Spread 0.01% en todas las compras (ask side: buy long + close short)
+     - CFD/Futures: indices, materias primas, divisas operan con margen 5%. Forex (<10) ×10000
+     - Columnas "P. entrada" / "P. cierre" con etiquetas bid/ask
      - Sistema de carteras nombradas (portfolio_group):
        - Compra desde el simulador del Screener → crea cartera con nombre
        - Ejecución secuencial (evita race conditions en balance)
@@ -118,8 +125,10 @@ backend/app/schemas/
      - 9 filtros: Precio, Cambio%, Sector, Market Cap, P/E, Dividendo%, Beta, ROE, Volatilidad
      - Tabla sorteable con scroll horizontal (barra arriba) + búsqueda por texto
      - Columnas adaptativas: oculta Market Cap, Sector, P/E, Div%, ROE para universos no-equity
-     - Simulador de portfolio: cantidades por activo, precios en tiempo real, diversity score penalizado
+     - Simulador de portfolio: cantidades por activo, costes con margen CFD, diversity score penalizado
+     - Info de spread y margen CFD visible en simulador
      - Comprar cartera → ejecución secuencial → navega a Paper Trading
+     - Diario de trading obligatorio en compra de carteras
      - Navegación: ticker → Charts, carrito → Paper Trading con ticker pre-rellenado
    - Dashboard:
      - 4 tarjetas principales (Gráficos, Paper Trading, Backtesting, Screener)
@@ -237,10 +246,21 @@ components/demo/PortfolioSummaryPanel.tsx   ← Sectores + diversity score (Shan
 components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde, sell rojo, close amber)
 ```
 
+### Spread y CFD/Futures
+- Spread 0.01% aplicado solo al ask: `buy` (abrir long) y `close short` (cerrar short)
+- No se aplica spread al bid: `sell` (abrir short) y `close long` (cerrar long)
+- CFD: indices (^), materias primas (=F), divisas (=X) operan con margen 5%
+- Forex: precios <10 se multiplican ×10000 (EURUSD 1.16 → 11600, margen 580€)
+- `_is_cfd()`, `_notional_value()`, `_apply_spread()` en demo_service.py
+- `_invested_value()`: margen fijo pagado (no cambia con precio). Para "Invertido"
+- `_position_value()`: margen + PnL no realizado (cambia con precio). Para "Valor total"
+- Frontend: `lib/cfdUtils.ts` replica la lógica CFD del backend
+- Posiciones SHORT muestran precio ask (con spread) como "P. cierre"
+
 ### Modelo de datos (Order)
 - Columna `side` (String(10), nullable): "long" | "short"
 - Columna `portfolio_group` (String(100), nullable): nombre de cartera
-- Columna `notes` (String(500), nullable): diario de operaciones
+- Columna `notes` (String(500), mandatory): diario de operaciones obligatorio
 - Precisión: `Numeric(14, 5)` en todos los campos de precio
 - Migration automática en `main.py` (ALTER TABLE si columna no existe)
 
@@ -323,6 +343,26 @@ backend/app/services/backtest_service.py ← Motor: templates, simulación, mét
 backend/app/schemas/backtest.py          ← Schemas Pydantic para reglas y resultados
 backend/app/schemas/common.py           ← Enums: CandlePattern, StopLossType, StrategySide
 ```
+
+## Concurrencia y Rate Limiting (Yahoo Finance)
+- Yahoo Finance API gratuita: ~15 minutos de retraso vs mercado real
+- **Request coalescing** (single-flight): `_coalesced_call()` con `concurrent.futures.Future` deduplica requests
+- **Cache backend**: quotes 5min (`_QUOTE_TTL`), history 10min (`_HISTORY_TTL`), screener 5min
+- **Stale cache fallback**: si Yahoo falla, devuelve datos expirados en vez de error
+- **Background cache warmer**: thread que pre-calienta tickers activos con `yf.download()` batch
+- **1 worker** (no 4): evita 4 caches separados que multiplican llamadas a Yahoo
+- **Botón refrescar**: `?force=true` invalida cache backend y pide dato fresco
+- **Frontend**: auto-refresh cada 2min (quote), gráfico solo bajo demanda
+
+## Supabase Storage (PDFs del Tutor)
+- Bucket: `uploads` (privado)
+- `backend/app/services/storage.py`: upload/download/delete via REST API (httpx)
+- Upload: guarda en Supabase + copia local (necesaria para extracción de texto)
+- Download: busca local primero, si no existe baja de Supabase y cachea
+- `file_path` en BD: solo nombre de archivo (ej: `uuid.pdf`), no ruta absoluta
+- Compatibilidad: resuelve rutas absolutas legacy extrayendo `p.name`
+- Config: `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` en `.env`
+- Sin estas keys: funciona solo con filesystem local (fallback)
 
 ## Comandos útiles
 ```bash
