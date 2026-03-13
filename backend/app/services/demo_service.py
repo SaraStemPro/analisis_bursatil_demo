@@ -106,7 +106,7 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
     is_cfd = _is_cfd(ticker)
 
     if body.type == "buy":
-        # Apply spread (buy at slightly higher price)
+        # Buy = ask side → apply spread (pay slightly more)
         exec_price = _apply_spread(base_price, is_buy=True)
         side = "long"
 
@@ -126,8 +126,8 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
         portfolio.balance -= cost
 
     elif body.type == "sell":
-        # Apply spread (sell at slightly lower price)
-        exec_price = _apply_spread(base_price, is_buy=False)
+        # Sell = bid side → NO spread (bid is lower, already implicit)
+        exec_price = base_price
         side = "short"
 
         if is_cfd:
@@ -182,8 +182,8 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
     base_price = Decimal(str(current_price))
 
     if body.side == "long":
-        # Closing long = selling → apply spread as sell
-        exec_price = _apply_spread(base_price, is_buy=False)
+        # Closing long = selling at bid → NO spread
+        exec_price = base_price
         held = _long_quantity(db, portfolio.id, ticker)
         if body.quantity > held:
             raise HTTPException(
@@ -204,7 +204,7 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
             portfolio.balance += exec_price * body.quantity
 
     else:  # short
-        # Closing short = buying → apply spread as buy
+        # Closing short = buying at ask → apply spread
         exec_price = _apply_spread(base_price, is_buy=True)
         held = _short_quantity(db, portfolio.id, ticker)
         if body.quantity > held:
@@ -620,6 +620,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
     positions = []
 
     for ticker in tickers:
+        is_cfd = _is_cfd(ticker)
+
         # Check LONG position
         long_held = _long_quantity(db, portfolio.id, ticker)
         if long_held > 0:
@@ -629,10 +631,22 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
             except HTTPException:
                 current_price = avg_price
 
-            pnl = (current_price - avg_price) * long_held
-            pnl_pct = (pnl / (avg_price * long_held) * 100) if avg_price else Decimal(0)
+            if is_cfd:
+                # CFD: P&L on notional values
+                notional_entry = _notional_value(ticker, avg_price) * long_held
+                notional_current = _notional_value(ticker, current_price) * long_held
+                pnl = notional_current - notional_entry
+                margin_invested = notional_entry * _CFD_MARGIN_PCT
+                pnl_pct = (pnl / margin_invested * 100) if margin_invested else Decimal(0)
+                # For display: avg_price and current_price show the margin per unit
+                display_avg = _notional_value(ticker, avg_price) * _CFD_MARGIN_PCT
+                display_current = _notional_value(ticker, current_price) * _CFD_MARGIN_PCT
+            else:
+                pnl = (current_price - avg_price) * long_held
+                pnl_pct = (pnl / (avg_price * long_held) * 100) if avg_price else Decimal(0)
+                display_avg = avg_price
+                display_current = current_price
 
-            # Get portfolio_group from first buy order for this ticker
             first_buy = next(
                 (o for o in all_orders if o.ticker == ticker and o.type == "buy"),
                 None,
@@ -642,8 +656,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 PositionResponse(
                     ticker=ticker,
                     quantity=long_held,
-                    avg_price=round(avg_price, 5),
-                    current_price=round(current_price, 5),
+                    avg_price=round(display_avg, 5),
+                    current_price=round(display_current, 5),
                     pnl=round(pnl, 5),
                     pnl_pct=round(pnl_pct, 2),
                     side="long",
@@ -660,10 +674,20 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
             except HTTPException:
                 current_price = avg_price
 
-            pnl = (avg_price - current_price) * short_held
-            pnl_pct = (pnl / (avg_price * short_held) * 100) if avg_price else Decimal(0)
+            if is_cfd:
+                notional_entry = _notional_value(ticker, avg_price) * short_held
+                notional_current = _notional_value(ticker, current_price) * short_held
+                pnl = notional_entry - notional_current
+                margin_invested = notional_entry * _CFD_MARGIN_PCT
+                pnl_pct = (pnl / margin_invested * 100) if margin_invested else Decimal(0)
+                display_avg = _notional_value(ticker, avg_price) * _CFD_MARGIN_PCT
+                display_current = _notional_value(ticker, current_price) * _CFD_MARGIN_PCT
+            else:
+                pnl = (avg_price - current_price) * short_held
+                pnl_pct = (pnl / (avg_price * short_held) * 100) if avg_price else Decimal(0)
+                display_avg = avg_price
+                display_current = current_price
 
-            # Get portfolio_group from first sell order for this ticker
             first_sell = next(
                 (o for o in all_orders if o.ticker == ticker and o.type == "sell"),
                 None,
@@ -673,8 +697,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 PositionResponse(
                     ticker=ticker,
                     quantity=short_held,
-                    avg_price=round(avg_price, 5),
-                    current_price=round(current_price, 5),
+                    avg_price=round(display_avg, 5),
+                    current_price=round(display_current, 5),
                     pnl=round(pnl, 5),
                     pnl_pct=round(pnl_pct, 2),
                     side="short",
