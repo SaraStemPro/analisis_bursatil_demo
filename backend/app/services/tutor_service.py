@@ -483,11 +483,11 @@ async def upload_document(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # Crear registro en BD
+    # Crear registro en BD (store relative path for portability)
     doc = Document(
         course_id=course_id,
         filename=file.filename,
-        file_path=str(file_path),
+        file_path=f"{file_id}.pdf",
         uploaded_by=user_id,
         processed=False,
     )
@@ -548,13 +548,24 @@ def get_documents(db: Session, course_id: str | None) -> list[DocumentResponse]:
     ]
 
 
+def _resolve_file_path(stored_path: str) -> Path:
+    """Resolve a stored file path — supports both relative and legacy absolute paths."""
+    p = Path(stored_path)
+    if p.is_absolute():
+        if p.exists():
+            return p
+        # Legacy absolute path from another machine — try filename in uploads dir
+        return _UPLOADS_DIR / p.name
+    return _UPLOADS_DIR / p
+
+
 def get_document_for_download(db: Session, document_id: str) -> dict:
     """Obtiene la ruta del archivo de un documento para descarga."""
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
 
-    file_path = Path(doc.file_path)
+    file_path = _resolve_file_path(doc.file_path)
     if not file_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado en el servidor")
 
@@ -570,7 +581,7 @@ def delete_document(db: Session, user_id: str, document_id: str):
 
     # Remove physical file
     try:
-        file_path = Path(doc.file_path)
+        file_path = _resolve_file_path(doc.file_path)
         if file_path.exists():
             file_path.unlink()
     except Exception:
