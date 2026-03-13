@@ -129,8 +129,8 @@ export default function Demo() {
                       <th className="px-3 py-2">Ticker</th>
                       <th className="px-3 py-2">Tipo</th>
                       <th className="px-3 py-2 text-right">Cantidad</th>
-                      <th className="px-3 py-2 text-right">P. medio</th>
-                      <th className="px-3 py-2 text-right">P. actual</th>
+                      <th className="px-3 py-2 text-right">P. entrada</th>
+                      <th className="px-3 py-2 text-right">P. cierre</th>
                       <th className="px-3 py-2 text-right">P&L</th>
                       <th className="px-3 py-2 text-right">%</th>
                       <th className="px-3 py-2 w-8"></th>
@@ -159,8 +159,8 @@ export default function Demo() {
                             </span>
                           </td>
                           <td className="px-3 py-2 text-right text-white">{p.quantity}</td>
-                          <td className="px-3 py-2 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
-                          <td className="px-3 py-2 text-right text-white">{fmtPrice(p.current_price)}</td>
+                          <td className="px-3 py-2 text-right text-slate-300" title={isLong ? 'Ask (con spread)' : 'Bid (sin spread)'}>{fmtPrice(p.avg_price)}</td>
+                          <td className="px-3 py-2 text-right text-white" title={isLong ? 'Bid (sin spread)' : 'Ask (con spread)'}>{fmtPrice(p.current_price)} <span className="text-[10px] text-slate-500">{isLong ? 'bid' : 'ask'}</span></td>
                           <td className={`px-3 py-2 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
                           </td>
@@ -225,8 +225,8 @@ export default function Demo() {
                 <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-800/50">
                   <th className="px-3 py-1.5">Ticker</th>
                   <th className="px-3 py-1.5 text-right">Cant.</th>
-                  <th className="px-3 py-1.5 text-right">P. medio</th>
-                  <th className="px-3 py-1.5 text-right">P. actual</th>
+                  <th className="px-3 py-1.5 text-right">P. entrada</th>
+                  <th className="px-3 py-1.5 text-right">P. cierre</th>
                   <th className="px-3 py-1.5 text-right">P&L</th>
                   <th className="px-3 py-1.5 text-right">%</th>
                   <th className="px-3 py-1.5 w-8"></th>
@@ -244,7 +244,7 @@ export default function Demo() {
                       </td>
                       <td className="px-3 py-1.5 text-right text-white">{p.quantity}</td>
                       <td className="px-3 py-1.5 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
-                      <td className="px-3 py-1.5 text-right text-white">{fmtPrice(p.current_price)}</td>
+                      <td className="px-3 py-1.5 text-right text-white">{fmtPrice(p.current_price)} <span className="text-[10px] text-slate-500">{p.side === 'long' ? 'bid' : 'ask'}</span></td>
                       <td className={`px-3 py-1.5 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
                       </td>

@@ -666,9 +666,11 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
         if short_held > 0:
             avg_price = _avg_sell_price(db, portfolio.id, ticker)
             try:
-                current_price = Decimal(str(_get_current_price(ticker)))
+                raw_price = Decimal(str(_get_current_price(ticker)))
             except HTTPException:
-                current_price = avg_price
+                raw_price = avg_price
+            # Short closes at ask (with spread)
+            current_price = _apply_spread(raw_price, is_buy=True)
 
             if is_cfd:
                 notional_entry = _notional_value(ticker, avg_price) * short_held

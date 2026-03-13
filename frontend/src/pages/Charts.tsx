@@ -16,7 +16,7 @@ import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/re
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
-import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react'
+import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw } from 'lucide-react'
 import { isCfd, askPrice, marginPerContract, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
@@ -151,7 +151,7 @@ export default function Charts() {
     enabled: searchQuery.length > 1,
   })
 
-  const { data: quote } = useQuery({
+  const { data: quote, refetch: refetchQuote, isFetching: quoteFetching } = useQuery({
     queryKey: ['quote', ticker],
     queryFn: () => market.quote(ticker),
     refetchInterval: 120_000, // 2 min — reduces Yahoo pressure with multiple users
@@ -703,7 +703,17 @@ export default function Charts() {
               <p className="text-xs text-slate-500">{quote.exchange} · {quote.market_state}</p>
             </div>
             <div className="text-right">
-              <p className="text-xl font-bold">{fmtPrice(quote.price)} {quote.currency}</p>
+              <div className="flex items-center justify-end gap-2">
+                <p className="text-xl font-bold">{fmtPrice(quote.price)} {quote.currency}</p>
+                <button
+                  onClick={() => { refetchQuote(); refetchHistory() }}
+                  disabled={quoteFetching}
+                  title="Refrescar precio"
+                  className="text-slate-500 hover:text-emerald-400 disabled:animate-spin transition-colors"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
               <p className={`text-sm ${quote.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {quote.change >= 0 ? '+' : ''}{fmtChange(quote.change, quote.price)} ({quote.change_percent.toFixed(2)}%)
               </p>
