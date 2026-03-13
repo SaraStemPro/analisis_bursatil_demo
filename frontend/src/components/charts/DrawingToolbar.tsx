@@ -132,10 +132,12 @@ export default function DrawingToolbar() {
         </div>
       )}
 
-      {/* Delete selected */}
+      {/* Delete selected — with confirmation */}
       {selectedId && (
         <button
-          onClick={() => removeDrawing(selectedId)}
+          onClick={() => {
+            if (window.confirm('¿Eliminar este dibujo?')) removeDrawing(selectedId)
+          }}
           title="Borrar seleccionado"
           className="p-2 rounded text-red-400 hover:bg-red-900/30"
         >
@@ -143,10 +145,12 @@ export default function DrawingToolbar() {
         </button>
       )}
 
-      {/* Clear all */}
+      {/* Clear all — with confirmation */}
       {drawings.length > 0 && (
         <button
-          onClick={clearAll}
+          onClick={() => {
+            if (window.confirm('¿Eliminar todos los dibujos?')) clearAll()
+          }}
           title="Borrar todo"
           className="p-2 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800"
         >

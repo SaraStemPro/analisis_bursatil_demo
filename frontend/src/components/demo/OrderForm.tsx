@@ -27,7 +27,7 @@ export default function OrderForm({ initialTicker }: Props) {
   })
 
   const orderMut = useMutation({
-    mutationFn: (data: { ticker: string; type: string; quantity: number; notes?: string }) => demo.createOrder(data),
+    mutationFn: (data: { ticker: string; type: string; quantity: number; notes: string }) => demo.createOrder(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })
@@ -44,7 +44,11 @@ export default function OrderForm({ initialTicker }: Props) {
 
   const handleOrder = (type: 'buy' | 'sell') => {
     if (!ticker) return
-    orderMut.mutate({ ticker, type, quantity, notes: notes.trim() || undefined })
+    if (!notes.trim()) {
+      setError('El diario de trading es obligatorio. Justifica tu operación.')
+      return
+    }
+    orderMut.mutate({ ticker, type, quantity, notes: notes.trim() })
   }
 
   return (
@@ -97,14 +101,18 @@ export default function OrderForm({ initialTicker }: Props) {
 
       {/* Diario de operaciones */}
       <div className="mt-3">
-        <label className="text-sm text-slate-400">Diario de Trading — ¿por qué abres esta posición?</label>
+        <label className="text-sm text-slate-400">
+          Diario de Trading — ¿por qué abres esta posición? <span className="text-red-400">*</span>
+        </label>
         <textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); if (error && e.target.value.trim()) setError('') }}
           maxLength={500}
           rows={2}
           placeholder="Ej: Soporte en media de 200, RSI sobrevendido, patrón de martillo..."
-          className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-emerald-500 resize-none placeholder:text-slate-500"
+          className={`block mt-1 w-full px-3 py-2 bg-slate-800 border rounded text-white text-sm focus:outline-none resize-none placeholder:text-slate-500 ${
+            error && !notes.trim() ? 'border-red-500 focus:border-red-500' : 'border-slate-600 focus:border-emerald-500'
+          }`}
         />
       </div>
 

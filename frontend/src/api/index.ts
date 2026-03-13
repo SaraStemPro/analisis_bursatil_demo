@@ -41,7 +41,7 @@ export const indicators = {
 // --- Demo ---
 export const demo = {
   portfolio: () => api.get<Portfolio>('/demo/portfolio'),
-  createOrder: (data: { ticker: string; type: string; quantity: number; price?: number; stop_loss?: number; take_profit?: number; portfolio_group?: string; notes?: string }) =>
+  createOrder: (data: { ticker: string; type: string; quantity: number; price?: number; stop_loss?: number; take_profit?: number; portfolio_group?: string; notes: string }) =>
     api.post<Order>('/demo/order', data),
   closePosition: (data: { ticker: string; quantity: number; side: string }) =>
     api.post<Order>('/demo/close-position', data),

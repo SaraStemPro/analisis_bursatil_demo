@@ -17,7 +17,7 @@ class OrderCreateRequest(BaseModel):
     stop_loss: Decimal | None = Field(default=None, gt=0, decimal_places=5)
     take_profit: Decimal | None = Field(default=None, gt=0, decimal_places=5)
     portfolio_group: str | None = None
-    notes: str | None = Field(default=None, max_length=500)
+    notes: str = Field(min_length=1, max_length=500)
 
 
 class ClosePositionRequest(BaseModel):

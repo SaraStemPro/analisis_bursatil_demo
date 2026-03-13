@@ -124,6 +124,8 @@ export default function Screener() {
   const [portfolio, setPortfolio] = useState<Map<string, { stock: DetailedQuote; qty: number }>>(new Map())
   const [showSimulator, setShowSimulator] = useState(false)
   const [carteraName, setCarteraName] = useState('')
+  const [carteraNotes, setCarteraNotes] = useState('')
+  const [carteraError, setCarteraError] = useState('')
 
   // Build filters object
   const filters: ScreenerFilters = useMemo(() => {
@@ -163,7 +165,7 @@ export default function Screener() {
   })
 
   const buyMut = useMutation({
-    mutationFn: (data: { ticker: string; type: string; quantity: number; portfolio_group?: string; price?: number }) => demo.createOrder(data),
+    mutationFn: (data: { ticker: string; type: string; quantity: number; portfolio_group?: string; price?: number; notes: string }) => demo.createOrder(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })
@@ -280,10 +282,14 @@ export default function Screener() {
   )
 
   const buyAllFromSimulator = async () => {
+    if (!carteraNotes.trim()) {
+      setCarteraError('El diario de trading es obligatorio. Justifica tu inversión.')
+      return
+    }
     const groupName = carteraName.trim() || `Cartera ${new Date().toLocaleDateString('es-ES')}`
     // Sequential to avoid race condition on balance
     for (const { stock, qty } of portfolioEntries) {
-      await buyMut.mutateAsync({ ticker: stock.symbol, type: 'buy', quantity: qty, price: stock.price, portfolio_group: groupName })
+      await buyMut.mutateAsync({ ticker: stock.symbol, type: 'buy', quantity: qty, price: stock.price, portfolio_group: groupName, notes: carteraNotes.trim() })
     }
     qc.invalidateQueries({ queryKey: ['carteras'] })
     navigate('/demo')
@@ -491,6 +497,23 @@ export default function Screener() {
                     Limpiar
                   </button>
                 </div>
+              </div>
+              {/* Diario de Trading obligatorio */}
+              <div className="mb-3">
+                <label className="text-xs text-slate-400">
+                  Diario de Trading — ¿por qué eliges esta cartera? <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={carteraNotes}
+                  onChange={(e) => { setCarteraNotes(e.target.value); if (carteraError) setCarteraError('') }}
+                  maxLength={500}
+                  rows={2}
+                  placeholder="Ej: Diversificación sectorial, apuesta por tecnología + salud defensiva..."
+                  className={`block mt-1 w-full px-3 py-2 bg-slate-800 border rounded text-white text-sm focus:outline-none resize-none placeholder:text-slate-500 ${
+                    carteraError ? 'border-red-500' : 'border-slate-600 focus:border-emerald-500'
+                  }`}
+                />
+                {carteraError && <p className="text-red-400 text-xs mt-1">{carteraError}</p>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

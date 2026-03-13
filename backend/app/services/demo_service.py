@@ -24,6 +24,46 @@ from ..schemas.demo import (
 # --- Cache for sector info (rarely changes) ---
 _sector_cache: dict[str, str | None] = {}
 
+# --- Spread & CFD/Futures margin ---
+_SPREAD_PCT = Decimal("0.0001")  # 0.01% spread on all trades
+_CFD_MARGIN_PCT = Decimal("0.05")  # 5% margin for indices, commodities, currencies
+
+# Tickers that trade as CFDs/Futures (not spot)
+_CFD_TICKERS = {
+    # Indices
+    "^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX", "^FTSE", "^GDAXI", "^FCHI",
+    "^N225", "^HSI", "^STOXX50E", "^IBEX",
+    # Commodities
+    "GC=F", "SI=F", "CL=F", "NG=F", "HG=F", "PL=F",
+    "ZW=F", "ZC=F", "ZS=F", "KC=F", "CT=F", "SB=F",
+    # Currencies (forex)
+    "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X", "USDCAD=X",
+    "NZDUSD=X", "EURGBP=X", "EURJPY=X", "GBPJPY=X",
+}
+
+
+def _is_cfd(ticker: str) -> bool:
+    """Check if ticker trades as CFD/Future (not spot)."""
+    t = ticker.upper()
+    return t in _CFD_TICKERS or t.endswith("=X") or t.endswith("=F") or t.startswith("^")
+
+
+def _notional_value(ticker: str, price: Decimal) -> Decimal:
+    """Get notional value per contract. Forex with >2 decimal precision
+    gets multiplied by 10000 (e.g. EURUSD 1.16 → 11600)."""
+    if _is_cfd(ticker):
+        # Forex: prices with many decimals → multiply by 10000
+        if price < 10:  # forex-like (EURUSD=1.16, GBPUSD=1.27, etc.)
+            return price * 10000
+    return price
+
+
+def _apply_spread(price: Decimal, is_buy: bool) -> Decimal:
+    """Apply spread to execution price. Buys pay slightly more, sells slightly less."""
+    if is_buy:
+        return price * (1 + _SPREAD_PCT)
+    return price * (1 - _SPREAD_PCT)
+
 
 def get_or_create_portfolio(db: Session, user_id: str) -> Portfolio:
     portfolio = db.query(Portfolio).filter(Portfolio.user_id == user_id).first()
@@ -61,28 +101,48 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
     portfolio = get_or_create_portfolio(db, user_id)
 
     current_price = _get_current_price(body.ticker)
-    exec_price = body.price if body.price else Decimal(str(current_price))
+    base_price = body.price if body.price else Decimal(str(current_price))
+    ticker = body.ticker.upper()
+    is_cfd = _is_cfd(ticker)
 
     if body.type == "buy":
-        # Open LONG position
-        cost = exec_price * body.quantity
+        # Apply spread (buy at slightly higher price)
+        exec_price = _apply_spread(base_price, is_buy=True)
+        side = "long"
+
+        if is_cfd:
+            # CFD/Futures: charge margin % of notional value
+            notional = _notional_value(ticker, exec_price) * body.quantity
+            cost = notional * _CFD_MARGIN_PCT
+        else:
+            # Spot: full price
+            cost = exec_price * body.quantity
+
         if cost > portfolio.balance:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Saldo insuficiente. Necesitas {cost}€ pero tienes {portfolio.balance}€",
+                detail=f"Saldo insuficiente. Necesitas {round(cost, 2)}€ pero tienes {portfolio.balance}€",
             )
         portfolio.balance -= cost
-        side = "long"
+
     elif body.type == "sell":
-        # Open SHORT position — deduct margin (100% of value)
-        margin = exec_price * body.quantity
+        # Apply spread (sell at slightly lower price)
+        exec_price = _apply_spread(base_price, is_buy=False)
+        side = "short"
+
+        if is_cfd:
+            notional = _notional_value(ticker, exec_price) * body.quantity
+            margin = notional * _CFD_MARGIN_PCT
+        else:
+            margin = exec_price * body.quantity
+
         if margin > portfolio.balance:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Saldo insuficiente para margen. Necesitas {margin}€ pero tienes {portfolio.balance}€",
+                detail=f"Saldo insuficiente para margen. Necesitas {round(margin, 2)}€ pero tienes {portfolio.balance}€",
             )
         portfolio.balance -= margin
-        side = "short"
+
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -116,11 +176,14 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
 def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
     ticker = body.ticker.upper()
+    is_cfd = _is_cfd(ticker)
 
     current_price = _get_current_price(ticker)
-    exec_price = Decimal(str(current_price))
+    base_price = Decimal(str(current_price))
 
     if body.side == "long":
+        # Closing long = selling → apply spread as sell
+        exec_price = _apply_spread(base_price, is_buy=False)
         held = _long_quantity(db, portfolio.id, ticker)
         if body.quantity > held:
             raise HTTPException(
@@ -128,10 +191,21 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
                 detail=f"Solo tienes {held} acciones LONG de {ticker}",
             )
         avg_price = _avg_buy_price(db, portfolio.id, ticker)
-        pnl = (exec_price - avg_price) * body.quantity
-        # Return proceeds to balance
-        portfolio.balance += exec_price * body.quantity
+
+        if is_cfd:
+            # CFD: P&L on notional, return margin + P&L
+            notional_entry = _notional_value(ticker, avg_price) * body.quantity
+            notional_exit = _notional_value(ticker, exec_price) * body.quantity
+            pnl = notional_exit - notional_entry
+            margin_paid = notional_entry * _CFD_MARGIN_PCT
+            portfolio.balance += margin_paid + pnl
+        else:
+            pnl = (exec_price - avg_price) * body.quantity
+            portfolio.balance += exec_price * body.quantity
+
     else:  # short
+        # Closing short = buying → apply spread as buy
+        exec_price = _apply_spread(base_price, is_buy=True)
         held = _short_quantity(db, portfolio.id, ticker)
         if body.quantity > held:
             raise HTTPException(
@@ -139,9 +213,16 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
                 detail=f"Solo tienes {held} acciones SHORT de {ticker}",
             )
         avg_price = _avg_sell_price(db, portfolio.id, ticker)
-        pnl = (avg_price - exec_price) * body.quantity
-        # Return margin + P&L to balance
-        portfolio.balance += avg_price * body.quantity + pnl
+
+        if is_cfd:
+            notional_entry = _notional_value(ticker, avg_price) * body.quantity
+            notional_exit = _notional_value(ticker, exec_price) * body.quantity
+            pnl = notional_entry - notional_exit
+            margin_paid = notional_entry * _CFD_MARGIN_PCT
+            portfolio.balance += margin_paid + pnl
+        else:
+            pnl = (avg_price - exec_price) * body.quantity
+            portfolio.balance += avg_price * body.quantity + pnl
 
     order = Order(
         portfolio_id=portfolio.id,

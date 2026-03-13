@@ -56,6 +56,7 @@ function validIntervals(period: string): string[] {
 }
 
 const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
+const LINE_DEFAULT_COLOR = '#f59e0b' // Lines (trendline, hline, vline) always start orange
 
 export default function Charts() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -137,7 +138,7 @@ export default function Charts() {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { resetInteraction(); previewRef.current.clear() }
-      if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
+      if (e.key === 'Delete' && selectedId && window.confirm('¿Eliminar este dibujo?')) removeDrawing(selectedId)
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
@@ -196,7 +197,7 @@ export default function Charts() {
     let drawing: Drawing
     switch (toolType) {
       case 'trendline':
-        drawing = { id, type: 'trendline', points, color, visible: true, lineWidth: 2, chartId: 'main' } as TrendlineDrawing
+        drawing = { id, type: 'trendline', points, color: LINE_DEFAULT_COLOR, visible: true, lineWidth: 2, chartId: 'main' } as TrendlineDrawing
         break
       case 'arrow':
         drawing = { id, type: 'arrow', points, color: store.arrowDirection === 'up' ? '#10b981' : '#ef4444', visible: true, direction: store.arrowDirection, chartId: 'main' } as ArrowDrawing
@@ -212,10 +213,10 @@ export default function Charts() {
         break
       }
       case 'hline':
-        drawing = { id, type: 'hline', points, color, visible: true, chartId: 'main' } as HLineDrawing
+        drawing = { id, type: 'hline', points, color: LINE_DEFAULT_COLOR, visible: true, chartId: 'main' } as HLineDrawing
         break
       case 'vline':
-        drawing = { id, type: 'vline', points, color, visible: true, chartId: 'main' } as VLineDrawing
+        drawing = { id, type: 'vline', points, color: LINE_DEFAULT_COLOR, visible: true, chartId: 'main' } as VLineDrawing
         break
       default:
         return
