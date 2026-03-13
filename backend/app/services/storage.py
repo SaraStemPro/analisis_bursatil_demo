@@ -46,14 +46,9 @@ def upload(filename: str, content: bytes) -> str:
 
 def download(stored_path: str) -> Path | None:
     """Get file for download. Returns local Path if available, otherwise downloads from Supabase."""
-    # Resolve stored path (could be relative or legacy absolute)
+    # Always resolve to just the filename inside _UPLOADS_DIR
     p = Path(stored_path)
-    if p.is_absolute():
-        if p.exists():
-            return p
-        local = _UPLOADS_DIR / p.name
-    else:
-        local = _UPLOADS_DIR / p
+    local = _UPLOADS_DIR / p.name
 
     if local.exists():
         return local
