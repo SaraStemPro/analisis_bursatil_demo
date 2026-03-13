@@ -40,6 +40,12 @@ _QUOTE_TTL = 300  # 5 minutes
 def invalidate_quote_cache(ticker: str):
     _quote_cache.pop(ticker.upper(), None)
 
+
+def invalidate_history_cache(ticker: str):
+    to_remove = [k for k in _history_cache if k.startswith(ticker.upper() + ":")]
+    for k in to_remove:
+        _history_cache.pop(k, None)
+
 _history_cache: dict[str, tuple[float, HistoryResponse]] = {}
 _HISTORY_TTL = 600  # 10 minutes
 

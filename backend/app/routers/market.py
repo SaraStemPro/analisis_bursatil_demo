@@ -38,6 +38,7 @@ def history(
         default="1d",
         pattern=r"^(1m|5m|15m|30m|1h|1d|1wk|1mo)$",
     ),
+    force: bool = Query(default=False),
 ):
     # Validate period-interval combination
     try:
@@ -46,6 +47,8 @@ def history(
         raise HTTPException(status_code=422, detail=str(e))
 
     market_service.track_ticker(ticker)
+    if force:
+        market_service.invalidate_history_cache(ticker)
     return market_service.get_history(ticker, period, interval)
 
 

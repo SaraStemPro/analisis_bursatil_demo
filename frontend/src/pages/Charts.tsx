@@ -708,9 +708,12 @@ export default function Charts() {
                 <p className="text-xl font-bold">{fmtPrice(quote.price)} {quote.currency}</p>
                 <button
                   onClick={async () => {
-                    const fresh = await market.quote(ticker, true)
-                    qc.setQueryData(['quote', ticker], fresh)
-                    refetchHistory()
+                    const [freshQuote, freshHistory] = await Promise.all([
+                      market.quote(ticker, true),
+                      market.history(ticker, period, interval, true),
+                    ])
+                    qc.setQueryData(['quote', ticker], freshQuote)
+                    qc.setQueryData(['history', ticker, period, interval], freshHistory)
                   }}
                   disabled={quoteFetching}
                   title="Refrescar precio"
