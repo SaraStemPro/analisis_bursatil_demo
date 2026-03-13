@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { demo, market } from '../../api'
 import { ArrowUpCircle, ArrowDownCircle } from 'lucide-react'
 import TickerSearchInput from './TickerSearchInput'
+import { isCfd, askPrice, totalCost, cfdLabel, marginPerContract, SPREAD_PCT } from '../../lib/cfdUtils'
 
 interface Props {
   initialTicker?: string
@@ -86,18 +87,30 @@ export default function OrderForm({ initialTicker }: Props) {
       </div>
 
       {/* Product description */}
-      {ticker && quote && (
-        <div className="mt-3 p-3 bg-slate-800 rounded text-sm">
-          <p className="text-slate-300">
-            Vas a operar con <span className="font-bold text-white">{quantity}</span> unidades de{' '}
-            <span className="font-bold text-emerald-400">{tickerName || ticker}</span> a{' '}
-            <span className="font-bold text-white">{quote.price.toFixed(2)} {quote.currency}</span>
-          </p>
-          <p className="text-slate-400 text-xs mt-1">
-            Coste total: {(quote.price * quantity).toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}
-          </p>
-        </div>
-      )}
+      {ticker && quote && (() => {
+        const cfd = isCfd(ticker)
+        const ask = askPrice(quote.price)
+        const cost = totalCost(ticker, quote.price, quantity)
+        return (
+          <div className="mt-3 p-3 bg-slate-800 rounded text-sm">
+            <p className="text-slate-300">
+              Vas a operar con <span className="font-bold text-white">{quantity}</span>{' '}
+              {cfd ? 'contratos' : 'unidades'} de{' '}
+              <span className="font-bold text-emerald-400">{tickerName || ticker}</span>
+              {cfd && <span className="text-amber-400/80 text-xs ml-1">({cfdLabel(ticker)})</span>}
+            </p>
+            <div className="mt-1.5 space-y-0.5 text-xs text-slate-400">
+              <p>Precio mid: <span className="text-white">{quote.price.toFixed(quote.price < 10 ? 5 : 2)} {quote.currency}</span> · Ask (compra): <span className="text-white">{ask.toFixed(ask < 10 ? 5 : 2)} {quote.currency}</span> <span className="text-slate-600">(+{(SPREAD_PCT * 100).toFixed(2)}% spread)</span></p>
+              {cfd && (
+                <p>Margen por contrato (5%): <span className="text-white">{marginPerContract(ticker, quote.price).toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}</span></p>
+              )}
+              <p className="text-slate-300 font-medium">
+                {cfd ? 'Margen total' : 'Coste total'}: <span className="text-white">{cost.toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}</span>
+              </p>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Diario de operaciones */}
       <div className="mt-3">

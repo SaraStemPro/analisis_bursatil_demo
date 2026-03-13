@@ -353,26 +353,27 @@ def get_portfolio_summary(db: Session, user_id: str) -> PortfolioSummaryResponse
     portfolio = get_or_create_portfolio(db, user_id)
     positions = _calculate_positions(db, portfolio)
 
-    total_positions_value = sum(_position_value(p) for p in positions)
-    total_value = float(portfolio.balance) + total_positions_value
+    total_invested = sum(_invested_value(p) for p in positions)
+    total_current = sum(_position_value(p) for p in positions)
+    total_value = float(portfolio.balance) + total_current
 
-    # Sector allocation
+    # Sector allocation (by invested value, not current)
     sector_values: dict[str, float] = {}
     for p in positions:
         sector = _get_sector(p.ticker)
-        val = _position_value(p)
+        val = _invested_value(p)
         sector_values[sector] = sector_values.get(sector, 0) + val
 
     sectors = []
     for sector, value in sorted(sector_values.items(), key=lambda x: -x[1]):
-        weight = (value / total_positions_value * 100) if total_positions_value > 0 else 0
+        weight = (value / total_invested * 100) if total_invested > 0 else 0
         sectors.append(SectorAllocation(sector=sector, weight_pct=round(weight, 1), value=round(value, 2)))
 
     # Diversity score: Shannon entropy with penalizations
     diversity_score = 0.0
     n_positions = sum(p.quantity for p in positions)
     n_sectors = len(sectors)
-    if n_sectors > 1 and total_positions_value > 0:
+    if n_sectors > 1 and total_invested > 0:
         weights = [s.weight_pct / 100 for s in sectors]
         entropy = -sum(w * math.log(w) for w in weights if w > 0)
         max_entropy = math.log(n_sectors)
@@ -392,7 +393,7 @@ def get_portfolio_summary(db: Session, user_id: str) -> PortfolioSummaryResponse
     return PortfolioSummaryResponse(
         total_value=round(total_value, 2),
         balance=round(float(portfolio.balance), 2),
-        invested=round(total_positions_value, 2),
+        invested=round(total_invested, 2),
         positions_count=len(positions),
         sectors=sectors,
         diversity_score=diversity_score,
@@ -412,11 +413,7 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
 
     result = []
     for name, group_positions in groups.items():
-        total_invested = sum(
-            float(_notional_value(p.ticker, Decimal(str(p.avg_price))) * p.quantity * _CFD_MARGIN_PCT)
-            if _is_cfd(p.ticker) else float(p.avg_price) * p.quantity
-            for p in group_positions
-        )
+        total_invested = sum(_invested_value(p) for p in group_positions)
         total_current = sum(_position_value(p) for p in group_positions)
         total_pnl = sum(float(p.pnl) for p in group_positions)
 
@@ -424,7 +421,7 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
         sector_map: dict[str, float] = {}
         for p in group_positions:
             sec = _get_sector(p.ticker)
-            sector_map[sec] = sector_map.get(sec, 0) + _position_value(p)
+            sector_map[sec] = sector_map.get(sec, 0) + _invested_value(p)
         n_sectors = len(sector_map)
 
         # Shannon entropy diversity score with penalizations
@@ -704,18 +701,24 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
     return positions
 
 
+def _invested_value(p: PositionResponse) -> float:
+    """What left the balance when position was opened (FIXED, does not change).
+    CFDs: margin = notional_entry × 5%.
+    Stocks: avg_price × quantity.
+    """
+    if _is_cfd(p.ticker):
+        avg = Decimal(str(p.avg_price))
+        notional_entry = _notional_value(p.ticker, avg) * p.quantity
+        return float(notional_entry * _CFD_MARGIN_PCT)
+    return float(p.avg_price) * p.quantity
+
+
 def _position_value(p: PositionResponse) -> float:
-    """Value of a position for portfolio totals.
+    """Current value of a position (CHANGES with market price).
     CFDs: margin invested + unrealized P&L.
     Stocks: current_price × quantity.
     """
-    ticker = p.ticker
-    if _is_cfd(ticker):
-        avg = Decimal(str(p.avg_price))
-        notional_entry = _notional_value(ticker, avg) * p.quantity
-        margin = float(notional_entry * _CFD_MARGIN_PCT)
-        return margin + float(p.pnl)
-    return float(p.current_price) * p.quantity
+    return _invested_value(p) + float(p.pnl)
 
 
 def _get_sector(ticker: str) -> str:

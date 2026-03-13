@@ -7,6 +7,7 @@ import {
   Search, Filter, TrendingUp, TrendingDown, ArrowUpDown, PieChart,
   ShoppingCart, Eye, ChevronDown, ChevronUp, X, Plus, Trash2, Info,
 } from 'lucide-react'
+import { isCfd, totalCost, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
 type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility'
 
@@ -223,7 +224,7 @@ export default function Screener() {
       const sec = s.sector || 'Otros'
       if (!map[sec]) map[sec] = { count: 0, value: 0 }
       map[sec].count += qty
-      map[sec].value += s.price * qty
+      map[sec].value += totalCost(s.symbol, s.price, qty)
     })
     const total = Object.values(map).reduce((a, b) => a + b.value, 0)
     return Object.entries(map)
@@ -237,7 +238,7 @@ export default function Screener() {
   }, [portfolioEntries])
 
   const totalPortfolioValue = useMemo(() =>
-    portfolioEntries.reduce((a, { stock, qty }) => a + stock.price * qty, 0),
+    portfolioEntries.reduce((a, { stock, qty }) => a + totalCost(stock.symbol, stock.price, qty), 0),
     [portfolioEntries])
 
   // Diversity score: Shannon entropy penalized by minimum positions/sectors
@@ -521,20 +522,22 @@ export default function Screener() {
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="text-xs font-medium text-slate-400">Acciones seleccionadas ({portfolioEntries.length})</h3>
-                    <span className="text-xs text-slate-500">Total: ${totalPortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                    <span className="text-xs text-slate-500">Inversion total: {totalPortfolioValue.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
                   </div>
                   <div className="space-y-1 max-h-52 overflow-y-auto">
                     {portfolioEntries.map(({ stock: s, qty }) => {
-                      const weight = totalPortfolioValue > 0 ? (s.price * qty / totalPortfolioValue * 100) : 0
+                      const cost = totalCost(s.symbol, s.price, qty)
+                      const weight = totalPortfolioValue > 0 ? (cost / totalPortfolioValue * 100) : 0
+                      const cfd = isCfd(s.symbol)
                       return (
                         <div key={s.symbol} className="flex items-center justify-between bg-slate-800 rounded px-2 py-1.5 text-sm">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <span className="font-medium text-white w-12 flex-shrink-0">{s.symbol}</span>
-                            <span className="text-slate-500 text-xs truncate max-w-[70px]">{s.sector || 'Otros'}</span>
+                            <span className="text-slate-500 text-xs truncate max-w-[70px]">{cfd ? cfdLabel(s.symbol) : (s.sector || 'Otros')}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-slate-500 text-xs w-10 text-right">{weight.toFixed(0)}%</span>
-                            <span className="text-slate-300 text-xs w-16 text-right">${formatPrice(s.price)}</span>
+                            <span className="text-slate-300 text-xs w-16 text-right">{cfd ? `${cost.toFixed(0)}€` : `$${formatPrice(s.price)}`}</span>
                             <input
                               type="number"
                               min={1}
@@ -601,6 +604,13 @@ export default function Screener() {
                     </div>
                   )}
                 </div>
+              </div>
+              {/* Spread & margin info */}
+              <div className="mt-3 p-2 bg-slate-800/50 rounded text-[11px] text-slate-500 space-y-0.5">
+                <p>Todas las compras incluyen un spread del {(SPREAD_PCT * 100).toFixed(2)}% (coste implicito ask/bid).</p>
+                {portfolioEntries.some(({ stock }) => isCfd(stock.symbol)) && (
+                  <p className="text-amber-400/70">Los indices, divisas y materias primas operan como CFDs/Futuros con un margen del 5%. Los costes mostrados reflejan el margen, no el valor nominal.</p>
+                )}
               </div>
             </div>
           )}

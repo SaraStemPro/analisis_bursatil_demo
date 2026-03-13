@@ -17,6 +17,7 @@ import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartU
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
 import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react'
+import { isCfd, askPrice, marginPerContract, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
 const ALL_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1wk', '1mo']
@@ -706,6 +707,14 @@ export default function Charts() {
               <p className={`text-sm ${quote.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {quote.change >= 0 ? '+' : ''}{fmtChange(quote.change, quote.price)} ({quote.change_percent.toFixed(2)}%)
               </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Ask (compra): {fmtPrice(askPrice(quote.price))} <span className="text-slate-600">(+{(SPREAD_PCT * 100).toFixed(2)}%)</span>
+              </p>
+              {isCfd(ticker) && (
+                <p className="text-xs text-amber-400/80 mt-0.5">
+                  {cfdLabel(ticker)} · Margen: {marginPerContract(ticker, quote.price).toLocaleString('es-ES', { style: 'currency', currency: quote.currency })} (5%)
+                </p>
+              )}
             </div>
           </div>
         )}
