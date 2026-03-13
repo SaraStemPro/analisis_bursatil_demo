@@ -132,16 +132,16 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
 
         if is_cfd:
             notional = _notional_value(ticker, exec_price) * body.quantity
-            margin = notional * _CFD_MARGIN_PCT
+            cost = notional * _CFD_MARGIN_PCT
         else:
-            margin = exec_price * body.quantity
+            cost = exec_price * body.quantity
 
-        if margin > portfolio.balance:
+        if cost > portfolio.balance:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Saldo insuficiente para margen. Necesitas {round(margin, 2)}€ pero tienes {portfolio.balance}€",
+                detail=f"Saldo insuficiente para margen. Necesitas {round(cost, 2)}€ pero tienes {portfolio.balance}€",
             )
-        portfolio.balance -= margin
+        portfolio.balance -= cost
 
     else:
         raise HTTPException(
@@ -160,6 +160,7 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
         status="open",
         side=side,
         pnl=None,
+        cost=cost,
         closed_at=None,
         portfolio_group=body.portfolio_group,
         notes=body.notes,
@@ -233,6 +234,7 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
         status="closed",
         side=body.side,
         pnl=pnl,
+        cost=None,
         closed_at=datetime.now(timezone.utc),
     )
 
@@ -528,6 +530,7 @@ def _order_to_response(o: Order) -> OrderResponse:
         status=o.status,
         side=o.side,
         pnl=o.pnl,
+        cost=o.cost,
         portfolio_group=o.portfolio_group,
         notes=o.notes,
         created_at=o.created_at,

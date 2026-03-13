@@ -76,6 +76,7 @@ class OrderResponse(BaseModel):
     pnl: Decimal | None = None
     portfolio_group: str | None = None
     notes: str | None = None
+    cost: Decimal | None = None
     created_at: datetime
     closed_at: datetime | None = None
 

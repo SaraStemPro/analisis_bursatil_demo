@@ -26,6 +26,7 @@ class Order(Base):
     closed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     portfolio_group: Mapped[str | None] = mapped_column(String(100), nullable=True)  # Named cartera group
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)  # Trading diary
+    cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 5), nullable=True)  # Actual amount deducted from balance
 
     portfolio: Mapped["Portfolio"] = relationship(back_populates="orders")
 
