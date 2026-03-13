@@ -21,6 +21,7 @@ def search(q: str = Query(min_length=1, max_length=50, description="Texto de bú
 
 @router.get("/quote/{ticker}", response_model=QuoteResponse)
 def quote(ticker: str):
+    market_service.track_ticker(ticker)
     return market_service.get_quote(ticker)
 
 
@@ -42,6 +43,7 @@ def history(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
+    market_service.track_ticker(ticker)
     return market_service.get_history(ticker, period, interval)
 
 

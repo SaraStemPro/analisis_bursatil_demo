@@ -152,12 +152,18 @@ export default function Charts() {
   const { data: quote } = useQuery({
     queryKey: ['quote', ticker],
     queryFn: () => market.quote(ticker),
-    refetchInterval: 30000,
+    refetchInterval: 120_000, // 2 min — reduces Yahoo pressure with multiple users
+    staleTime: 60_000,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   })
 
-  const { data: history } = useQuery({
+  const { data: history, isLoading: historyLoading, isError: historyError, error: historyErrorObj, refetch: refetchHistory } = useQuery({
     queryKey: ['history', ticker, period, interval],
     queryFn: () => market.history(ticker, period, interval),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    staleTime: 120_000, // 2 min — avoids redundant fetches
   })
 
   const { data: catalog } = useQuery({
@@ -816,12 +822,38 @@ export default function Charts() {
       <div className="flex gap-2">
         <DrawingToolbar />
         <div className="flex-1 relative">
+          {historyLoading && !history && (
+            <div className="bg-slate-900 rounded-lg border border-slate-700 h-[450px] flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-3" />
+                <p className="text-sm text-slate-400">Cargando gráfico...</p>
+              </div>
+            </div>
+          )}
+          {historyError && !history && (
+            <div className="bg-slate-900 rounded-lg border border-red-500/50 h-[450px] flex items-center justify-center">
+              <div className="text-center px-6">
+                <p className="text-sm text-red-400 mb-2">
+                  {(historyErrorObj as Error)?.message?.includes('no disponible')
+                    ? 'Servicio de datos temporalmente saturado'
+                    : 'Error al cargar los datos del gráfico'}
+                </p>
+                <p className="text-xs text-slate-500 mb-3">Demasiadas peticiones simultáneas a Yahoo Finance</p>
+                <button
+                  onClick={() => refetchHistory()}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded transition-colors"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          )}
           <div
             ref={chartRef}
             onClick={() => setActiveChartId('main')}
             className={`bg-slate-900 rounded-lg border transition-colors ${
               activeChartId === 'main' ? 'border-emerald-500' : 'border-slate-700'
-            } ${activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''}`}
+            } ${activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''} ${!history?.data?.length ? 'hidden' : ''}`}
           />
           {/* Text input overlay */}
           {textInput.show && (

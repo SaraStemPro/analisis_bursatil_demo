@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .routers import auth, market, indicators, demo, backtest, tutor
+from .services.market_service import start_cache_warmer
 from .utils.auth import hash_password
 
 Base.metadata.create_all(bind=engine)
@@ -146,6 +147,11 @@ app.include_router(indicators.router)
 app.include_router(demo.router)
 app.include_router(backtest.router)
 app.include_router(tutor.router)
+
+
+@app.on_event("startup")
+def _on_startup():
+    start_cache_warmer()
 
 
 @app.get("/api/health")

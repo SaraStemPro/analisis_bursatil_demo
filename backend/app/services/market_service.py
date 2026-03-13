@@ -2,6 +2,7 @@ import logging
 import math
 import threading
 import time
+from concurrent.futures import Future
 
 import numpy as np
 import yfinance as yf
@@ -20,7 +21,9 @@ from ..schemas.market import (
 )
 
 
-# --- Screener cache ---
+# ============================================================================
+# Cache layer — all TTLs generous for educational use (not real-time trading)
+# ============================================================================
 _screener_cache: dict[str, tuple[float, list[DetailedQuoteResponse]]] = {}
 _SCREENER_TTL = 300  # 5 minutes
 
@@ -28,36 +31,55 @@ _info_cache: dict[str, tuple[float, dict]] = {}
 _INFO_TTL = 1800  # 30 minutes
 
 _volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
-_VOLATILITY_TTL = 300  # 5 minutes, same as screener
+_VOLATILITY_TTL = 300  # 5 minutes
 
 _quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
-_QUOTE_TTL = 120  # 2 minutes — prevents Yahoo rate limiting with 13+ users
+_QUOTE_TTL = 300  # 5 minutes
 
 _history_cache: dict[str, tuple[float, HistoryResponse]] = {}
-_HISTORY_TTL = 300  # 5 minutes — historical data doesn't change fast
+_HISTORY_TTL = 600  # 10 minutes
 
-# Rate limiting protection
-_yf_lock = threading.Lock()
-_last_yf_call: float = 0
-_YF_MIN_INTERVAL = 0.5  # max 2 calls per second to Yahoo
+# ============================================================================
+# Request coalescing — prevents duplicate Yahoo calls for the same resource
+# When multiple users request the same ticker simultaneously, only ONE call
+# goes to Yahoo. The rest wait for that single result.
+# ============================================================================
+_inflight: dict[str, Future] = {}
+_inflight_lock = threading.Lock()
 
 
-def _throttled_yf_call(fn, *args, **kwargs):
-    """Throttle yfinance calls to avoid Yahoo rate limiting."""
-    global _last_yf_call
-    with _yf_lock:
-        elapsed = time.time() - _last_yf_call
-        if elapsed < _YF_MIN_INTERVAL:
-            time.sleep(_YF_MIN_INTERVAL - elapsed)
-        _last_yf_call = time.time()
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:
-        if "RateLimit" in type(e).__name__ or "Too Many Requests" in str(e):
-            logger.warning("Yahoo rate limited, waiting 5s...")
-            time.sleep(5)
-            return fn(*args, **kwargs)
-        raise
+def _coalesced_call(key: str, fn):
+    """Execute fn() with request coalescing: if another thread is already
+    fetching the same key, wait for its result instead of calling Yahoo again."""
+    is_caller = False
+    with _inflight_lock:
+        if key in _inflight:
+            # Another thread is already fetching this — just grab its future
+            future = _inflight[key]
+        else:
+            # We're the first — create a future and register it
+            future = Future()
+            _inflight[key] = future
+            is_caller = True
+
+    if is_caller:
+        try:
+            result = fn()
+            future.set_result(result)
+        except Exception as e:
+            future.set_exception(e)
+        finally:
+            with _inflight_lock:
+                _inflight.pop(key, None)
+
+    # All threads (including the caller) get the result from the same future
+    return future.result(timeout=30)
+
+
+# Background cache warmer — tracks which tickers users are viewing
+_active_tickers: set[str] = set()
+_warmer_running = False
+
 
 # Universe of tickers for screening
 SP500_TICKERS = [
@@ -186,8 +208,6 @@ def _calculate_volatilities(tickers: list[str]) -> dict[str, float]:
         if df.empty:
             return result
 
-        # yf.download returns MultiIndex columns (field, ticker) when multiple tickers
-        # For single ticker it returns single-level columns
         if len(tickers) == 1:
             close = df["Close"].dropna()
             if len(close) > 1:
@@ -241,11 +261,18 @@ def get_quote(ticker: str) -> QuoteResponse:
     if cached and time.time() - cached[0] < _QUOTE_TTL:
         return cached[1]
 
-    tk = yf.Ticker(ticker)
-    info = _throttled_yf_call(lambda: tk.info)
+    try:
+        info = _coalesced_call(f"quote:{cache_key}", lambda: yf.Ticker(ticker).info)
+    except Exception as e:
+        if cached:
+            logger.warning(f"Yahoo error for quote {ticker}, returning stale cache: {e}")
+            return cached[1]
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio de datos temporalmente no disponible. Inténtalo de nuevo en unos segundos.",
+        )
 
     if not info or info.get("trailingPegRatio") is None and info.get("regularMarketPrice") is None:
-        # yfinance devuelve un dict casi vacío si el ticker no existe
         price = info.get("regularMarketPrice") or info.get("currentPrice")
         if price is None:
             raise HTTPException(
@@ -279,10 +306,24 @@ def get_history(ticker: str, period: str, interval: str) -> HistoryResponse:
     if cached and time.time() - cached[0] < _HISTORY_TTL:
         return cached[1]
 
-    tk = yf.Ticker(ticker)
-    df = _throttled_yf_call(lambda: tk.history(period=period, interval=interval))
+    try:
+        df = _coalesced_call(
+            f"history:{cache_key}",
+            lambda: yf.Ticker(ticker).history(period=period, interval=interval),
+        )
+    except Exception as e:
+        if cached:
+            logger.warning(f"Yahoo error for history {ticker}, returning stale cache: {e}")
+            return cached[1]
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio de datos temporalmente no disponible. Inténtalo de nuevo en unos segundos.",
+        )
 
     if df.empty:
+        if cached:
+            logger.warning(f"Empty history for {ticker}, returning stale cache")
+            return cached[1]
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Sin datos históricos para '{ticker}' con period={period}, interval={interval}",
@@ -481,7 +522,7 @@ def _get_cached_info(ticker: str) -> dict:
             return cached_info
 
     try:
-        info = yf.Ticker(ticker).info or {}
+        info = _coalesced_call(f"info:{ticker}", lambda: yf.Ticker(ticker).info or {})
     except Exception:
         info = {}
 
@@ -489,3 +530,137 @@ def _get_cached_info(ticker: str) -> dict:
     if info and info.get("regularMarketPrice"):
         _info_cache[ticker] = (now, info)
     return info
+
+
+# ============================================================================
+# Background cache warmer — refreshes active tickers using batch download
+# ============================================================================
+
+def track_ticker(ticker: str):
+    """Register a ticker as actively viewed. Called from route handlers."""
+    _active_tickers.add(ticker.upper())
+
+
+def _warm_quotes_batch(tickers: list[str]):
+    """Batch-refresh quotes using yf.download (1 HTTP request for N tickers)."""
+    if not tickers:
+        return
+    try:
+        df = yf.download(tickers, period="2d", interval="1d", progress=False, threads=True)
+        if df.empty:
+            return
+
+        if len(tickers) == 1:
+            t = tickers[0]
+            if "Close" in df.columns and len(df) > 0:
+                row = df.iloc[-1]
+                prev_row = df.iloc[-2] if len(df) > 1 else row
+                price = float(row["Close"])
+                prev = float(prev_row["Close"])
+                change = price - prev
+                pct = (change / prev * 100) if prev else 0
+                cached = _quote_cache.get(t)
+                _quote_cache[t] = (time.time(), QuoteResponse(
+                    symbol=t,
+                    name=cached[1].name if cached else t,
+                    price=round(price, 4),
+                    change=round(change, 4),
+                    change_percent=round(pct, 2),
+                    currency=cached[1].currency if cached else "USD",
+                    market_state=cached[1].market_state if cached else "REGULAR",
+                    exchange=cached[1].exchange if cached else "",
+                ))
+        else:
+            close = df["Close"] if "Close" in df.columns else None
+            if close is not None:
+                for t in tickers:
+                    try:
+                        series = close[t].dropna()
+                        if len(series) < 1:
+                            continue
+                        price = float(series.iloc[-1])
+                        prev = float(series.iloc[-2]) if len(series) > 1 else price
+                        change = price - prev
+                        pct = (change / prev * 100) if prev else 0
+                        cached = _quote_cache.get(t)
+                        _quote_cache[t] = (time.time(), QuoteResponse(
+                            symbol=t,
+                            name=cached[1].name if cached else t,
+                            price=round(price, 4),
+                            change=round(change, 4),
+                            change_percent=round(pct, 2),
+                            currency=cached[1].currency if cached else "USD",
+                            market_state=cached[1].market_state if cached else "REGULAR",
+                            exchange=cached[1].exchange if cached else "",
+                        ))
+                    except (KeyError, TypeError, IndexError):
+                        continue
+        logger.info(f"Cache warmer: refreshed {len(tickers)} tickers via batch download")
+    except Exception as e:
+        logger.warning(f"Cache warmer batch error: {e}")
+
+
+def _cache_warmer_loop():
+    """Background thread that periodically refreshes active ticker caches."""
+    global _warmer_running
+    _warmer_running = True
+    logger.info("Cache warmer started")
+    while _warmer_running:
+        try:
+            now = time.time()
+            # Collect tickers whose quote cache is about to expire (>80% of TTL)
+            stale_tickers = []
+            for t in list(_active_tickers):
+                cached = _quote_cache.get(t)
+                if not cached or (now - cached[0]) > _QUOTE_TTL * 0.8:
+                    stale_tickers.append(t)
+
+            if stale_tickers:
+                _warm_quotes_batch(stale_tickers)
+
+            # Pre-warm history for active tickers (3mo/1d is the default view)
+            for t in list(_active_tickers):
+                cache_key = f"{t}:3mo:1d"
+                cached = _history_cache.get(cache_key)
+                if not cached or (now - cached[0]) > _HISTORY_TTL * 0.8:
+                    try:
+                        df = yf.Ticker(t).history(period="3mo", interval="1d")
+                        if not df.empty:
+                            df = df.dropna(subset=["Open", "High", "Low", "Close"])
+                            data = [
+                                OHLCV(
+                                    date=idx.to_pydatetime(),
+                                    open=round(row["Open"], 4),
+                                    high=round(row["High"], 4),
+                                    low=round(row["Low"], 4),
+                                    close=round(row["Close"], 4),
+                                    volume=int(row["Volume"]),
+                                )
+                                for idx, row in df.iterrows()
+                            ]
+                            _history_cache[cache_key] = (time.time(), HistoryResponse(
+                                symbol=t, period="3mo", interval="1d", data=data,
+                            ))
+                        time.sleep(1)  # space out individual history fetches
+                    except Exception:
+                        continue
+
+            # Clean tickers not accessed in last 30 minutes
+            for t in list(_active_tickers):
+                cached = _quote_cache.get(t)
+                if cached and (now - cached[0]) > 1800:
+                    _active_tickers.discard(t)
+
+        except Exception as e:
+            logger.warning(f"Cache warmer error: {e}")
+
+        # Sleep 3 minutes between warming cycles
+        time.sleep(180)
+
+
+def start_cache_warmer():
+    """Start the background cache warmer thread."""
+    if _warmer_running:
+        return
+    t = threading.Thread(target=_cache_warmer_loop, daemon=True, name="cache-warmer")
+    t.start()
