@@ -58,11 +58,11 @@ def download(stored_path: str) -> Path | None:
     if local.exists():
         return local
 
-    # Try Supabase Storage
+    # Try Supabase Storage — always use just the filename (p.name)
+    # because the bucket IS the "uploads" folder
     if _is_configured():
-        filename = p.name if p.is_absolute() else str(p)
         resp = httpx.get(
-            f"{_base_url()}/{filename}",
+            f"{_base_url()}/{p.name}",
             headers=_headers(),
             timeout=30,
         )
@@ -77,22 +77,16 @@ def download(stored_path: str) -> Path | None:
 def delete(stored_path: str):
     """Delete file from both local and Supabase."""
     p = Path(stored_path)
-    filename = p.name if p.is_absolute() else str(p)
 
     # Local
-    local = _UPLOADS_DIR / filename if not p.is_absolute() else p
-    if not p.is_absolute():
-        local = _UPLOADS_DIR / p
-    else:
-        local = p if p.exists() else _UPLOADS_DIR / p.name
-
+    local = _UPLOADS_DIR / p.name
     if local.exists():
         local.unlink()
 
-    # Supabase
+    # Supabase — always use just filename
     if _is_configured():
         httpx.delete(
-            f"{_base_url()}/{filename}",
+            f"{_base_url()}/{p.name}",
             headers=_headers(),
             timeout=10,
         )
