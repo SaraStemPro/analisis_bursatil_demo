@@ -153,8 +153,8 @@ export default function Admin() {
                         <td className={`py-1.5 text-right ${pnlColor(p.pnl_pct)}`}>{fmtPct(p.pnl_pct)}</td>
                         <td className="py-1.5 text-right">
                           {p.fx_pnl != null ? (
-                            <span className={`text-xs ${p.fx_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {p.fx_pnl >= 0 ? '+' : ''}{p.fx_pnl.toFixed(2)}€
+                            <span className={`text-xs ${Number(p.fx_pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
                             </span>
                           ) : (
                             <span className="text-slate-600 text-xs">—</span>

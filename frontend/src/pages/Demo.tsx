@@ -172,9 +172,9 @@ export default function Demo() {
                             {p.fx_pnl != null ? (
                               <span
                                 className={`text-xs ${p.fx_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
-                                title={`TC entrada: ${p.fx_rate_entry?.toFixed(4)} | TC actual: ${p.fx_rate_current?.toFixed(4)}`}
+                                title={`TC entrada: ${Number(p.fx_rate_entry).toFixed(4)} | TC actual: ${Number(p.fx_rate_current).toFixed(4)}`}
                               >
-                                {p.fx_pnl >= 0 ? '+' : ''}{p.fx_pnl.toFixed(2)}€
+                                {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
                                 <span className="text-[10px] text-slate-500 ml-1">USD</span>
                               </span>
                             ) : (
@@ -268,8 +268,8 @@ export default function Demo() {
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         {p.fx_pnl != null ? (
-                          <span className={`text-xs ${p.fx_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {p.fx_pnl >= 0 ? '+' : ''}{p.fx_pnl.toFixed(2)}€
+                          <span className={`text-xs ${Number(p.fx_pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
                           </span>
                         ) : (
                           <span className="text-slate-600 text-xs">—</span>
