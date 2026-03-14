@@ -30,6 +30,9 @@ with engine.connect() as conn:
         if "cost" not in columns:
             conn.execute(text("ALTER TABLE orders ADD COLUMN cost NUMERIC(14,5)"))
             conn.commit()
+        if "fx_rate" not in columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN fx_rate NUMERIC(10,6)"))
+            conn.commit()
     if "backtest_runs" in inspector.get_table_names():
         columns = {c["name"]: c for c in inspector.get_columns("backtest_runs")}
         db_url = str(engine.url)

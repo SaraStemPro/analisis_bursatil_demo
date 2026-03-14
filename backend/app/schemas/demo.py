@@ -46,6 +46,10 @@ class PositionResponse(BaseModel):
     pnl_pct: Decimal
     side: str = "long"  # "long" | "short"
     portfolio_group: str | None = None
+    currency: str = "EUR"  # "EUR" | "USD"
+    fx_rate_entry: Decimal | None = None  # EUR/USD rate when position opened
+    fx_rate_current: Decimal | None = None  # EUR/USD rate now
+    fx_pnl: Decimal | None = None  # P&L from currency movement only (EUR)
 
     model_config = {"from_attributes": True}
 
@@ -77,6 +81,7 @@ class OrderResponse(BaseModel):
     portfolio_group: str | None = None
     notes: str | None = None
     cost: Decimal | None = None
+    fx_rate: Decimal | None = None
     created_at: datetime
     closed_at: datetime | None = None
 

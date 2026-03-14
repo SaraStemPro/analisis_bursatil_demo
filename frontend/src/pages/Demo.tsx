@@ -133,6 +133,7 @@ export default function Demo() {
                       <th className="px-3 py-2 text-right">P. cierre</th>
                       <th className="px-3 py-2 text-right">P&L</th>
                       <th className="px-3 py-2 text-right">%</th>
+                      <th className="px-3 py-2 text-right">Riesgo FX</th>
                       <th className="px-3 py-2 w-8"></th>
                     </tr>
                   </thead>
@@ -166,6 +167,19 @@ export default function Demo() {
                           </td>
                           <td className={`px-3 py-2 text-right ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isProfit ? '+' : ''}{Number(p.pnl_pct).toFixed(2)}%
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {p.fx_pnl != null ? (
+                              <span
+                                className={`text-xs ${p.fx_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                                title={`TC entrada: ${p.fx_rate_entry?.toFixed(4)} | TC actual: ${p.fx_rate_current?.toFixed(4)}`}
+                              >
+                                {p.fx_pnl >= 0 ? '+' : ''}{p.fx_pnl.toFixed(2)}€
+                                <span className="text-[10px] text-slate-500 ml-1">USD</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 text-xs">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <button
@@ -229,6 +243,7 @@ export default function Demo() {
                   <th className="px-3 py-1.5 text-right">P. cierre</th>
                   <th className="px-3 py-1.5 text-right">P&L</th>
                   <th className="px-3 py-1.5 text-right">%</th>
+                  <th className="px-3 py-1.5 text-right">Riesgo FX</th>
                   <th className="px-3 py-1.5 w-8"></th>
                 </tr>
               </thead>
@@ -252,8 +267,17 @@ export default function Demo() {
                         {isProfit ? '+' : ''}{p.pnl_pct.toFixed(2)}%
                       </td>
                       <td className="px-3 py-1.5 text-right">
+                        {p.fx_pnl != null ? (
+                          <span className={`text-xs ${p.fx_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {p.fx_pnl >= 0 ? '+' : ''}{p.fx_pnl.toFixed(2)}€
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
                         <button
-                          onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name })}
+                          onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name, currency: (p.currency || 'EUR') as 'EUR' | 'USD', fx_rate_entry: null, fx_rate_current: null, fx_pnl: p.fx_pnl })}
                           className="text-slate-500 hover:text-red-400 transition-colors"
                           title="Cerrar posicion (total o parcial)"
                         >

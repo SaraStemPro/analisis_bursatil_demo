@@ -135,6 +135,7 @@ export default function Admin() {
                       <th className="text-right py-1">P. actual</th>
                       <th className="text-right py-1">P&L</th>
                       <th className="text-right py-1">P&L %</th>
+                      <th className="text-right py-1">Riesgo FX</th>
                       <th className="text-left py-1 pl-3">Cartera</th>
                     </tr>
                   </thead>
@@ -150,6 +151,15 @@ export default function Admin() {
                         <td className="py-1.5 text-right text-slate-300">{fmtPrice(p.current_price)}</td>
                         <td className={`py-1.5 text-right font-medium ${pnlColor(p.pnl)}`}>{fmtMoney(p.pnl)}</td>
                         <td className={`py-1.5 text-right ${pnlColor(p.pnl_pct)}`}>{fmtPct(p.pnl_pct)}</td>
+                        <td className="py-1.5 text-right">
+                          {p.fx_pnl != null ? (
+                            <span className={`text-xs ${p.fx_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {p.fx_pnl >= 0 ? '+' : ''}{p.fx_pnl.toFixed(2)}€
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 text-xs">—</span>
+                          )}
+                        </td>
                         <td className="py-1.5 pl-3 text-slate-500 text-xs">{p.portfolio_group || '—'}</td>
                       </tr>
                     ))}
