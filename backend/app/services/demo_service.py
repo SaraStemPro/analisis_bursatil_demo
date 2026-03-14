@@ -875,18 +875,26 @@ def _invested_value(p: PositionResponse) -> float:
     """What left the balance when position was opened (FIXED, does not change).
     CFDs: margin = notional_entry × 5%.
     Stocks: avg_price × quantity.
+    For USD positions (with fx_rate_entry): converts to EUR using entry FX rate.
     """
     if _is_cfd(p.ticker):
         avg = Decimal(str(p.avg_price))
         notional_entry = _notional_value(p.ticker, avg) * p.quantity
-        return float(notional_entry * _CFD_MARGIN_PCT)
-    return float(p.avg_price) * p.quantity
+        value_usd = float(notional_entry * _CFD_MARGIN_PCT)
+    else:
+        value_usd = float(p.avg_price) * p.quantity
+
+    # Convert to EUR if position was opened with FX conversion
+    if p.fx_rate_entry is not None:
+        return value_usd / float(p.fx_rate_entry)
+    return value_usd
 
 
 def _position_value(p: PositionResponse) -> float:
     """Current value of a position (CHANGES with market price).
     CFDs: margin invested + unrealized P&L.
     Stocks: current_price × quantity.
+    P&L is already in EUR, invested_value is already in EUR.
     """
     return _invested_value(p) + float(p.pnl)
 
