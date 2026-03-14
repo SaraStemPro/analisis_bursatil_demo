@@ -57,7 +57,8 @@ export const demo = {
     username: string; email: string; balance: number; initial_balance: number;
     invested: number; total_value: number; total_pnl: number; total_pnl_pct: number;
     positions: { ticker: string; side: string; quantity: number; avg_price: number;
-      current_price: number; pnl: number; pnl_pct: number; portfolio_group: string | null }[];
+      current_price: number; pnl: number; pnl_pct: number; portfolio_group: string | null;
+      currency: string; fx_pnl: number | null }[];
   }[]>('/demo/admin/positions'),
 }
 
