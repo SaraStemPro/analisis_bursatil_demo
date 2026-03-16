@@ -111,9 +111,9 @@ export default function Dashboard() {
                 return (
                   <tr key={r.username} className={`border-b border-slate-800 ${isMe ? 'bg-emerald-900/20' : ''}`}>
                     <td className="py-2 px-2 font-medium">
-                      {idx === 0 ? <span className="text-amber-400">1</span>
-                        : idx === 1 ? <span className="text-slate-300">2</span>
-                        : idx === 2 ? <span className="text-amber-700">3</span>
+                      {idx === 0 ? '🥇'
+                        : idx === 1 ? '🥈'
+                        : idx === 2 ? '🥉'
                         : idx + 1}
                     </td>
                     <td className="py-2 px-2">
