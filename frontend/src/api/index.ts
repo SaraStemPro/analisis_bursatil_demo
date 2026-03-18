@@ -6,6 +6,7 @@ import type {
   ScreenerFilters, ScreenerResult, Cartera,
   ChatResponse, Conversation, ConversationMessages, Document,
   Strategy, BacktestRun, BacktestRunSummary, BacktestTrade, StrategyRules,
+  PortfolioBacktestRun, PortfolioRunSummary,
 } from '../types'
 
 // --- Auth ---
@@ -118,4 +119,11 @@ export const backtest = {
   getRunTrades: (id: string) => api.get<BacktestTrade[]>(`/backtest/runs/${id}/trades`),
   deleteRun: (id: string) => api.delete<void>(`/backtest/runs/${id}`),
   compare: (run_ids: string[]) => api.post<{ runs: BacktestRun[] }>('/backtest/compare', { run_ids }),
+  // Portfolio (multi-ticker)
+  universes: () => api.get<Record<string, { label: string; count: number }>>('/backtest/universes'),
+  runPortfolio: (data: { strategy_id?: string; rules?: StrategyRules; strategy_name?: string; tickers?: string[]; universe?: string; allocations?: { ticker: string; weight_pct: number }[]; start_date: string; end_date: string; interval?: string; initial_capital?: number; commission_pct?: number }) =>
+    api.post<PortfolioBacktestRun>('/backtest/run-portfolio', data),
+  portfolioRuns: () => api.get<PortfolioRunSummary[]>('/backtest/portfolio-runs'),
+  getPortfolioRun: (id: string) => api.get<PortfolioBacktestRun>(`/backtest/portfolio-runs/${id}`),
+  deletePortfolioRun: (id: string) => api.delete<void>(`/backtest/portfolio-runs/${id}`),
 }

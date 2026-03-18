@@ -9,6 +9,7 @@ from .indicator_preset import IndicatorPreset
 from .strategy import Strategy
 from .backtest_run import BacktestRun
 from .backtest_trade import BacktestTrade
+from .backtest_portfolio_run import BacktestPortfolioRun
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "Strategy",
     "BacktestRun",
     "BacktestTrade",
+    "BacktestPortfolioRun",
 ]

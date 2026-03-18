@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..models.backtest_run import BacktestRun
 from ..models.backtest_trade import BacktestTrade
+from ..models.backtest_portfolio_run import BacktestPortfolioRun
 from ..models.strategy import Strategy
 from ..schemas.backtest import (
     BacktestCompareResponse,
@@ -20,6 +21,10 @@ from ..schemas.backtest import (
     ConditionGroup,
     ConditionOperand,
     EquityPoint,
+    PortfolioBacktestRequest,
+    PortfolioBacktestResponse,
+    PortfolioRunSummary,
+    PortfolioTickerResult,
     StrategyCreateRequest,
     StrategyResponse,
     StrategyRules,
@@ -1050,6 +1055,385 @@ def _calculate_metrics(
         worst_trade_pnl=round(min(pnls), 2) if pnls else None,
         buy_and_hold_return_pct=round(bh_return_pct, 2),
     )
+
+
+# ──────────────────────────────────────
+# Portfolio backtest (multi-ticker)
+# ──────────────────────────────────────
+
+MAX_PORTFOLIO_TICKERS = 50
+
+UNIVERSE_LABELS: dict[str, str] = {
+    "sp500": "S&P 500",
+    "ibex35": "IBEX 35",
+    "tech": "Tecnología",
+    "healthcare": "Salud",
+    "finance": "Finanzas",
+    "energy": "Energía",
+    "industrials": "Industriales",
+    "consumer": "Consumo",
+    "indices": "Índices",
+    "currencies": "Divisas",
+    "commodities": "Materias Primas",
+}
+
+
+def get_backtest_universes() -> dict[str, dict]:
+    from ..services.market_service import UNIVERSES
+    return {
+        name: {"label": UNIVERSE_LABELS.get(name, name), "count": len(tickers)}
+        for name, tickers in UNIVERSES.items()
+        if name != "all"
+    }
+
+
+def run_portfolio_backtest(
+    db: Session, user_id: str, body: PortfolioBacktestRequest
+) -> PortfolioBacktestResponse:
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # 1. Resolve tickers
+    if body.universe:
+        from ..services.market_service import UNIVERSES
+        tickers = UNIVERSES.get(body.universe, [])
+        if not tickers:
+            raise HTTPException(status_code=400, detail=f"Universo '{body.universe}' no encontrado")
+    else:
+        tickers = [t.upper() for t in body.tickers]
+
+    # Limit tickers
+    if len(tickers) > MAX_PORTFOLIO_TICKERS:
+        tickers = tickers[:MAX_PORTFOLIO_TICKERS]
+
+    # 2. Resolve rules
+    if body.rules:
+        rules = body.rules
+        strategy_id = str(body.strategy_id) if body.strategy_id else None
+        strategy_name = body.strategy_name or "Prueba rápida"
+    else:
+        strategy_id = str(body.strategy_id)
+        strategy_resp = get_strategy(db, user_id, strategy_id)
+        rules = strategy_resp.rules
+        strategy_name = strategy_resp.name
+
+    # 3. Calculate allocations
+    if body.allocations:
+        alloc_map = {a.ticker.upper(): a.weight_pct for a in body.allocations}
+    else:
+        weight = round(100.0 / len(tickers), 4)
+        alloc_map = {t: weight for t in tickers}
+
+    # 4. Create portfolio run record
+    portfolio_run = BacktestPortfolioRun(
+        user_id=user_id,
+        strategy_id=strategy_id,
+        strategy_name=strategy_name,
+        universe=body.universe,
+        tickers_json=tickers,
+        allocations_json=alloc_map,
+        initial_capital=body.initial_capital,
+        commission_pct=body.commission_pct,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        interval=body.interval,
+        status="running",
+    )
+    db.add(portfolio_run)
+    db.commit()
+    db.refresh(portfolio_run)
+
+    try:
+        # 5. Run each ticker
+        ticker_results: list[PortfolioTickerResult] = []
+        failed_tickers: list[str] = []
+        child_equity_curves: dict[str, list[EquityPoint]] = {}
+        all_trades: list[dict] = []
+
+        for ticker in tickers:
+            allocated_capital = float(body.initial_capital) * alloc_map.get(ticker, 0) / 100.0
+            if allocated_capital < 1:
+                continue
+            try:
+                single_req = BacktestRunRequest(
+                    rules=rules,
+                    strategy_name=f"{strategy_name} — {ticker}",
+                    ticker=ticker,
+                    start_date=body.start_date,
+                    end_date=body.end_date,
+                    interval=body.interval,
+                    initial_capital=Decimal(str(round(allocated_capital, 2))),
+                    commission_pct=body.commission_pct,
+                )
+                result = run_backtest(db, user_id, single_req)
+
+                # Link child run to portfolio parent
+                child_run = db.query(BacktestRun).filter(BacktestRun.id == str(result.id)).first()
+                if child_run:
+                    child_run.portfolio_run_id = portfolio_run.id
+                    db.commit()
+
+                ticker_results.append(PortfolioTickerResult(
+                    ticker=ticker,
+                    weight_pct=alloc_map.get(ticker, 0),
+                    allocated_capital=allocated_capital,
+                    metrics=result.metrics,
+                    trades_count=result.metrics.total_trades if result.metrics else 0,
+                    run_id=str(result.id),
+                ))
+                if result.equity_curve:
+                    child_equity_curves[ticker] = result.equity_curve
+
+                # Collect trades for aggregate metrics
+                if result.metrics:
+                    child_trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == str(result.id)).all()
+                    for t in child_trades:
+                        all_trades.append({
+                            "pnl": float(t.pnl) if t.pnl else 0,
+                            "duration_days": t.duration_days,
+                        })
+
+            except Exception as e:
+                logger.warning(f"Portfolio backtest: ticker {ticker} failed: {e}")
+                failed_tickers.append(ticker)
+
+        if not ticker_results:
+            raise ValueError("Ningún ticker pudo ejecutarse correctamente")
+
+        # 6. Combine equity curves
+        portfolio_equity = _combine_equity_curves(child_equity_curves)
+
+        # 7. Calculate portfolio metrics
+        portfolio_metrics = _calculate_portfolio_metrics(
+            all_trades, portfolio_equity, float(body.initial_capital)
+        )
+
+        # 8. Update portfolio run record
+        portfolio_run.portfolio_metrics = portfolio_metrics.model_dump()
+        portfolio_run.portfolio_equity_curve = [
+            {"date": e.date.isoformat(), "equity": e.equity} for e in portfolio_equity
+        ]
+        portfolio_run.failed_tickers = failed_tickers
+        portfolio_run.status = "completed"
+        portfolio_run.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(portfolio_run)
+
+        return _portfolio_run_to_response(portfolio_run, portfolio_metrics, portfolio_equity, ticker_results, failed_tickers)
+
+    except Exception as e:
+        portfolio_run.status = "failed"
+        portfolio_run.error_message = str(e)
+        portfolio_run.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _combine_equity_curves(curves: dict[str, list[EquityPoint]]) -> list[EquityPoint]:
+    """Combine per-ticker equity curves into a portfolio curve by summing equities per date."""
+    if not curves:
+        return []
+
+    # Collect all unique dates and per-ticker values
+    all_dates: set[date] = set()
+    ticker_series: dict[str, dict[date, float]] = {}
+    for ticker, curve in curves.items():
+        series = {}
+        for pt in curve:
+            series[pt.date] = pt.equity
+            all_dates.add(pt.date)
+        ticker_series[ticker] = series
+
+    sorted_dates = sorted(all_dates)
+    combined: list[EquityPoint] = []
+
+    # Forward-fill: track last known equity per ticker
+    last_known: dict[str, float] = {}
+    for d in sorted_dates:
+        total = 0.0
+        for ticker, series in ticker_series.items():
+            if d in series:
+                last_known[ticker] = series[d]
+            equity = last_known.get(ticker, 0.0)
+            total += equity
+        combined.append(EquityPoint(date=d, equity=round(total, 2)))
+
+    return combined
+
+
+def _calculate_portfolio_metrics(
+    all_trades: list[dict],
+    equity_curve: list[EquityPoint],
+    initial_capital: float,
+) -> BacktestMetrics:
+    """Calculate portfolio-level metrics from the combined equity curve and all trades."""
+    if not equity_curve:
+        return BacktestMetrics(
+            total_return=0, total_return_pct=0, max_drawdown=0, max_drawdown_pct=0,
+            win_rate=0, total_trades=0,
+        )
+
+    final_equity = equity_curve[-1].equity
+    total_return = final_equity - initial_capital
+    total_return_pct = total_return / initial_capital * 100 if initial_capital > 0 else 0
+
+    # Annualized return
+    days = (equity_curve[-1].date - equity_curve[0].date).days
+    annualized = ((final_equity / initial_capital) ** (365 / days) - 1) * 100 if days > 0 and initial_capital > 0 else None
+
+    # Sharpe ratio from combined equity curve
+    equities = [e.equity for e in equity_curve]
+    daily_returns = [
+        (equities[i] - equities[i - 1]) / equities[i - 1]
+        for i in range(1, len(equities))
+        if equities[i - 1] != 0
+    ]
+    sharpe = None
+    if daily_returns and len(daily_returns) > 1:
+        import statistics
+        mean_r = statistics.mean(daily_returns)
+        std_r = statistics.stdev(daily_returns)
+        sharpe = round((mean_r / std_r) * (252 ** 0.5), 2) if std_r > 0 else None
+
+    # Max drawdown
+    peak = 0.0
+    max_dd = 0.0
+    for e in equities:
+        if e > peak:
+            peak = e
+        dd = peak - e
+        if dd > max_dd:
+            max_dd = dd
+    max_dd_pct = max_dd / peak * 100 if peak > 0 else 0
+
+    # Trade stats (from all tickers combined)
+    pnls = [t["pnl"] for t in all_trades]
+    winners = [p for p in pnls if p > 0]
+    losers = [p for p in pnls if p <= 0]
+    win_rate = len(winners) / len(pnls) * 100 if pnls else 0
+
+    gross_profit = sum(winners) if winners else 0
+    gross_loss = abs(sum(losers)) if losers else 0
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
+
+    durations = [t["duration_days"] for t in all_trades if t.get("duration_days") is not None]
+
+    return BacktestMetrics(
+        total_return=round(total_return, 2),
+        total_return_pct=round(total_return_pct, 2),
+        annualized_return_pct=round(annualized, 2) if annualized is not None else None,
+        sharpe_ratio=sharpe,
+        max_drawdown=round(max_dd, 2),
+        max_drawdown_pct=round(max_dd_pct, 2),
+        win_rate=round(win_rate, 2),
+        profit_factor=round(profit_factor, 2) if profit_factor is not None else None,
+        total_trades=len(all_trades),
+        avg_trade_duration_days=round(sum(durations) / len(durations), 1) if durations else None,
+        best_trade_pnl=round(max(pnls), 2) if pnls else None,
+        worst_trade_pnl=round(min(pnls), 2) if pnls else None,
+    )
+
+
+def _portfolio_run_to_response(
+    run: BacktestPortfolioRun,
+    metrics: BacktestMetrics | None,
+    equity_curve: list[EquityPoint],
+    ticker_results: list[PortfolioTickerResult],
+    failed_tickers: list[str],
+) -> PortfolioBacktestResponse:
+    return PortfolioBacktestResponse(
+        id=run.id,
+        strategy_name=run.strategy_name or "Portfolio",
+        tickers=run.tickers_json,
+        universe=run.universe,
+        start_date=run.start_date,
+        end_date=run.end_date,
+        initial_capital=run.initial_capital,
+        commission_pct=run.commission_pct,
+        portfolio_metrics=metrics,
+        equity_curve=equity_curve,
+        ticker_results=ticker_results,
+        failed_tickers=failed_tickers,
+        status=run.status,
+        created_at=run.created_at,
+        completed_at=run.completed_at,
+    )
+
+
+def get_portfolio_runs(db: Session, user_id: str) -> list[PortfolioRunSummary]:
+    runs = (
+        db.query(BacktestPortfolioRun)
+        .filter(BacktestPortfolioRun.user_id == user_id)
+        .order_by(BacktestPortfolioRun.created_at.desc())
+        .all()
+    )
+    results = []
+    for r in runs:
+        metrics = r.portfolio_metrics or {}
+        results.append(PortfolioRunSummary(
+            id=r.id,
+            strategy_name=r.strategy_name,
+            ticker_count=len(r.tickers_json) if r.tickers_json else 0,
+            universe=r.universe,
+            start_date=r.start_date,
+            end_date=r.end_date,
+            total_return_pct=metrics.get("total_return_pct"),
+            status=r.status,
+            created_at=r.created_at,
+        ))
+    return results
+
+
+def get_portfolio_run(db: Session, user_id: str, run_id: str) -> PortfolioBacktestResponse:
+    run = db.query(BacktestPortfolioRun).filter(
+        BacktestPortfolioRun.id == run_id,
+        BacktestPortfolioRun.user_id == user_id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Portfolio backtest no encontrado")
+
+    metrics = BacktestMetrics(**run.portfolio_metrics) if run.portfolio_metrics else None
+    equity = [
+        EquityPoint(date=date.fromisoformat(e["date"]), equity=e["equity"])
+        for e in (run.portfolio_equity_curve or [])
+    ]
+
+    # Build ticker results from child runs
+    child_runs = db.query(BacktestRun).filter(BacktestRun.portfolio_run_id == run.id).all()
+    alloc_map = run.allocations_json or {}
+    ticker_results = []
+    for cr in child_runs:
+        cr_metrics = BacktestMetrics(**cr.metrics) if cr.metrics else None
+        ticker_results.append(PortfolioTickerResult(
+            ticker=cr.ticker,
+            weight_pct=alloc_map.get(cr.ticker, 0),
+            allocated_capital=float(cr.initial_capital),
+            metrics=cr_metrics,
+            trades_count=cr_metrics.total_trades if cr_metrics else 0,
+            run_id=cr.id,
+        ))
+
+    return _portfolio_run_to_response(
+        run, metrics, equity, ticker_results, run.failed_tickers or []
+    )
+
+
+def delete_portfolio_run(db: Session, user_id: str, run_id: str) -> None:
+    run = db.query(BacktestPortfolioRun).filter(
+        BacktestPortfolioRun.id == run_id,
+        BacktestPortfolioRun.user_id == user_id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Portfolio backtest no encontrado")
+
+    # Delete child runs and their trades
+    child_runs = db.query(BacktestRun).filter(BacktestRun.portfolio_run_id == run.id).all()
+    for cr in child_runs:
+        db.query(BacktestTrade).filter(BacktestTrade.run_id == cr.id).delete()
+        db.delete(cr)
+
+    db.delete(run)
+    db.commit()
 
 
 # ──────────────────────────────────────

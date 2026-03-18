@@ -258,3 +258,109 @@ class BacktestRunSummary(BaseModel):
 
 class BacktestCompareResponse(BaseModel):
     runs: list[BacktestRunResponse]
+
+
+# --- Portfolio Backtest (multi-ticker) ---
+
+class TickerAllocation(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+    weight_pct: float = Field(gt=0, le=100, description="% del capital total asignado a este ticker")
+
+
+class PortfolioBacktestRequest(BaseModel):
+    strategy_id: UUID | None = Field(default=None)
+    rules: StrategyRules | None = Field(default=None)
+    strategy_name: str | None = Field(default=None, max_length=200)
+    tickers: list[str] | None = Field(default=None, min_length=1, max_length=50)
+    universe: str | None = Field(default=None, max_length=50)
+    allocations: list[TickerAllocation] | None = Field(default=None)
+    start_date: date
+    end_date: date
+    interval: str = Field(default="1d")
+    initial_capital: Decimal = Field(default=Decimal("100000.00"), gt=0, le=Decimal("10000000.00"))
+    commission_pct: Decimal = Field(default=Decimal("0.1"), ge=0, le=Decimal("10.0"))
+
+    @model_validator(mode="after")
+    def validate_strategy_source(self):
+        if not self.strategy_id and not self.rules:
+            raise ValueError("Debe proporcionar 'strategy_id' o 'rules'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_ticker_source(self):
+        if not self.tickers and not self.universe:
+            raise ValueError("Debe proporcionar 'tickers' o 'universe'")
+        if self.tickers and self.universe:
+            raise ValueError("Proporcione solo 'tickers' o 'universe', no ambos")
+        return self
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.end_date <= self.start_date:
+            raise ValueError("'end_date' debe ser posterior a 'start_date'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        valid = {"1m", "5m", "15m", "1h", "4h", "1d", "1wk"}
+        if self.interval not in valid:
+            raise ValueError(f"'interval' debe ser uno de: {', '.join(sorted(valid))}")
+        return self
+
+    @model_validator(mode="after")
+    def validate_allocations(self):
+        if self.allocations and self.tickers:
+            alloc_tickers = {a.ticker.upper() for a in self.allocations}
+            input_tickers = {t.upper() for t in self.tickers}
+            if alloc_tickers != input_tickers:
+                raise ValueError("Los tickers en 'allocations' deben coincidir con 'tickers'")
+            total = sum(a.weight_pct for a in self.allocations)
+            if abs(total - 100.0) > 1.0:
+                raise ValueError(f"Los pesos deben sumar ~100% (actual: {total:.1f}%)")
+        return self
+
+
+class PortfolioTickerResult(BaseModel):
+    ticker: str
+    weight_pct: float
+    allocated_capital: float
+    metrics: BacktestMetrics | None = None
+    trades_count: int
+    run_id: str
+
+    model_config = {"from_attributes": True}
+
+
+class PortfolioBacktestResponse(BaseModel):
+    id: str
+    strategy_name: str
+    tickers: list[str]
+    universe: str | None = None
+    start_date: date
+    end_date: date
+    initial_capital: Decimal
+    commission_pct: Decimal
+    portfolio_metrics: BacktestMetrics | None = None
+    equity_curve: list[EquityPoint] | None = None
+    ticker_results: list[PortfolioTickerResult] = []
+    failed_tickers: list[str] = []
+    status: str = "running"
+    error_message: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PortfolioRunSummary(BaseModel):
+    id: str
+    strategy_name: str | None = None
+    ticker_count: int
+    universe: str | None = None
+    start_date: date
+    end_date: date
+    total_return_pct: float | None = None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

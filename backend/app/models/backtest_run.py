@@ -27,11 +27,15 @@ class BacktestRun(Base):
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
+    portfolio_run_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("backtest_portfolio_runs.id"), nullable=True)
+
     user: Mapped["User"] = relationship(back_populates="backtest_runs")
     strategy: Mapped["Strategy"] = relationship(back_populates="backtest_runs")
     trades: Mapped[list["BacktestTrade"]] = relationship(back_populates="run")
+    portfolio_run: Mapped["BacktestPortfolioRun"] = relationship(back_populates="child_runs")
 
 
 from .user import User  # noqa: E402
 from .strategy import Strategy  # noqa: E402
 from .backtest_trade import BacktestTrade  # noqa: E402
+from .backtest_portfolio_run import BacktestPortfolioRun  # noqa: E402

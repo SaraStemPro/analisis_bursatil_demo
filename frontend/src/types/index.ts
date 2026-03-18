@@ -400,3 +400,50 @@ export interface BacktestRunSummary {
   total_trades: number | null
   created_at: string
 }
+
+// --- Portfolio Backtest (multi-ticker) ---
+
+export interface TickerAllocation {
+  ticker: string
+  weight_pct: number
+}
+
+export interface PortfolioTickerResult {
+  ticker: string
+  weight_pct: number
+  allocated_capital: number
+  metrics: BacktestMetrics | null
+  trades_count: number
+  run_id: string
+}
+
+export interface PortfolioBacktestRun {
+  id: string
+  strategy_name: string
+  tickers: string[]
+  universe: string | null
+  start_date: string
+  end_date: string
+  initial_capital: number
+  commission_pct: number
+  portfolio_metrics: BacktestMetrics | null
+  equity_curve: EquityPoint[] | null
+  ticker_results: PortfolioTickerResult[]
+  failed_tickers: string[]
+  status: BacktestStatus
+  error_message: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface PortfolioRunSummary {
+  id: string
+  strategy_name: string | null
+  ticker_count: number
+  universe: string | null
+  start_date: string
+  end_date: string
+  total_return_pct: number | null
+  status: BacktestStatus
+  created_at: string
+}

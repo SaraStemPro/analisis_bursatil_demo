@@ -74,11 +74,16 @@ from .backtest import (
     ConditionGroup,
     ConditionOperand,
     EquityPoint,
+    PortfolioBacktestRequest,
+    PortfolioBacktestResponse,
+    PortfolioRunSummary,
+    PortfolioTickerResult,
     RiskManagement,
     StrategyCreateRequest,
     StrategyResponse,
     StrategyRules,
     StrategyUpdateRequest,
+    TickerAllocation,
 )
 
 __all__ = [
@@ -159,4 +164,9 @@ __all__ = [
     "StrategyResponse",
     "StrategyRules",
     "StrategyUpdateRequest",
+    "PortfolioBacktestRequest",
+    "PortfolioBacktestResponse",
+    "PortfolioRunSummary",
+    "PortfolioTickerResult",
+    "TickerAllocation",
 ]

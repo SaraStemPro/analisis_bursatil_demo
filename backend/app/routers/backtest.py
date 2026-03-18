@@ -10,6 +10,9 @@ from ..schemas.backtest import (
     BacktestRunResponse,
     BacktestRunSummary,
     BacktestTradeResponse,
+    PortfolioBacktestRequest,
+    PortfolioBacktestResponse,
+    PortfolioRunSummary,
     StrategyCreateRequest,
     StrategyResponse,
     StrategyUpdateRequest,
@@ -127,3 +130,45 @@ def compare(
     current_user: User = Depends(get_current_user),
 ):
     return backtest_service.compare_runs(db, current_user.id, body.run_ids)
+
+
+# --- Portfolio (multi-ticker) ---
+
+@router.get("/universes")
+def get_universes():
+    return backtest_service.get_backtest_universes()
+
+
+@router.post("/run-portfolio", response_model=PortfolioBacktestResponse, status_code=201)
+def run_portfolio_backtest(
+    body: PortfolioBacktestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return backtest_service.run_portfolio_backtest(db, current_user.id, body)
+
+
+@router.get("/portfolio-runs", response_model=list[PortfolioRunSummary])
+def list_portfolio_runs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return backtest_service.get_portfolio_runs(db, current_user.id)
+
+
+@router.get("/portfolio-runs/{run_id}", response_model=PortfolioBacktestResponse)
+def get_portfolio_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return backtest_service.get_portfolio_run(db, current_user.id, run_id)
+
+
+@router.delete("/portfolio-runs/{run_id}", status_code=204)
+def delete_portfolio_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    backtest_service.delete_portfolio_run(db, current_user.id, run_id)

@@ -74,6 +74,9 @@ with engine.connect() as conn:
                 conn.execute(text("DROP TABLE backtest_runs"))
                 conn.execute(text("ALTER TABLE backtest_runs_new RENAME TO backtest_runs"))
                 conn.commit()
+        if "portfolio_run_id" not in columns:
+            conn.execute(text("ALTER TABLE backtest_runs ADD COLUMN portfolio_run_id VARCHAR(36)"))
+            conn.commit()
 
 
 # Seed: create default course, professor, and demo student
