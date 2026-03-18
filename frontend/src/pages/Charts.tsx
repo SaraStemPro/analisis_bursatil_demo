@@ -76,9 +76,14 @@ export default function Charts() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [period, setPeriod] = useState('3mo')
   const [interval, setInterval] = useState('1d')
-  const [activeIndicators, setActiveIndicators] = useState<IndicatorRequest[]>([])
+  // Each active indicator has a unique id to allow multiple instances of SMA/EMA
+  type ActiveIndicator = IndicatorRequest & { id: string }
+  const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>([])
   const [indicatorColors, setIndicatorColors] = useState<Record<string, string>>({})
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
+
+  // Build request list for backend (strip id)
+  const indicatorRequests: IndicatorRequest[] = activeIndicators.map(({ name, params }) => ({ name, params }))
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
 
   // Feature 11: pattern selector — set of active pattern types
@@ -180,9 +185,9 @@ export default function Charts() {
   })
 
   const { data: indicatorData } = useQuery({
-    queryKey: ['indicators', ticker, period, interval, activeIndicators],
-    queryFn: () => indicators.calculate({ ticker, period, interval, indicators: activeIndicators }),
-    enabled: activeIndicators.length > 0,
+    queryKey: ['indicators', ticker, period, interval, indicatorRequests],
+    queryFn: () => indicators.calculate({ ticker, period, interval, indicators: indicatorRequests }),
+    enabled: indicatorRequests.length > 0,
   })
 
   // Strategy signals
@@ -218,7 +223,7 @@ export default function Charts() {
   )
 
   const getIndicatorColor = useCallback(
-    (name: string, idx: number) => indicatorColors[name] ?? INDICATOR_COLORS[idx % INDICATOR_COLORS.length],
+    (key: string, idx: number) => indicatorColors[key] ?? INDICATOR_COLORS[idx % INDICATOR_COLORS.length],
     [indicatorColors],
   )
 
@@ -398,15 +403,15 @@ export default function Charts() {
       ? indicatorData.dates.map((d) => toChartTime(d, interval))
       : times
     if (indicatorData) {
-      indicatorData.indicators.forEach((ind) => {
+      indicatorData.indicators.forEach((ind, respIdx) => {
         const def = getIndicatorDef(ind.name)
         if (!def?.overlay || ind.name === 'FRACTALS') return
 
-        const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
-        const baseColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
+        const ai = activeIndicators[respIdx]
+        const baseColor = ai ? getIndicatorColor(ai.id, respIdx) : INDICATOR_COLORS[respIdx % INDICATOR_COLORS.length]
 
         Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
-          const seriesColor = subIdx === 0 ? baseColor : INDICATOR_COLORS[(aiIdx + subIdx) % INDICATOR_COLORS.length]
+          const seriesColor = subIdx === 0 ? baseColor : INDICATOR_COLORS[(respIdx + subIdx) % INDICATOR_COLORS.length]
           const lineSeries = chart.addSeries(LineSeries, {
             color: seriesColor,
             lineWidth: 2,
@@ -625,24 +630,39 @@ export default function Charts() {
     oscChartsRef.current.delete(chartId)
   }, [])
 
-  const toggleIndicator = (ind: IndicatorDefinition) => {
+  // Indicators that can have multiple instances
+  const MULTI_INSTANCE = new Set(['SMA', 'EMA'])
+
+  const addIndicator = (ind: IndicatorDefinition) => {
     setActiveIndicators((prev) => {
-      const exists = prev.find((i) => i.name === ind.name)
-      if (exists) {
-        setEditingIndicator(null)
-        return prev.filter((i) => i.name !== ind.name)
-      }
       if (prev.length >= 5) return prev
+      // For non-multi indicators, check if already exists
+      if (!MULTI_INSTANCE.has(ind.name) && prev.some((i) => i.name === ind.name)) return prev
       const params: Record<string, number> = {}
       ind.params.forEach((p) => { params[p.name] = p.default })
-      return [...prev, { name: ind.name, params }]
+      return [...prev, { id: crypto.randomUUID(), name: ind.name, params }]
     })
   }
 
-  const updateParam = (indicatorName: string, paramName: string, value: number) => {
+  const removeIndicator = (id: string) => {
+    setEditingIndicator(null)
+    setActiveIndicators((prev) => prev.filter((i) => i.id !== id))
+    setIndicatorColors((prev) => { const next = { ...prev }; delete next[id]; return next })
+  }
+
+  const toggleIndicator = (ind: IndicatorDefinition) => {
+    const existing = activeIndicators.find((i) => i.name === ind.name)
+    if (existing && !MULTI_INSTANCE.has(ind.name)) {
+      removeIndicator(existing.id)
+    } else {
+      addIndicator(ind)
+    }
+  }
+
+  const updateParam = (indicatorId: string, paramName: string, value: number) => {
     setActiveIndicators((prev) =>
       prev.map((ind) =>
-        ind.name === indicatorName
+        ind.id === indicatorId
           ? { ...ind, params: { ...ind.params, [paramName]: value } }
           : ind
       )
@@ -1006,10 +1026,12 @@ export default function Charts() {
       </div>
 
       {/* Oscillator charts — separate chart instances synced to main */}
-      {oscillatorIndicators.map((ind) => {
-        const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
-        const oscColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
-        const oscChartId = `osc-${ind.name}`
+      {oscillatorIndicators.map((ind, oscIdx) => {
+        // Find the matching activeIndicator by looking through all indicator responses
+        const respIdx = indicatorData?.indicators.indexOf(ind) ?? -1
+        const ai = respIdx >= 0 ? activeIndicators[respIdx] : null
+        const oscColor = ai ? getIndicatorColor(ai.id, respIdx) : INDICATOR_COLORS[oscIdx % INDICATOR_COLORS.length]
+        const oscChartId = ai ? `osc-${ai.id}` : `osc-${ind.name}-${oscIdx}`
         return (
           <OscillatorChart
             key={ind.name}
@@ -1034,36 +1056,40 @@ export default function Charts() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {activeIndicators.map((ind, idx) => {
             const def = getIndicatorDef(ind.name)
-            const indData = indicatorData?.indicators.find((d) => d.name === ind.name)
-            const color = getIndicatorColor(ind.name, idx)
-            const isEditing = editingIndicator === ind.name
+            const indData = indicatorData?.indicators[idx]
+            const color = getIndicatorColor(ind.id, idx)
+            const isEditing = editingIndicator === ind.id
+            // Display name with params for multi-instance (e.g. "SMA (50)")
+            const paramSummary = MULTI_INSTANCE.has(ind.name) && ind.params.length
+              ? ` (${Object.values(ind.params).join(', ')})`
+              : ''
 
             return (
-              <div key={ind.name} className="bg-slate-900 rounded-lg p-3 border border-slate-700">
+              <div key={ind.id} className="bg-slate-900 rounded-lg p-3 border border-slate-700">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <label className="relative w-3 h-3 rounded-full cursor-pointer" style={{ backgroundColor: color }}>
                       <input
                         type="color"
                         value={color}
-                        onChange={(e) => setIndicatorColors((prev) => ({ ...prev, [ind.name]: e.target.value }))}
+                        onChange={(e) => setIndicatorColors((prev) => ({ ...prev, [ind.id]: e.target.value }))}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
                     </label>
-                    <span className="font-medium text-sm">{def?.display_name ?? ind.name}</span>
+                    <span className="font-medium text-sm">{def?.display_name ?? ind.name}{paramSummary}</span>
                     {def && !def.overlay && <span className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded">osc</span>}
                   </div>
                   <div className="flex items-center gap-1">
                     {def && def.params.length > 0 && (
                       <button
-                        onClick={() => setEditingIndicator(isEditing ? null : ind.name)}
+                        onClick={() => setEditingIndicator(isEditing ? null : ind.id)}
                         className={`p-1 rounded hover:bg-slate-700 ${isEditing ? 'text-emerald-400' : 'text-slate-500'}`}
                       >
                         <Settings2 size={14} />
                       </button>
                     )}
                     <button
-                      onClick={() => toggleIndicator(def!)}
+                      onClick={() => removeIndicator(ind.id)}
                       className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-red-400"
                     >
                       <X size={14} />
@@ -1092,7 +1118,7 @@ export default function Charts() {
                           value={ind.params[p.name] ?? p.default}
                           min={p.min ?? undefined}
                           max={p.max ?? undefined}
-                          onChange={(e) => updateParam(ind.name, p.name, Number(e.target.value))}
+                          onChange={(e) => updateParam(ind.id, p.name, Number(e.target.value))}
                           className="flex-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-emerald-500"
                         />
                       </div>
@@ -1115,16 +1141,18 @@ export default function Charts() {
                 <p className="text-xs font-medium text-slate-400 uppercase mb-1">{cat}</p>
                 <div className="flex flex-wrap gap-2">
                   {catalog.indicators.filter((i) => i.category === cat && i.name !== 'VWAP').map((ind) => {
-                    const active = activeIndicators.some((a) => a.name === ind.name)
+                    const count = activeIndicators.filter((a) => a.name === ind.name).length
+                    const isMulti = MULTI_INSTANCE.has(ind.name)
                     return (
                       <button
                         key={ind.name}
-                        onClick={() => toggleIndicator(ind)}
+                        onClick={() => isMulti ? addIndicator(ind) : toggleIndicator(ind)}
+                        disabled={activeIndicators.length >= 5 && count === 0}
                         className={`px-3 py-1 rounded text-sm transition-colors ${
-                          active ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        }`}
+                          count > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        } disabled:opacity-40`}
                       >
-                        {ind.display_name}
+                        {ind.display_name}{count > 0 && isMulti ? ` (${count})` : ''}{isMulti ? ' +' : ''}
                       </button>
                     )
                   })}
