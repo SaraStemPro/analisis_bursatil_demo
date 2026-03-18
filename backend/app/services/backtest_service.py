@@ -1132,7 +1132,11 @@ def _calculate_metrics(
 # ──────────────────────────────────────
 
 def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsResponse:
-    """Evaluate strategy conditions on historical data and return signal points."""
+    """Evaluate strategy conditions on historical data and return signal points.
+
+    Uses rising-edge detection: only emits a signal when condition transitions
+    from false to true (not when it stays true across consecutive bars).
+    """
     # Resolve rules
     if body.rules:
         rules = body.rules
@@ -1151,6 +1155,9 @@ def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsR
     if df.empty:
         raise HTTPException(status_code=400, detail=f"Sin datos para {ticker}")
 
+    # Save the first visible date before extending with warmup data
+    first_visible_date = df.index[0]
+
     # If warmup is needed, download extra data before the visible range
     if warmup_bars > 10:
         if interval in ("1m", "5m", "15m"):
@@ -1164,14 +1171,17 @@ def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsR
                                  end=df.index[-1].strftime("%Y-%m-%d"),
                                  interval=interval)
         if not df_extended.empty:
-            # Merge: use extended data before visible range, keep original data
             df = pd.concat([df_extended[~df_extended.index.isin(df.index)], df]).sort_index()
 
     # Compute indicators
     indicator_data = _compute_all_indicators(df, rules)
 
-    # Find visible start index (skip warmup)
-    visible_start = max(warmup_bars, 0)
+    # Find exact visible start index using saved date (not approximate warmup_bars)
+    visible_start = 0
+    for idx_i in range(len(df)):
+        if df.index[idx_i] >= first_visible_date:
+            visible_start = idx_i
+            break
 
     side = rules.side
     is_both = side == StrategySide.both
@@ -1179,36 +1189,46 @@ def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsR
 
     signals: list[Signal] = []
 
+    # Rising-edge state: track previous bar's condition result per signal type
+    prev: dict[str, bool] = {
+        "entry_long": False, "exit_long": False,
+        "entry_short": False, "exit_short": False,
+    }
+
+    def _rising_edge(key: str, current: bool) -> bool:
+        """Returns True only on transition from False to True."""
+        was = prev[key]
+        prev[key] = current
+        return current and not was
+
     for i in range(visible_start, len(df)):
         dt = df.index[i]
         date_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
 
         if is_both:
             if has_independent_short:
-                # Independent conditions for long and short
-                if _evaluate_group(rules.entry, i, df, indicator_data):
+                if _rising_edge("entry_long", _evaluate_group(rules.entry, i, df, indicator_data)):
                     signals.append(Signal(date=date_str, type="entry_long"))
-                if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+                if _rising_edge("exit_long", _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)):
                     signals.append(Signal(date=date_str, type="exit_long"))
-                if _evaluate_group(rules.entry_short, i, df, indicator_data):
+                if _rising_edge("entry_short", _evaluate_group(rules.entry_short, i, df, indicator_data)):
                     signals.append(Signal(date=date_str, type="entry_short"))
-                if _evaluate_group(rules.exit_short, i, df, indicator_data, is_exit=True):
+                if _rising_edge("exit_short", _evaluate_group(rules.exit_short, i, df, indicator_data, is_exit=True)):
                     signals.append(Signal(date=date_str, type="exit_short"))
             else:
-                # Legacy: entry → long, exit → short
-                if _evaluate_group(rules.entry, i, df, indicator_data):
+                if _rising_edge("entry_long", _evaluate_group(rules.entry, i, df, indicator_data)):
                     signals.append(Signal(date=date_str, type="entry_long"))
-                if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+                if _rising_edge("entry_short", _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)):
                     signals.append(Signal(date=date_str, type="entry_short"))
         elif side == StrategySide.short:
-            if _evaluate_group(rules.entry, i, df, indicator_data):
+            if _rising_edge("entry_short", _evaluate_group(rules.entry, i, df, indicator_data)):
                 signals.append(Signal(date=date_str, type="entry_short"))
-            if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+            if _rising_edge("exit_short", _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)):
                 signals.append(Signal(date=date_str, type="exit_short"))
         else:  # long
-            if _evaluate_group(rules.entry, i, df, indicator_data):
+            if _rising_edge("entry_long", _evaluate_group(rules.entry, i, df, indicator_data)):
                 signals.append(Signal(date=date_str, type="entry_long"))
-            if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+            if _rising_edge("exit_long", _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)):
                 signals.append(Signal(date=date_str, type="exit_long"))
 
     return SignalsResponse(signals=signals, ticker=ticker)
