@@ -392,6 +392,11 @@ export default function Charts() {
 
     // Draw overlay indicators — use same color as the indicator cards
     // (FRACTALS rendered as markers below, not as LineSeries)
+    // Use indicator's own dates if available (prevents misalignment when
+    // history and indicator endpoints return different bar counts)
+    const indTimes = indicatorData?.dates
+      ? indicatorData.dates.map((d) => toChartTime(d, interval))
+      : times
     if (indicatorData) {
       indicatorData.indicators.forEach((ind) => {
         const def = getIndicatorDef(ind.name)
@@ -409,7 +414,7 @@ export default function Charts() {
             priceScaleId: 'right',
           })
           const lineData = values
-            .map((v, i) => (v !== null ? { time: times[i], value: v } : null))
+            .map((v, i) => (v !== null && i < indTimes.length ? { time: indTimes[i], value: v } : null))
             .filter(Boolean) as { time: Time; value: number }[]
           lineSeries.setData(lineData)
         })
@@ -476,9 +481,9 @@ export default function Charts() {
       const fractalsInd = indicatorData.indicators.find((ind) => ind.name === 'FRACTALS')
       if (fractalsInd) {
         fractalsInd.data.fractal_up?.forEach((v, i) => {
-          if (v !== null) {
+          if (v !== null && i < indTimes.length) {
             allMarkers.push({
-              time: times[i],
+              time: indTimes[i],
               position: 'aboveBar',
               shape: 'arrowDown',
               color: '#22d3ee',
@@ -487,9 +492,9 @@ export default function Charts() {
           }
         })
         fractalsInd.data.fractal_down?.forEach((v, i) => {
-          if (v !== null) {
+          if (v !== null && i < indTimes.length) {
             allMarkers.push({
-              time: times[i],
+              time: indTimes[i],
               position: 'belowBar',
               shape: 'arrowUp',
               color: '#f59e0b',
@@ -587,7 +592,10 @@ export default function Charts() {
     return def && !def.overlay
   }) ?? []
 
-  const oscTimes = history?.data.map((d) => toChartTime(d.date, interval)) ?? []
+  // Use indicator dates for oscillators to match indicator data alignment
+  const oscTimes = indicatorData?.dates
+    ? indicatorData.dates.map((d) => toChartTime(d, interval))
+    : (history?.data.map((d) => toChartTime(d.date, interval)) ?? [])
 
   // Handle synced range from oscillators — logical ranges now aligned via spacer series
   const handleOscRangeChange = useCallback((range: LogicalRange | null, sourceChartId: string) => {

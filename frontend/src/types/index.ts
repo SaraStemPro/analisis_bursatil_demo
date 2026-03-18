@@ -94,6 +94,7 @@ export interface CalculateResponse {
   period: string
   interval: string
   indicators: IndicatorSeries[]
+  dates?: string[]
 }
 
 export interface Preset {

@@ -64,6 +64,7 @@ class CalculateResponse(BaseModel):
     period: str
     interval: str
     indicators: list[IndicatorSeries]
+    dates: list[str] = []
 
 
 class PresetResponse(BaseModel):

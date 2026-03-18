@@ -278,11 +278,15 @@ def calculate_indicators(
 
     results = [_compute_indicator(df, ind) for ind in indicators]
 
+    # Return dates so frontend can align indicator data with chart times
+    dates = [dt.isoformat() for dt in df.index]
+
     return CalculateResponse(
         ticker=ticker.upper(),
         period=period,
         interval=interval,
         indicators=results,
+        dates=dates,
     )
 
 
