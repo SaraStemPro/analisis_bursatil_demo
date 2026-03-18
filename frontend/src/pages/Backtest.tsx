@@ -252,16 +252,16 @@ export default function Backtest() {
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold">Backtesting</h1>
           {/* Mode toggle */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
+          <div className="flex bg-slate-800 rounded-lg p-0.5">
             <button
               onClick={() => { setMode('single'); setActivePortfolioRun(null) }}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${mode === 'single' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-gray-900'}`}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${mode === 'single' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Un ticker
             </button>
             <button
               onClick={() => { setMode('portfolio'); setActiveRun(null) }}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1.5 ${mode === 'portfolio' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-gray-900'}`}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1.5 ${mode === 'portfolio' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               <Briefcase size={14} /> Portfolio
             </button>
@@ -284,26 +284,26 @@ export default function Backtest() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Strategy selector */}
-        <div className="bg-white rounded-lg p-5 border border-gray-300">
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <h2 className="font-semibold mb-3">Estrategias</h2>
 
           {templates && templates.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs text-gray-400 mb-2">Plantillas predefinidas</p>
+              <p className="text-xs text-slate-500 mb-2">Plantillas predefinidas</p>
               <div className="space-y-1.5">
                 {templates.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => setSelectedStrategy(s)}
                     className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                      selectedStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-gray-100 hover:bg-gray-200'
+                      selectedStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-slate-800 hover:bg-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{s.name}</span>
                       <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded">plantilla</span>
                     </div>
-                    {s.description && <p className="text-xs text-gray-500 mt-1">{s.description}</p>}
+                    {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
                   </button>
                 ))}
               </div>
@@ -311,41 +311,41 @@ export default function Backtest() {
           )}
 
           <div>
-            <p className="text-xs text-gray-400 mb-2">Mis estrategias</p>
+            <p className="text-xs text-slate-500 mb-2">Mis estrategias</p>
             <div className="space-y-1.5">
               {strategies && strategies.length > 0 ? strategies.map((s) => (
                 <div
                   key={s.id}
                   className={`flex items-center gap-1 rounded text-sm transition-colors ${
-                    selectedStrategy?.id === s.id ? 'bg-purple-900/50 border border-purple-600' : 'bg-gray-100 hover:bg-gray-200'
+                    selectedStrategy?.id === s.id ? 'bg-purple-900/50 border border-purple-600' : 'bg-slate-800 hover:bg-slate-700'
                   }`}
                 >
                   <button onClick={() => setSelectedStrategy(s)} className="flex-1 text-left px-3 py-2">
                     <span className="font-medium">{s.name}</span>
-                    {s.description && <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>}
+                    {s.description && <p className="text-xs text-slate-400 mt-0.5">{s.description}</p>}
                   </button>
-                  <button onClick={() => { setEditingStrategy(s); setShowBuilder(true) }} className="p-1.5 text-gray-400 hover:text-purple-400" title="Editar">
+                  <button onClick={() => { setEditingStrategy(s); setShowBuilder(true) }} className="p-1.5 text-slate-500 hover:text-purple-400" title="Editar">
                     <Pencil size={13} />
                   </button>
-                  <button onClick={() => { if (confirm(`¿Eliminar "${s.name}"?`)) deleteStratMut.mutate(s.id) }} className="p-1.5 text-gray-400 hover:text-red-400 mr-1" title="Eliminar">
+                  <button onClick={() => { if (confirm(`¿Eliminar "${s.name}"?`)) deleteStratMut.mutate(s.id) }} className="p-1.5 text-slate-500 hover:text-red-400 mr-1" title="Eliminar">
                     <Trash2 size={13} />
                   </button>
                 </div>
               )) : (
-                <p className="text-xs text-gray-400 italic">Crea tu primera estrategia con el botón de arriba</p>
+                <p className="text-xs text-slate-500 italic">Crea tu primera estrategia con el botón de arriba</p>
               )}
             </div>
           </div>
         </div>
 
         {/* Run config */}
-        <div className={`bg-white rounded-lg p-5 border border-gray-300 ${selectedStrategy ? 'lg:col-span-2' : ''}`}>
+        <div className={`bg-slate-900 rounded-lg p-5 border border-slate-700 ${selectedStrategy ? 'lg:col-span-2' : ''}`}>
           <h2 className="font-semibold mb-3 flex items-center gap-2">
-            <Settings2 size={16} className="text-gray-500" /> Configuración
+            <Settings2 size={16} className="text-slate-400" /> Configuración
           </h2>
 
           {!selectedStrategy && (
-            <p className="text-sm text-gray-400 italic">Selecciona una estrategia de la lista para configurar y ejecutar</p>
+            <p className="text-sm text-slate-500 italic">Selecciona una estrategia de la lista para configurar y ejecutar</p>
           )}
 
           {selectedStrategy && customRules && (
@@ -363,7 +363,7 @@ export default function Backtest() {
                   <option value="both">Long + Short</option>
                 </select>
               </div>
-              {selectedStrategy.description && <p className="text-xs text-gray-500 -mt-2">{selectedStrategy.description}</p>}
+              {selectedStrategy.description && <p className="text-xs text-slate-400 -mt-2">{selectedStrategy.description}</p>}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Left: Rules */}
@@ -400,16 +400,16 @@ export default function Backtest() {
                   )}
 
                   <div>
-                    <label className="text-sm text-gray-500">Fecha inicio</label>
-                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 focus:outline-none focus:border-emerald-500" />
+                    <label className="text-sm text-slate-400">Fecha inicio</label>
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-emerald-500" />
                   </div>
                   <div>
-                    <label className="text-sm text-gray-500">Fecha fin</label>
-                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 focus:outline-none focus:border-emerald-500" />
+                    <label className="text-sm text-slate-400">Fecha fin</label>
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-emerald-500" />
                   </div>
                   <div>
-                    <label className="text-sm text-gray-500">Timeframe</label>
-                    <select value={interval} onChange={(e) => setInterval(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 focus:outline-none focus:border-emerald-500">
+                    <label className="text-sm text-slate-400">Timeframe</label>
+                    <select value={interval} onChange={(e) => setInterval(e.target.value)} className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-emerald-500">
                       <option value="1d">Diario</option>
                       <option value="1h">1 hora</option>
                       <option value="4h">4 horas</option>
@@ -446,7 +446,7 @@ export default function Backtest() {
 
         {/* Run history — only shows when no strategy selected */}
         {!selectedStrategy && (
-          <div className="bg-white rounded-lg p-5 border border-gray-300">
+          <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
             <h2 className="font-semibold mb-3">Historial</h2>
             <RunHistory runs={runs} portfolioRuns={portfolioRuns} onView={viewRun} onViewPortfolio={viewPortfolioRun} onDelete={(id) => deleteMut.mutate(id)} onDeletePortfolio={(id) => deletePortfolioMut.mutate(id)} onDeleteAll={() => { if (confirm('¿Borrar todo el historial de backtests?')) deleteAllMut.mutate() }} />
           </div>
@@ -455,7 +455,7 @@ export default function Backtest() {
 
       {/* History below when strategy is selected */}
       {selectedStrategy && ((runs && runs.length > 0) || (portfolioRuns && portfolioRuns.length > 0)) && (
-        <div className="bg-white rounded-lg p-5 border border-gray-300">
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <h2 className="font-semibold mb-3">Historial de backtests</h2>
           <RunHistory runs={runs} portfolioRuns={portfolioRuns} onView={viewRun} onViewPortfolio={viewPortfolioRun} onDelete={(id) => deleteMut.mutate(id)} onDeletePortfolio={(id) => deletePortfolioMut.mutate(id)} onDeleteAll={() => { if (confirm('¿Borrar todo el historial de backtests?')) deleteAllMut.mutate() }} />
         </div>
@@ -475,11 +475,11 @@ export default function Backtest() {
       {/* Portfolio results */}
       {activePortfolioRun && activePortfolioRun.status === 'completed' && activePortfolioRun.portfolio_metrics && (
         <div className="space-y-4">
-          <div className="bg-white rounded-lg p-5 border border-cyan-700">
+          <div className="bg-slate-900 rounded-lg p-5 border border-cyan-700">
             <h2 className="font-semibold mb-3 flex items-center gap-2">
               <Briefcase size={18} className="text-cyan-400" />
               Portfolio — {activePortfolioRun.strategy_name}
-              <span className="text-sm text-gray-500 font-normal">
+              <span className="text-sm text-slate-400 font-normal">
                 ({activePortfolioRun.tickers.length} tickers{activePortfolioRun.universe ? ` — ${activePortfolioRun.universe}` : ''})
               </span>
             </h2>
@@ -495,18 +495,18 @@ export default function Backtest() {
           )}
 
           {activePortfolioRun.equity_curve && (
-            <div className="bg-white rounded-lg p-5 border border-gray-300">
+            <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
               <h3 className="font-semibold mb-3">Curva de Equity (Portfolio)</h3>
               <EquityCurveChart data={activePortfolioRun.equity_curve} color="#06b6d4" />
             </div>
           )}
 
           {/* Per-ticker breakdown */}
-          <div className="bg-white rounded-lg p-5 border border-gray-300">
+          <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
             <h3 className="font-semibold mb-3">Desglose por ticker ({activePortfolioRun.ticker_results.length})</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="text-gray-500 text-left border-b border-gray-300">
+                <thead><tr className="text-slate-400 text-left border-b border-slate-700">
                   <th className="pb-2 px-2 w-8"></th>
                   <th className="pb-2 px-2">Ticker</th>
                   <th className="pb-2 px-2 text-right">Peso</th>
@@ -565,17 +565,17 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
 }) {
   return (
     <div className="space-y-2">
-      <label className="text-sm text-gray-500">Tickers del portfolio</label>
+      <label className="text-sm text-slate-400">Tickers del portfolio</label>
       <div className="flex gap-1.5">
         <button
           onClick={() => setTickerSource('manual')}
-          className={`text-xs px-2.5 py-1 rounded ${tickerSource === 'manual' ? 'bg-cyan-600 text-white' : 'bg-gray-200 text-gray-500'}`}
+          className={`text-xs px-2.5 py-1 rounded ${tickerSource === 'manual' ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-400'}`}
         >
           Manual
         </button>
         <button
           onClick={() => setTickerSource('universe')}
-          className={`text-xs px-2.5 py-1 rounded ${tickerSource === 'universe' ? 'bg-cyan-600 text-white' : 'bg-gray-200 text-gray-500'}`}
+          className={`text-xs px-2.5 py-1 rounded ${tickerSource === 'universe' ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-400'}`}
         >
           Universo
         </button>
@@ -585,7 +585,7 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
         <select
           value={selectedUniverse}
           onChange={(e) => setSelectedUniverse(e.target.value)}
-          className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm"
+          className="block w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
         >
           <option value="">Seleccionar universo...</option>
           {universes && Object.entries(universes).map(([key, u]) => (
@@ -610,9 +610,9 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
           {portfolioTickers.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {portfolioTickers.map(t => (
-                <span key={t} className="inline-flex items-center gap-1 bg-gray-200 rounded px-2 py-0.5 text-xs text-gray-900">
+                <span key={t} className="inline-flex items-center gap-1 bg-slate-700 rounded px-2 py-0.5 text-xs text-white">
                   {t}
-                  <button onClick={() => removeTicker(t)} className="text-gray-500 hover:text-red-400"><X size={12} /></button>
+                  <button onClick={() => removeTicker(t)} className="text-slate-400 hover:text-red-400"><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -621,27 +621,27 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
           {portfolioTickers.length >= 2 && (
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">Capital:</label>
+                <label className="text-xs text-slate-400">Capital:</label>
                 <button
                   onClick={() => setAllocMode('equal')}
-                  className={`text-xs px-2 py-0.5 rounded ${allocMode === 'equal' ? 'bg-cyan-800 text-cyan-300' : 'bg-gray-200 text-gray-500'}`}
+                  className={`text-xs px-2 py-0.5 rounded ${allocMode === 'equal' ? 'bg-cyan-800 text-cyan-300' : 'bg-slate-700 text-slate-400'}`}
                 >
                   Equitativo
                 </button>
                 <button
                   onClick={() => setAllocMode('custom')}
-                  className={`text-xs px-2 py-0.5 rounded ${allocMode === 'custom' ? 'bg-cyan-800 text-cyan-300' : 'bg-gray-200 text-gray-500'}`}
+                  className={`text-xs px-2 py-0.5 rounded ${allocMode === 'custom' ? 'bg-cyan-800 text-cyan-300' : 'bg-slate-700 text-slate-400'}`}
                 >
                   Personalizado
                 </button>
               </div>
               {allocMode === 'equal' ? (
-                <p className="text-xs text-gray-400">{(100 / portfolioTickers.length).toFixed(1)}% por ticker</p>
+                <p className="text-xs text-slate-500">{(100 / portfolioTickers.length).toFixed(1)}% por ticker</p>
               ) : (
                 <div className="space-y-1 max-h-32 overflow-y-auto">
                   {portfolioTickers.map(t => (
                     <div key={t} className="flex items-center gap-2 text-xs">
-                      <span className="w-14 text-gray-700">{t}</span>
+                      <span className="w-14 text-slate-300">{t}</span>
                       <input
                         type="number"
                         min="1"
@@ -649,12 +649,12 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
                         step="1"
                         value={customAllocations[t] ?? Math.round(100 / portfolioTickers.length)}
                         onChange={(e) => setCustomAllocations({ ...customAllocations, [t]: Number(e.target.value) })}
-                        className="w-16 px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-900 text-center"
+                        className="w-16 px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-white text-center"
                       />
-                      <span className="text-gray-400">%</span>
+                      <span className="text-slate-500">%</span>
                     </div>
                   ))}
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-slate-500">
                     Total: {portfolioTickers.reduce((sum, t) => sum + (customAllocations[t] ?? Math.round(100 / portfolioTickers.length)), 0)}%
                   </p>
                 </div>
@@ -662,7 +662,7 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
             </div>
           )}
 
-          <p className="text-xs text-gray-400">{portfolioTickers.length}/50 tickers</p>
+          <p className="text-xs text-slate-500">{portfolioTickers.length}/50 tickers</p>
         </>
       )}
     </div>
@@ -683,15 +683,15 @@ function ConditionGroupDisplay({ group, groupKey, label, borderColor, updateOper
       <h4 className={`text-xs font-medium ${borderColor.replace('border-', 'text-').replace('/40', '')}`}>{label} ({group.operator})</h4>
       {group.conditions.map((cond, ci) => (
         <div key={ci} className="text-xs space-y-1">
-          {ci > 0 && <div className="text-gray-400 text-center">{group.operator}</div>}
+          {ci > 0 && <div className="text-slate-600 text-center">{group.operator}</div>}
           {(cond.offset ?? 0) > 0 && <span className="text-amber-400 text-xs">{cond.offset} velas atrás:</span>}
           <div className="flex items-center gap-1.5 flex-wrap">
             <OperandDisplay operand={cond.left} onParamChange={(k, v) => updateOperandParam(groupKey, ci, 'left', k, v)} onValueChange={(v) => updateOperandValue(groupKey, ci, 'left', v)} />
-            <span className="text-gray-400">{COMP_LABELS[cond.comparator] || cond.comparator}</span>
+            <span className="text-slate-500">{COMP_LABELS[cond.comparator] || cond.comparator}</span>
             <OperandDisplay operand={cond.right} onParamChange={(k, v) => updateOperandParam(groupKey, ci, 'right', k, v)} onValueChange={(v) => updateOperandValue(groupKey, ci, 'right', v)} />
             {cond.right_upper && (
               <>
-                <span className="text-gray-400">y</span>
+                <span className="text-slate-500">y</span>
                 <OperandDisplay operand={cond.right_upper} onParamChange={(k, v) => updateOperandParam(groupKey, ci, 'right_upper', k, v)} onValueChange={(v) => updateOperandValue(groupKey, ci, 'right_upper', v)} />
               </>
             )}
@@ -732,37 +732,37 @@ function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, upd
         <h4 className="text-xs font-medium text-amber-400 mb-2">Gestión de riesgo</h4>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-xs text-gray-400">Tipo de Stop Loss</label>
+            <label className="text-xs text-slate-500">Tipo de Stop Loss</label>
             <select
               value={customRules.risk_management.stop_loss_type || 'fixed'}
               onChange={(e) => updateRiskParam('stop_loss_type', e.target.value as StopLossType)}
-              className="block w-full mt-0.5 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900"
+              className="block w-full mt-0.5 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white"
             >
               <option value="fixed">Fijo (%)</option>
               <option value="fractal">Fractal (dinámico)</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-400">
+            <label className="text-xs text-slate-500">
               {customRules.risk_management.stop_loss_type === 'fractal' ? 'Stop fallback %' : 'Stop Loss %'}
             </label>
-            <input type="number" step="0.5" value={customRules.risk_management.stop_loss_pct ?? ''} onChange={(e) => updateRiskParam('stop_loss_pct', e.target.value ? Number(e.target.value) : null)} placeholder="—" className="block w-full mt-0.5 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900" />
+            <input type="number" step="0.5" value={customRules.risk_management.stop_loss_pct ?? ''} onChange={(e) => updateRiskParam('stop_loss_pct', e.target.value ? Number(e.target.value) : null)} placeholder="—" className="block w-full mt-0.5 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white" />
           </div>
           <div>
-            <label className="text-xs text-gray-400">Take Profit %</label>
-            <input type="number" step="0.5" value={customRules.risk_management.take_profit_pct ?? ''} onChange={(e) => updateRiskParam('take_profit_pct', e.target.value ? Number(e.target.value) : null)} placeholder="—" className="block w-full mt-0.5 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900" />
+            <label className="text-xs text-slate-500">Take Profit %</label>
+            <input type="number" step="0.5" value={customRules.risk_management.take_profit_pct ?? ''} onChange={(e) => updateRiskParam('take_profit_pct', e.target.value ? Number(e.target.value) : null)} placeholder="—" className="block w-full mt-0.5 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white" />
           </div>
           <div>
-            <label className="text-xs text-gray-400">Riesgo máx/trade %</label>
-            <input type="number" step="0.5" value={customRules.risk_management.max_risk_pct ?? ''} onChange={(e) => updateRiskParam('max_risk_pct', e.target.value ? Number(e.target.value) : null)} placeholder="—" className="block w-full mt-0.5 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900" />
+            <label className="text-xs text-slate-500">Riesgo máx/trade %</label>
+            <input type="number" step="0.5" value={customRules.risk_management.max_risk_pct ?? ''} onChange={(e) => updateRiskParam('max_risk_pct', e.target.value ? Number(e.target.value) : null)} placeholder="—" className="block w-full mt-0.5 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white" />
           </div>
           <div>
-            <label className="text-xs text-gray-400">Capital/operación %</label>
-            <input type="number" step="1" min="1" max="100" value={customRules.risk_management.position_size_pct} onChange={(e) => updateRiskParam('position_size_pct', Number(e.target.value))} className="block w-full mt-0.5 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900" />
+            <label className="text-xs text-slate-500">Capital/operación %</label>
+            <input type="number" step="1" min="1" max="100" value={customRules.risk_management.position_size_pct} onChange={(e) => updateRiskParam('position_size_pct', Number(e.target.value))} className="block w-full mt-0.5 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white" />
           </div>
         </div>
         {customRules.risk_management.stop_loss_type === 'fractal' && (
-          <p className="text-xs text-gray-400 mt-1.5">
+          <p className="text-xs text-slate-500 mt-1.5">
             {customRules.side === 'both'
               ? 'Long: stop en fractal de soporte. Short: stop en fractal de resistencia.'
               : `Stop en último fractal de ${customRules.side === 'short' ? 'resistencia' : 'soporte'}.`
@@ -770,7 +770,7 @@ function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, upd
           </p>
         )}
         {customRules.risk_management.max_risk_pct && (
-          <p className="text-xs text-gray-400 mt-1">Limita la pérdida máxima al {customRules.risk_management.max_risk_pct}% del capital por operación.</p>
+          <p className="text-xs text-slate-500 mt-1">Limita la pérdida máxima al {customRules.risk_management.max_risk_pct}% del capital por operación.</p>
         )}
       </div>
     </>
@@ -781,22 +781,22 @@ function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, upd
 function MetricsGrid({ metrics }: { metrics: import('../types').BacktestMetrics }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-sm">
-      <div><p className="text-gray-500">Rentabilidad</p><p className={`font-bold ${metrics.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.total_return_pct >= 0 ? '+' : ''}{metrics.total_return_pct.toFixed(2)}%</p></div>
-      <div><p className="text-gray-500">Retorno</p><p className={`font-bold ${metrics.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.total_return >= 0 ? '+' : ''}{metrics.total_return.toFixed(2)}€</p></div>
-      <div><p className="text-gray-500">Sharpe</p><p className="font-bold">{metrics.sharpe_ratio?.toFixed(2) ?? 'N/A'}</p></div>
-      <div><p className="text-gray-500">Max Drawdown</p><p className="font-bold text-red-400">{metrics.max_drawdown_pct.toFixed(2)}%</p></div>
-      <div><p className="text-gray-500">Win Rate</p><p className="font-bold">{metrics.win_rate.toFixed(1)}%</p></div>
-      <div><p className="text-gray-500">Profit Factor</p><p className="font-bold">{metrics.profit_factor?.toFixed(2) ?? 'N/A'}</p></div>
-      <div><p className="text-gray-500">Trades</p><p className="font-bold">{metrics.total_trades}</p></div>
+      <div><p className="text-slate-400">Rentabilidad</p><p className={`font-bold ${metrics.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.total_return_pct >= 0 ? '+' : ''}{metrics.total_return_pct.toFixed(2)}%</p></div>
+      <div><p className="text-slate-400">Retorno</p><p className={`font-bold ${metrics.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.total_return >= 0 ? '+' : ''}{metrics.total_return.toFixed(2)}€</p></div>
+      <div><p className="text-slate-400">Sharpe</p><p className="font-bold">{metrics.sharpe_ratio?.toFixed(2) ?? 'N/A'}</p></div>
+      <div><p className="text-slate-400">Max Drawdown</p><p className="font-bold text-red-400">{metrics.max_drawdown_pct.toFixed(2)}%</p></div>
+      <div><p className="text-slate-400">Win Rate</p><p className="font-bold">{metrics.win_rate.toFixed(1)}%</p></div>
+      <div><p className="text-slate-400">Profit Factor</p><p className="font-bold">{metrics.profit_factor?.toFixed(2) ?? 'N/A'}</p></div>
+      <div><p className="text-slate-400">Trades</p><p className="font-bold">{metrics.total_trades}</p></div>
       {metrics.buy_and_hold_return_pct != null && (
-        <div><p className="text-gray-500">Buy & Hold</p><p className="font-bold">{metrics.buy_and_hold_return_pct.toFixed(2)}%</p></div>
+        <div><p className="text-slate-400">Buy & Hold</p><p className="font-bold">{metrics.buy_and_hold_return_pct.toFixed(2)}%</p></div>
       )}
       {metrics.best_trade_pnl != null && metrics.worst_trade_pnl != null && metrics.best_trade_pnl === metrics.worst_trade_pnl ? (
-        <div><p className="text-gray-500">Único trade</p><p className={`font-bold ${metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.best_trade_pnl >= 0 ? '+' : ''}{metrics.best_trade_pnl.toFixed(2)}€</p></div>
+        <div><p className="text-slate-400">Único trade</p><p className={`font-bold ${metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.best_trade_pnl >= 0 ? '+' : ''}{metrics.best_trade_pnl.toFixed(2)}€</p></div>
       ) : (
         <>
-          {metrics.best_trade_pnl != null && <div><p className="text-gray-500">Mejor trade</p><p className={`font-bold ${metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.best_trade_pnl >= 0 ? '+' : ''}{metrics.best_trade_pnl.toFixed(2)}€</p></div>}
-          {metrics.worst_trade_pnl != null && <div><p className="text-gray-500">Peor trade</p><p className={`font-bold ${metrics.worst_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.worst_trade_pnl >= 0 ? '+' : ''}{metrics.worst_trade_pnl.toFixed(2)}€</p></div>}
+          {metrics.best_trade_pnl != null && <div><p className="text-slate-400">Mejor trade</p><p className={`font-bold ${metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.best_trade_pnl >= 0 ? '+' : ''}{metrics.best_trade_pnl.toFixed(2)}€</p></div>}
+          {metrics.worst_trade_pnl != null && <div><p className="text-slate-400">Peor trade</p><p className={`font-bold ${metrics.worst_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.worst_trade_pnl >= 0 ? '+' : ''}{metrics.worst_trade_pnl.toFixed(2)}€</p></div>}
         </>
       )}
     </div>
@@ -823,7 +823,7 @@ function SingleRunResults({ run }: { run: BacktestRun }) {
   if (!run.metrics) return null
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg p-5 border border-gray-300">
+      <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
         <h2 className="font-semibold mb-3 flex items-center gap-2">
           <FlaskConical size={18} className="text-emerald-400" />
           Resultados — {run.ticker} ({run.start_date} → {run.end_date})
@@ -832,14 +832,14 @@ function SingleRunResults({ run }: { run: BacktestRun }) {
       </div>
 
       {run.equity_curve && (
-        <div className="bg-white rounded-lg p-5 border border-gray-300">
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <h3 className="font-semibold mb-3">Curva de Equity</h3>
           <EquityCurveChart data={run.equity_curve} />
         </div>
       )}
 
       {run.trades && run.trades.length > 0 && (
-        <div className="bg-white rounded-lg p-5 border border-gray-300">
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <h3 className="font-semibold mb-3">Operaciones ({run.trades.length})</h3>
           <TradesTable trades={run.trades} />
         </div>
@@ -853,7 +853,7 @@ function TradesTable({ trades }: { trades: import('../types').BacktestTrade[] })
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead><tr className="text-gray-500 text-left border-b border-gray-300">
+        <thead><tr className="text-slate-400 text-left border-b border-slate-700">
           <th className="pb-2 px-2">Lado</th><th className="pb-2 px-2">Entrada</th><th className="pb-2 px-2">Salida</th><th className="pb-2 px-2 text-right">P. entrada</th><th className="pb-2 px-2 text-right">P. salida</th><th className="pb-2 px-2 text-right">P&L</th><th className="pb-2 px-2 text-right">%</th><th className="pb-2 px-2">Cierre</th><th className="pb-2 px-2 text-right">Días</th>
         </tr></thead>
         <tbody>
@@ -863,7 +863,7 @@ function TradesTable({ trades }: { trades: import('../types').BacktestTrade[] })
             const exitReasonLabel = t.exit_reason === 'stop_loss' ? 'Stop Loss' : t.exit_reason === 'take_profit' ? 'Take Profit' : t.exit_reason === 'signal' ? 'Señal salida' : '-'
             const isShort = t.type === 'sell'
             return (
-              <tr key={t.id} className="border-b border-gray-200">
+              <tr key={t.id} className="border-b border-slate-800">
                 <td className="py-1.5 px-2"><span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isShort ? 'bg-red-900/50 text-red-300' : 'bg-emerald-900/50 text-emerald-300'}`}>{isShort ? 'Short' : 'Long'}</span></td>
                 <td className="px-2">{t.entry_date?.split('T')[0]}</td>
                 <td className="px-2">{t.exit_date?.split('T')[0] ?? '-'}</td>
@@ -871,7 +871,7 @@ function TradesTable({ trades }: { trades: import('../types').BacktestTrade[] })
                 <td className="px-2 text-right">{t.exit_price ? Number(t.exit_price).toFixed(2) : '-'}</td>
                 <td className={`px-2 text-right font-medium ${pnl && pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}€` : '-'}</td>
                 <td className={`px-2 text-right ${pnlPct && pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{pnlPct != null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%` : '-'}</td>
-                <td className="px-2"><span className={`text-xs px-1.5 py-0.5 rounded ${t.exit_reason === 'stop_loss' ? 'bg-red-900/60 text-red-400' : t.exit_reason === 'take_profit' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-gray-200 text-gray-700'}`}>{exitReasonLabel}</span></td>
+                <td className="px-2"><span className={`text-xs px-1.5 py-0.5 rounded ${t.exit_reason === 'stop_loss' ? 'bg-red-900/60 text-red-400' : t.exit_reason === 'take_profit' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-slate-700 text-slate-300'}`}>{exitReasonLabel}</span></td>
                 <td className="px-2 text-right">{t.duration_days ?? '-'}</td>
               </tr>
             )
@@ -892,13 +892,13 @@ function TickerResultRow({ result, isExpanded, expandedRunData, onToggle }: {
   const m = result.metrics
   return (
     <>
-      <tr className="border-b border-gray-200 hover:bg-gray-100 cursor-pointer" onClick={onToggle}>
+      <tr className="border-b border-slate-800 hover:bg-slate-800/50 cursor-pointer" onClick={onToggle}>
         <td className="py-1.5 px-2">
-          {isExpanded ? <ChevronDown size={14} className="text-cyan-400" /> : <ChevronRight size={14} className="text-gray-400" />}
+          {isExpanded ? <ChevronDown size={14} className="text-cyan-400" /> : <ChevronRight size={14} className="text-slate-500" />}
         </td>
         <td className="px-2 font-medium">{result.ticker}</td>
-        <td className="px-2 text-right text-gray-500">{result.weight_pct.toFixed(1)}%</td>
-        <td className="px-2 text-right text-gray-500">{result.allocated_capital.toLocaleString('es-ES', { minimumFractionDigits: 0 })}€</td>
+        <td className="px-2 text-right text-slate-400">{result.weight_pct.toFixed(1)}%</td>
+        <td className="px-2 text-right text-slate-400">{result.allocated_capital.toLocaleString('es-ES', { minimumFractionDigits: 0 })}€</td>
         <td className={`px-2 text-right font-medium ${(m?.total_return_pct ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
           {m ? `${m.total_return_pct >= 0 ? '+' : ''}${m.total_return_pct.toFixed(2)}%` : 'N/A'}
         </td>
@@ -907,12 +907,12 @@ function TickerResultRow({ result, isExpanded, expandedRunData, onToggle }: {
         <td className="px-2 text-right text-red-400">{m ? `${m.max_drawdown_pct.toFixed(1)}%` : '-'}</td>
       </tr>
       {isExpanded && expandedRunData && expandedRunData.equity_curve && (
-        <tr><td colSpan={8} className="p-3 bg-gray-100/30">
+        <tr><td colSpan={8} className="p-3 bg-slate-800/30">
           <div className="space-y-3">
             <EquityCurveChart data={expandedRunData.equity_curve} color="#06b6d4" />
             {expandedRunData.trades && expandedRunData.trades.length > 0 && (
               <div>
-                <p className="text-xs text-gray-500 mb-2">Operaciones ({expandedRunData.trades.length})</p>
+                <p className="text-xs text-slate-400 mb-2">Operaciones ({expandedRunData.trades.length})</p>
                 <TradesTable trades={expandedRunData.trades} />
               </div>
             )}
@@ -932,10 +932,10 @@ function OperandDisplay({ operand, onParamChange, onValueChange }: {
   if (operand.type === 'indicator') {
     const bandLabels: Record<string, string> = { lower: 'inf', mid: 'media', upper: 'sup' }
     return (
-      <span className="inline-flex items-center gap-1 bg-gray-100 rounded px-1.5 py-0.5">
-        <span className="text-gray-900 font-medium">{operand.name}</span>
+      <span className="inline-flex items-center gap-1 bg-slate-800 rounded px-1.5 py-0.5">
+        <span className="text-white font-medium">{operand.name}</span>
         {operand.params && Object.entries(operand.params).filter(([k]) => k !== 'band').map(([k, v]) => (
-          <input key={k} type="number" value={v} onChange={(e) => onParamChange(k, Number(e.target.value))} className="w-12 px-1 py-0 bg-gray-200 border border-gray-300 rounded text-center text-gray-900 text-xs" title={k} />
+          <input key={k} type="number" value={v} onChange={(e) => onParamChange(k, Number(e.target.value))} className="w-12 px-1 py-0 bg-slate-700 border border-slate-600 rounded text-center text-white text-xs" title={k} />
         ))}
         {operand.name === 'BBANDS' && operand.params?.band && (
           <span className="text-xs text-blue-300">{bandLabels[String(operand.params.band)] || String(operand.params.band)}</span>
@@ -945,13 +945,13 @@ function OperandDisplay({ operand, onParamChange, onValueChange }: {
   }
   if (operand.type === 'price') {
     const labels: Record<string, string> = { close: 'Cierre', open: 'Apertura', high: 'Máximo', low: 'Mínimo' }
-    return <span className="bg-gray-100 rounded px-1.5 py-0.5 text-cyan-300">{labels[operand.field || 'close'] || operand.field}</span>
+    return <span className="bg-slate-800 rounded px-1.5 py-0.5 text-cyan-300">{labels[operand.field || 'close'] || operand.field}</span>
   }
   if (operand.type === 'value') {
-    return <input type="number" step="any" value={operand.value ?? 0} onChange={(e) => onValueChange(Number(e.target.value))} className="w-16 px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-center text-amber-300 text-xs" />
+    return <input type="number" step="any" value={operand.value ?? 0} onChange={(e) => onValueChange(Number(e.target.value))} className="w-16 px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-center text-amber-300 text-xs" />
   }
   if (operand.type === 'volume') {
-    return <span className="bg-gray-100 rounded px-1.5 py-0.5 text-purple-300">Volumen</span>
+    return <span className="bg-slate-800 rounded px-1.5 py-0.5 text-purple-300">Volumen</span>
   }
   if (operand.type === 'candle_pattern') {
     const patternLabels: Record<string, string> = {
@@ -985,41 +985,41 @@ function RunHistory({ runs, portfolioRuns, onView, onViewPortfolio, onDelete, on
     <div className="space-y-2">
       {items.length > 0 && (
         <div className="flex justify-end mb-1">
-          <button onClick={onDeleteAll} className="text-xs text-gray-400 hover:text-red-400 flex items-center gap-1">
+          <button onClick={onDeleteAll} className="text-xs text-slate-500 hover:text-red-400 flex items-center gap-1">
             <Trash2 size={12} /> Borrar todo
           </button>
         </div>
       )}
       <div className="max-h-64 overflow-y-auto space-y-2">
       {items.map((item) => item.type === 'single' ? (
-        <div key={item.data.id} className="flex items-center justify-between bg-gray-100 rounded px-3 py-2 text-sm">
+        <div key={item.data.id} className="flex items-center justify-between bg-slate-800 rounded px-3 py-2 text-sm">
           <button onClick={() => onView(item.data.id)} className="text-left flex-1">
             <span className="font-medium">{item.data.strategy_name}</span>
-            <span className="text-gray-500 ml-2">{item.data.ticker}</span>
+            <span className="text-slate-400 ml-2">{item.data.ticker}</span>
             {item.data.total_return_pct !== null && (
               <span className={`ml-2 ${item.data.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {item.data.total_return_pct >= 0 ? '+' : ''}{item.data.total_return_pct.toFixed(2)}%
               </span>
             )}
           </button>
-          <button onClick={() => onDelete(item.data.id)} className="text-gray-400 hover:text-red-400 ml-2"><Trash2 size={14} /></button>
+          <button onClick={() => onDelete(item.data.id)} className="text-slate-500 hover:text-red-400 ml-2"><Trash2 size={14} /></button>
         </div>
       ) : (
-        <div key={item.data.id} className="flex items-center justify-between bg-gray-100 rounded px-3 py-2 text-sm border-l-2 border-cyan-600">
+        <div key={item.data.id} className="flex items-center justify-between bg-slate-800 rounded px-3 py-2 text-sm border-l-2 border-cyan-600">
           <button onClick={() => onViewPortfolio(item.data.id)} className="text-left flex-1">
             <span className="font-medium">{item.data.strategy_name ?? 'Portfolio'}</span>
             <span className="text-cyan-400 ml-2">{item.data.ticker_count} tickers</span>
-            {item.data.universe && <span className="text-gray-400 ml-1">({item.data.universe})</span>}
+            {item.data.universe && <span className="text-slate-500 ml-1">({item.data.universe})</span>}
             {item.data.total_return_pct !== null && (
               <span className={`ml-2 ${item.data.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {item.data.total_return_pct >= 0 ? '+' : ''}{item.data.total_return_pct.toFixed(2)}%
               </span>
             )}
           </button>
-          <button onClick={() => onDeletePortfolio(item.data.id)} className="text-gray-400 hover:text-red-400 ml-2"><Trash2 size={14} /></button>
+          <button onClick={() => onDeletePortfolio(item.data.id)} className="text-slate-500 hover:text-red-400 ml-2"><Trash2 size={14} /></button>
         </div>
       ))}
-      {items.length === 0 && <p className="text-sm text-gray-400">Sin backtests aún</p>}
+      {items.length === 0 && <p className="text-sm text-slate-500">Sin backtests aún</p>}
       </div>
     </div>
   )

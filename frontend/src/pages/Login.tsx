@@ -33,12 +33,12 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-bold text-emerald-400 text-center mb-8">AnalisisBursatil</h1>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg p-6 space-y-4 border border-gray-300">
-          <h2 className="text-lg font-semibold text-gray-900 text-center">
+        <form onSubmit={handleSubmit} className="bg-slate-900 rounded-lg p-6 space-y-4 border border-slate-700">
+          <h2 className="text-lg font-semibold text-white text-center">
             {isRegister ? 'Crear cuenta' : 'Iniciar sesión'}
           </h2>
 
@@ -49,7 +49,7 @@ export default function Login() {
                 placeholder="Nombre de usuario"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
                 required
               />
               <input
@@ -57,7 +57,7 @@ export default function Login() {
                 placeholder="Código de invitación"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
                 required
               />
             </>
@@ -68,7 +68,7 @@ export default function Login() {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+            className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
             required
           />
           <input
@@ -76,7 +76,7 @@ export default function Login() {
             placeholder="Contraseña"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+            className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
             required
             minLength={8}
           />
@@ -86,7 +86,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-gray-900 rounded font-medium transition-colors"
+            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded font-medium transition-colors"
           >
             {loading ? 'Cargando...' : isRegister ? 'Registrarse' : 'Entrar'}
           </button>
@@ -94,7 +94,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => { setIsRegister(!isRegister); setError('') }}
-            className="w-full text-sm text-gray-500 hover:text-emerald-400 transition-colors"
+            className="w-full text-sm text-slate-400 hover:text-emerald-400 transition-colors"
           >
             {isRegister ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
           </button>

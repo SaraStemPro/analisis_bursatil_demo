@@ -45,7 +45,7 @@ export default function DrawingToolbar() {
   } = useDrawingStore()
 
   return (
-    <div className="flex flex-col gap-1 bg-white rounded-lg border border-gray-300 p-1.5">
+    <div className="flex flex-col gap-1 bg-slate-900 rounded-lg border border-slate-700 p-1.5">
       {TOOLS.map(({ type, icon: Icon, label }) => {
         const isActive = activeTool === type
         return (
@@ -54,7 +54,7 @@ export default function DrawingToolbar() {
             onClick={() => selectTool(isActive ? null : type)}
             title={label}
             className={`p-2 rounded transition-colors ${
-              isActive ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+              isActive ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
             <Icon size={18} />
@@ -64,12 +64,12 @@ export default function DrawingToolbar() {
 
       {/* Arrow direction toggle */}
       {activeTool === 'arrow' && (
-        <div className="flex flex-col gap-0.5 border-t border-gray-300 pt-1 mt-1">
+        <div className="flex flex-col gap-0.5 border-t border-slate-700 pt-1 mt-1">
           <button
             onClick={() => setArrowDirection('up')}
             title="Flecha arriba"
             className={`p-1.5 rounded transition-colors ${
-              arrowDirection === 'up' ? 'bg-emerald-900 text-emerald-400' : 'text-gray-400 hover:bg-gray-100'
+              arrowDirection === 'up' ? 'bg-emerald-900 text-emerald-400' : 'text-slate-500 hover:bg-slate-800'
             }`}
           >
             <ArrowUp size={14} />
@@ -78,7 +78,7 @@ export default function DrawingToolbar() {
             onClick={() => setArrowDirection('down')}
             title="Flecha abajo"
             className={`p-1.5 rounded transition-colors ${
-              arrowDirection === 'down' ? 'bg-red-900 text-red-400' : 'text-gray-400 hover:bg-gray-100'
+              arrowDirection === 'down' ? 'bg-red-900 text-red-400' : 'text-slate-500 hover:bg-slate-800'
             }`}
           >
             <ArrowDown size={14} />
@@ -88,16 +88,16 @@ export default function DrawingToolbar() {
 
       {/* Elliott wave type toggle */}
       {activeTool === 'elliott' && (
-        <div className="flex flex-col gap-0.5 border-t border-gray-300 pt-1 mt-1">
+        <div className="flex flex-col gap-0.5 border-t border-slate-700 pt-1 mt-1">
           <button
             onClick={() => setElliottWaveType('impulse')}
-            className={`px-1 py-0.5 text-[10px] rounded ${elliottWaveType === 'impulse' ? 'bg-emerald-900 text-emerald-300' : 'text-gray-400'}`}
+            className={`px-1 py-0.5 text-[10px] rounded ${elliottWaveType === 'impulse' ? 'bg-emerald-900 text-emerald-300' : 'text-slate-500'}`}
           >
             1-5
           </button>
           <button
             onClick={() => setElliottWaveType('corrective')}
-            className={`px-1 py-0.5 text-[10px] rounded ${elliottWaveType === 'corrective' ? 'bg-emerald-900 text-emerald-300' : 'text-gray-400'}`}
+            className={`px-1 py-0.5 text-[10px] rounded ${elliottWaveType === 'corrective' ? 'bg-emerald-900 text-emerald-300' : 'text-slate-500'}`}
           >
             ABC
           </button>
@@ -105,17 +105,17 @@ export default function DrawingToolbar() {
       )}
 
       {/* Divider */}
-      <div className="border-t border-gray-300 my-1" />
+      <div className="border-t border-slate-700 my-1" />
 
       {/* Color picker for selected drawing */}
       {selectedId && (
-        <div className="flex flex-col gap-1 border-t border-gray-300 pt-1 mt-1">
+        <div className="flex flex-col gap-1 border-t border-slate-700 pt-1 mt-1">
           <div className="flex flex-wrap gap-1 px-0.5 justify-center">
             {COLOR_PALETTE.map((c) => (
               <button
                 key={c}
                 onClick={() => updateDrawingColor(selectedId, c)}
-                className="w-4 h-4 rounded-full border border-gray-300 hover:scale-125 transition-transform"
+                className="w-4 h-4 rounded-full border border-slate-600 hover:scale-125 transition-transform"
                 style={{ backgroundColor: c }}
                 title={c}
               />
@@ -152,7 +152,7 @@ export default function DrawingToolbar() {
             if (window.confirm('¿Eliminar todos los dibujos?')) clearAll()
           }}
           title="Borrar todo"
-          className="p-2 rounded text-gray-400 hover:text-red-400 hover:bg-gray-100"
+          className="p-2 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800"
         >
           <X size={18} />
         </button>
@@ -163,7 +163,7 @@ export default function DrawingToolbar() {
         <button
           onClick={resetInteraction}
           title="Cancelar"
-          className="p-2 rounded text-yellow-400 hover:bg-gray-100 text-[10px] font-bold"
+          className="p-2 rounded text-yellow-400 hover:bg-slate-800 text-[10px] font-bold"
         >
           ESC
         </button>
@@ -172,7 +172,7 @@ export default function DrawingToolbar() {
       {/* Guidance text */}
       {activeTool && (
         <div className="mt-1 px-1">
-          <p className="text-[9px] text-gray-400 leading-tight text-center">
+          <p className="text-[9px] text-slate-500 leading-tight text-center">
             {GUIDANCE[activeTool]}
           </p>
           {activeTool === 'elliott' && pendingPoints.length > 0 && (

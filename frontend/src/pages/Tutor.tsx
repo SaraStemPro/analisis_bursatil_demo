@@ -59,14 +59,14 @@ export default function Tutor() {
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
       {/* Sidebar */}
-      <div className="w-64 bg-white rounded-lg border border-gray-300 p-4 hidden md:flex flex-col">
+      <div className="w-64 bg-slate-900 rounded-lg border border-slate-700 p-4 hidden md:flex flex-col">
         <ConversationSidebar
           activeId={conversationId}
           onSelect={handleSelectConversation}
           onNew={handleNewConversation}
         />
 
-        <div className="mt-4 pt-4 border-t border-gray-300">
+        <div className="mt-4 pt-4 border-t border-slate-700">
           <DocumentPanel readOnly={!isProfessor} />
         </div>
       </div>

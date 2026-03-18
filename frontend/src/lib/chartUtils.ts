@@ -4,10 +4,10 @@ import type { Time } from 'lightweight-charts'
 export const INTRADAY_INTERVALS = new Set(['1m', '5m', '15m', '30m', '1h'])
 
 export const CHART_THEME = {
-  layout: { background: { type: ColorType.Solid as const, color: '#0f172a' }, textColor: '#94a3b8' },
-  grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
-  timeScale: { borderColor: '#334155' },
-  rightPriceScale: { borderColor: '#334155' },
+  layout: { background: { type: ColorType.Solid as const, color: '#ffffff' }, textColor: '#374151' },
+  grid: { vertLines: { color: '#e5e7eb' }, horzLines: { color: '#e5e7eb' } },
+  timeScale: { borderColor: '#d1d5db' },
+  rightPriceScale: { borderColor: '#d1d5db' },
 } as const
 
 /** Get Madrid (Europe/Madrid) UTC offset in seconds for a given date.

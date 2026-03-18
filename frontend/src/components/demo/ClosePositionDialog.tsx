@@ -32,24 +32,24 @@ export default function ClosePositionDialog({ position, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-white border border-gray-300 rounded-xl p-6 w-96 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-96 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-bold text-lg">Cerrar posicion</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
 
         <div className="mb-4 text-sm">
-          <p className="text-gray-700">
-            <span className="font-bold text-gray-900">{position.ticker}</span>
+          <p className="text-slate-300">
+            <span className="font-bold text-white">{position.ticker}</span>
             <span className={`ml-2 text-xs px-2 py-0.5 rounded ${position.side === 'long' ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
               {position.side.toUpperCase()}
             </span>
           </p>
-          <p className="text-gray-500 mt-1">Posicion: {position.quantity} acciones a {Number(position.avg_price).toFixed(2)}</p>
+          <p className="text-slate-400 mt-1">Posicion: {position.quantity} acciones a {Number(position.avg_price).toFixed(2)}</p>
         </div>
 
         <div className="mb-4">
-          <label className="text-sm text-gray-500">Cantidad a cerrar</label>
+          <label className="text-sm text-slate-400">Cantidad a cerrar</label>
           <div className="flex items-center gap-3 mt-1">
             <input
               type="range"
@@ -65,13 +65,13 @@ export default function ClosePositionDialog({ position, onClose }: Props) {
               max={position.quantity}
               value={quantity}
               onChange={(e) => setQuantity(Math.min(position.quantity, Math.max(1, Number(e.target.value))))}
-              className="w-20 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm text-center"
+              className="w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm text-center"
             />
           </div>
         </div>
 
-        <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
-          <p className="text-gray-500">P&L estimado</p>
+        <div className="mb-4 p-3 bg-slate-800 rounded text-sm">
+          <p className="text-slate-400">P&L estimado</p>
           <p className={`text-lg font-bold ${estimatedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {estimatedPnl >= 0 ? '+' : ''}{estimatedPnl.toFixed(2)}€
           </p>
@@ -84,7 +84,7 @@ export default function ClosePositionDialog({ position, onClose }: Props) {
             <button
               onClick={() => closeMut.mutate()}
               disabled={closeMut.isPending}
-              className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded text-gray-900 font-medium text-sm"
+              className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded text-white font-medium text-sm"
             >
               Cerrar {quantity} de {position.quantity}
             </button>

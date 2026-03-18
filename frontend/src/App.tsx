@@ -20,12 +20,12 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   render() {
     if (this.state.error) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
           <div className="bg-red-900/30 border border-red-500 rounded-lg p-6 max-w-lg">
             <h2 className="text-red-400 font-bold text-lg mb-2">Error en la aplicacion</h2>
             <pre className="text-red-300 text-sm whitespace-pre-wrap">{this.state.error.message}</pre>
             <pre className="text-red-400/60 text-xs mt-2 whitespace-pre-wrap">{this.state.error.stack}</pre>
-            <button onClick={() => this.setState({ error: null })} className="mt-4 px-4 py-2 bg-red-600 text-gray-900 rounded hover:bg-red-700">
+            <button onClick={() => this.setState({ error: null })} className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
               Reintentar
             </button>
           </div>
@@ -38,7 +38,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthStore()
-  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-500">Cargando...</div>
+  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">Cargando...</div>
   if (!user) return <Navigate to="/login" />
   return <>{children}</>
 }
