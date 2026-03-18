@@ -193,23 +193,31 @@ export default function Backtest() {
   }
 
   const updateOperandParam = (
-    group: 'entry' | 'exit', condIdx: number, side: 'left' | 'right' | 'right_upper',
+    group: string, condIdx: number, side: 'left' | 'right' | 'right_upper',
     paramKey: string, paramValue: number,
   ) => {
     if (!customRules) return
     const updated = JSON.parse(JSON.stringify(customRules)) as StrategyRules
-    const operand = updated[group].conditions[condIdx][side]
-    if (operand && operand.params) operand.params[paramKey] = paramValue
+    const g = group as keyof Pick<StrategyRules, 'entry' | 'exit' | 'entry_short' | 'exit_short'>
+    const condGroup = updated[g]
+    if (condGroup && 'conditions' in condGroup) {
+      const operand = condGroup.conditions[condIdx][side]
+      if (operand && operand.params) operand.params[paramKey] = paramValue
+    }
     setCustomRules(updated)
   }
 
   const updateOperandValue = (
-    group: 'entry' | 'exit', condIdx: number, side: 'left' | 'right' | 'right_upper', value: number,
+    group: string, condIdx: number, side: 'left' | 'right' | 'right_upper', value: number,
   ) => {
     if (!customRules) return
     const updated = JSON.parse(JSON.stringify(customRules)) as StrategyRules
-    const operand = updated[group].conditions[condIdx][side]
-    if (operand && operand.type === 'value') operand.value = value
+    const g = group as keyof Pick<StrategyRules, 'entry' | 'exit' | 'entry_short' | 'exit_short'>
+    const condGroup = updated[g]
+    if (condGroup && 'conditions' in condGroup) {
+      const operand = condGroup.conditions[condIdx][side]
+      if (operand && operand.type === 'value') operand.value = value
+    }
     setCustomRules(updated)
   }
 
@@ -662,57 +670,62 @@ function PortfolioTickerSelector({ tickerSource, setTickerSource, portfolioTicke
 }
 
 
-function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, updateRiskParam }: {
-  customRules: StrategyRules
-  updateOperandParam: (group: 'entry' | 'exit', ci: number, side: 'left' | 'right' | 'right_upper', k: string, v: number) => void
-  updateOperandValue: (group: 'entry' | 'exit', ci: number, side: 'left' | 'right' | 'right_upper', v: number) => void
-  updateRiskParam: (key: keyof RiskManagement, v: number | string | null) => void
+function ConditionGroupDisplay({ group, groupKey, label, borderColor, updateOperandParam, updateOperandValue }: {
+  group: import('../types').ConditionGroup
+  groupKey: 'entry' | 'exit' | 'entry_short' | 'exit_short'
+  label: string
+  borderColor: string
+  updateOperandParam: (group: string, ci: number, side: 'left' | 'right' | 'right_upper', k: string, v: number) => void
+  updateOperandValue: (group: string, ci: number, side: 'left' | 'right' | 'right_upper', v: number) => void
 }) {
   return (
-    <>
-      {/* Entry conditions */}
-      <div className="border border-emerald-700/40 rounded p-3 space-y-2">
-        <h4 className="text-xs font-medium text-emerald-400">Entrada ({customRules.entry.operator})</h4>
-        {customRules.entry.conditions.map((cond, ci) => (
-          <div key={ci} className="text-xs space-y-1">
-            {ci > 0 && <div className="text-slate-600 text-center">{customRules.entry.operator}</div>}
-            {(cond.offset ?? 0) > 0 && <span className="text-amber-400 text-xs">{cond.offset} velas atrás:</span>}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <OperandDisplay operand={cond.left} onParamChange={(k, v) => updateOperandParam('entry', ci, 'left', k, v)} onValueChange={(v) => updateOperandValue('entry', ci, 'left', v)} />
-              <span className="text-slate-500">{COMP_LABELS[cond.comparator] || cond.comparator}</span>
-              <OperandDisplay operand={cond.right} onParamChange={(k, v) => updateOperandParam('entry', ci, 'right', k, v)} onValueChange={(v) => updateOperandValue('entry', ci, 'right', v)} />
-              {cond.right_upper && (
-                <>
-                  <span className="text-slate-500">y</span>
-                  <OperandDisplay operand={cond.right_upper} onParamChange={(k, v) => updateOperandParam('entry', ci, 'right_upper', k, v)} onValueChange={(v) => updateOperandValue('entry', ci, 'right_upper', v)} />
-                </>
-              )}
-            </div>
+    <div className={`border ${borderColor} rounded p-3 space-y-2`}>
+      <h4 className={`text-xs font-medium ${borderColor.replace('border-', 'text-').replace('/40', '')}`}>{label} ({group.operator})</h4>
+      {group.conditions.map((cond, ci) => (
+        <div key={ci} className="text-xs space-y-1">
+          {ci > 0 && <div className="text-slate-600 text-center">{group.operator}</div>}
+          {(cond.offset ?? 0) > 0 && <span className="text-amber-400 text-xs">{cond.offset} velas atrás:</span>}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <OperandDisplay operand={cond.left} onParamChange={(k, v) => updateOperandParam(groupKey, ci, 'left', k, v)} onValueChange={(v) => updateOperandValue(groupKey, ci, 'left', v)} />
+            <span className="text-slate-500">{COMP_LABELS[cond.comparator] || cond.comparator}</span>
+            <OperandDisplay operand={cond.right} onParamChange={(k, v) => updateOperandParam(groupKey, ci, 'right', k, v)} onValueChange={(v) => updateOperandValue(groupKey, ci, 'right', v)} />
+            {cond.right_upper && (
+              <>
+                <span className="text-slate-500">y</span>
+                <OperandDisplay operand={cond.right_upper} onParamChange={(k, v) => updateOperandParam(groupKey, ci, 'right_upper', k, v)} onValueChange={(v) => updateOperandValue(groupKey, ci, 'right_upper', v)} />
+              </>
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
-      {/* Exit conditions */}
-      <div className="border border-red-700/40 rounded p-3 space-y-2">
-        <h4 className="text-xs font-medium text-red-400">Salida ({customRules.exit.operator})</h4>
-        {customRules.exit.conditions.map((cond, ci) => (
-          <div key={ci} className="text-xs space-y-1">
-            {ci > 0 && <div className="text-slate-600 text-center">{customRules.exit.operator}</div>}
-            {(cond.offset ?? 0) > 0 && <span className="text-amber-400 text-xs">{cond.offset} velas atrás:</span>}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <OperandDisplay operand={cond.left} onParamChange={(k, v) => updateOperandParam('exit', ci, 'left', k, v)} onValueChange={(v) => updateOperandValue('exit', ci, 'left', v)} />
-              <span className="text-slate-500">{COMP_LABELS[cond.comparator] || cond.comparator}</span>
-              <OperandDisplay operand={cond.right} onParamChange={(k, v) => updateOperandParam('exit', ci, 'right', k, v)} onValueChange={(v) => updateOperandValue('exit', ci, 'right', v)} />
-              {cond.right_upper && (
-                <>
-                  <span className="text-slate-500">y</span>
-                  <OperandDisplay operand={cond.right_upper} onParamChange={(k, v) => updateOperandParam('exit', ci, 'right_upper', k, v)} onValueChange={(v) => updateOperandValue('exit', ci, 'right_upper', v)} />
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, updateRiskParam }: {
+  customRules: StrategyRules
+  updateOperandParam: (group: string, ci: number, side: 'left' | 'right' | 'right_upper', k: string, v: number) => void
+  updateOperandValue: (group: string, ci: number, side: 'left' | 'right' | 'right_upper', v: number) => void
+  updateRiskParam: (key: keyof RiskManagement, v: number | string | null) => void
+}) {
+  const isBoth = customRules.side === 'both' && customRules.entry_short && customRules.exit_short
+  return (
+    <>
+      {isBoth ? (
+        <>
+          <p className="text-xs text-emerald-400 font-medium">Long</p>
+          <ConditionGroupDisplay group={customRules.entry} groupKey="entry" label="Entrada Long" borderColor="border-emerald-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          <ConditionGroupDisplay group={customRules.exit} groupKey="exit" label="Salida Long" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          <p className="text-xs text-red-400 font-medium">Short</p>
+          <ConditionGroupDisplay group={customRules.entry_short!} groupKey="entry_short" label="Entrada Short" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          <ConditionGroupDisplay group={customRules.exit_short!} groupKey="exit_short" label="Salida Short" borderColor="border-amber-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+        </>
+      ) : (
+        <>
+          <ConditionGroupDisplay group={customRules.entry} groupKey="entry" label="Entrada" borderColor="border-emerald-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          <ConditionGroupDisplay group={customRules.exit} groupKey="exit" label="Salida" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+        </>
+      )}
 
       {/* Risk management */}
       <div className="border border-amber-700/40 rounded p-3">

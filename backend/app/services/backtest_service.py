@@ -576,7 +576,12 @@ def _compute_all_indicators(df: pd.DataFrame, rules: StrategyRules) -> dict[str,
     needs_patterns = False
     needs_fractals_for_stop = rules.risk_management.stop_loss_type == StopLossType.fractal
 
-    for group in [rules.entry, rules.exit]:
+    all_groups = [rules.entry, rules.exit]
+    if rules.entry_short:
+        all_groups.append(rules.entry_short)
+    if rules.exit_short:
+        all_groups.append(rules.exit_short)
+    for group in all_groups:
         for cond in group.conditions:
             for operand in [cond.left, cond.right]:
                 if operand.type == ConditionOperandType.indicator and operand.name:
@@ -757,7 +762,12 @@ def _find_last_fractal_resistance(indicator_data: dict, i: int, entry_price: flo
 def _calc_warmup(rules: StrategyRules) -> int:
     """Calcula las barras de warmup necesarias según los indicadores usados."""
     max_period = 50  # mínimo razonable
-    for group in [rules.entry, rules.exit]:
+    groups = [rules.entry, rules.exit]
+    if rules.entry_short:
+        groups.append(rules.entry_short)
+    if rules.exit_short:
+        groups.append(rules.exit_short)
+    for group in groups:
         for cond in group.conditions:
             for operand in [cond.left, cond.right]:
                 if operand.type == ConditionOperandType.indicator and operand.params:
@@ -875,11 +885,15 @@ def _simulate(
 ) -> tuple[list[dict], list[EquityPoint]]:
     """Ejecuta la simulación. Soporta long, short y both.
 
-    Modo both:
+    Modo both con entry_short/exit_short (condiciones independientes):
+    - entry → abre Long, exit → cierra Long
+    - entry_short → abre Short, exit_short → cierra Short
+    - Long y Short se gestionan independientemente
+
+    Modo both sin entry_short/exit_short (legacy, condiciones compartidas):
     - Señal de entrada → abre Long
     - Señal de salida → abre Short
     - Cada posición se cierra por su señal contraria, stop o take profit
-    - Si al cerrar una posición la señal opuesta está activa, abre la contraria
     """
     capital = initial_capital
     position = None
@@ -888,6 +902,8 @@ def _simulate(
 
     side = rules.side
     is_both = side == StrategySide.both
+    # Independent short conditions for "both" mode
+    has_independent_short = is_both and rules.entry_short is not None and rules.exit_short is not None
     stop_loss_pct = rules.risk_management.stop_loss_pct
     take_profit_pct = rules.risk_management.take_profit_pct
 
@@ -901,17 +917,30 @@ def _simulate(
         if position is None:
             # Sin posición → evaluar si hay señal para abrir
             if is_both:
-                # Señal de entrada → Long, señal de salida → Short
-                entry_signal = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
-                exit_signal = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
-                if entry_signal:
-                    position, capital = _open_position(
-                        capital, close, False, rules, indicator_data, i,
-                        current_date, commission_pct, position_size_pct)
-                elif exit_signal:
-                    position, capital = _open_position(
-                        capital, close, True, rules, indicator_data, i,
-                        current_date, commission_pct, position_size_pct)
+                if has_independent_short:
+                    # Independent: check long entry and short entry separately
+                    entry_long = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
+                    entry_short = _evaluate_group(rules.entry_short, i, df, indicator_data, is_exit=False)
+                    if entry_long:
+                        position, capital = _open_position(
+                            capital, close, False, rules, indicator_data, i,
+                            current_date, commission_pct, position_size_pct)
+                    elif entry_short:
+                        position, capital = _open_position(
+                            capital, close, True, rules, indicator_data, i,
+                            current_date, commission_pct, position_size_pct)
+                else:
+                    # Legacy: entry → Long, exit → Short
+                    entry_signal = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
+                    exit_signal = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                    if entry_signal:
+                        position, capital = _open_position(
+                            capital, close, False, rules, indicator_data, i,
+                            current_date, commission_pct, position_size_pct)
+                    elif exit_signal:
+                        position, capital = _open_position(
+                            capital, close, True, rules, indicator_data, i,
+                            current_date, commission_pct, position_size_pct)
             else:
                 if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
                     open_short = side == StrategySide.short
@@ -951,11 +980,18 @@ def _simulate(
             # Check signal exit
             if not exit_reason:
                 if is_both:
-                    # Long se cierra con señal de salida, Short se cierra con señal de entrada
-                    if pos_is_short:
-                        signal_exit = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
+                    if has_independent_short:
+                        # Independent: long closes on exit, short closes on exit_short
+                        if pos_is_short:
+                            signal_exit = _evaluate_group(rules.exit_short, i, df, indicator_data, is_exit=True)
+                        else:
+                            signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
                     else:
-                        signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                        # Legacy: long closes on exit signal, short closes on entry signal
+                        if pos_is_short:
+                            signal_exit = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
+                        else:
+                            signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
                 else:
                     signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
                 if signal_exit:
@@ -967,18 +1003,30 @@ def _simulate(
                 trades.append(trade)
                 position = None
 
-                # Modo both: tras cerrar, si la señal opuesta está activa, abrir
+                # Modo both: tras cerrar por señal, intentar abrir posición opuesta
                 if is_both and exit_reason == "signal":
-                    if pos_is_short:
-                        # Cerré short por señal de entrada → la entrada está activa → abrir Long
-                        position, capital = _open_position(
-                            capital, close, False, rules, indicator_data, i,
-                            current_date, commission_pct, position_size_pct)
+                    if has_independent_short:
+                        # Independent: after closing, check if opposite entry is active
+                        if pos_is_short:
+                            if _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False):
+                                position, capital = _open_position(
+                                    capital, close, False, rules, indicator_data, i,
+                                    current_date, commission_pct, position_size_pct)
+                        else:
+                            if _evaluate_group(rules.entry_short, i, df, indicator_data, is_exit=False):
+                                position, capital = _open_position(
+                                    capital, close, True, rules, indicator_data, i,
+                                    current_date, commission_pct, position_size_pct)
                     else:
-                        # Cerré long por señal de salida → la salida está activa → abrir Short
-                        position, capital = _open_position(
-                            capital, close, True, rules, indicator_data, i,
-                            current_date, commission_pct, position_size_pct)
+                        # Legacy: always open opposite after signal close
+                        if pos_is_short:
+                            position, capital = _open_position(
+                                capital, close, False, rules, indicator_data, i,
+                                current_date, commission_pct, position_size_pct)
+                        else:
+                            position, capital = _open_position(
+                                capital, close, True, rules, indicator_data, i,
+                                current_date, commission_pct, position_size_pct)
 
         # Equity
         if position:
@@ -1127,30 +1175,40 @@ def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsR
 
     side = rules.side
     is_both = side == StrategySide.both
+    has_independent_short = is_both and rules.entry_short is not None and rules.exit_short is not None
 
     signals: list[Signal] = []
 
     for i in range(visible_start, len(df)):
-        entry_signal = _evaluate_group(rules.entry, i, df, indicator_data)
-        exit_signal = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
-
         dt = df.index[i]
         date_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
 
         if is_both:
-            if entry_signal:
-                signals.append(Signal(date=date_str, type="entry_long"))
-            if exit_signal:
-                signals.append(Signal(date=date_str, type="entry_short"))
+            if has_independent_short:
+                # Independent conditions for long and short
+                if _evaluate_group(rules.entry, i, df, indicator_data):
+                    signals.append(Signal(date=date_str, type="entry_long"))
+                if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+                    signals.append(Signal(date=date_str, type="exit_long"))
+                if _evaluate_group(rules.entry_short, i, df, indicator_data):
+                    signals.append(Signal(date=date_str, type="entry_short"))
+                if _evaluate_group(rules.exit_short, i, df, indicator_data, is_exit=True):
+                    signals.append(Signal(date=date_str, type="exit_short"))
+            else:
+                # Legacy: entry → long, exit → short
+                if _evaluate_group(rules.entry, i, df, indicator_data):
+                    signals.append(Signal(date=date_str, type="entry_long"))
+                if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
+                    signals.append(Signal(date=date_str, type="entry_short"))
         elif side == StrategySide.short:
-            if entry_signal:
+            if _evaluate_group(rules.entry, i, df, indicator_data):
                 signals.append(Signal(date=date_str, type="entry_short"))
-            if exit_signal:
+            if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
                 signals.append(Signal(date=date_str, type="exit_short"))
         else:  # long
-            if entry_signal:
+            if _evaluate_group(rules.entry, i, df, indicator_data):
                 signals.append(Signal(date=date_str, type="entry_long"))
-            if exit_signal:
+            if _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True):
                 signals.append(Signal(date=date_str, type="exit_long"))
 
     return SignalsResponse(signals=signals, ticker=ticker)

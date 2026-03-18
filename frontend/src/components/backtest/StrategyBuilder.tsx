@@ -310,6 +310,12 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
   const [exit, setExit] = useState<ConditionGroup>(
     editStrategy?.rules.exit || { operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }
   )
+  const [entryShort, setEntryShort] = useState<ConditionGroup>(
+    editStrategy?.rules.entry_short || { operator: 'AND', conditions: [makeDefaultCondition()] }
+  )
+  const [exitShort, setExitShort] = useState<ConditionGroup>(
+    editStrategy?.rules.exit_short || { operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }
+  )
   const [risk, setRisk] = useState<RiskManagement>(
     editStrategy?.rules.risk_management || { stop_loss_pct: 5, stop_loss_type: 'fixed', take_profit_pct: 15, position_size_pct: 100, max_risk_pct: null }
   )
@@ -317,7 +323,11 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
 
   const createMut = useMutation({
     mutationFn: () => {
-      const rules: StrategyRules = { entry, exit, risk_management: risk, side }
+      const rules: StrategyRules = {
+        entry, exit, risk_management: risk, side,
+        entry_short: side === 'both' ? entryShort : undefined,
+        exit_short: side === 'both' ? exitShort : undefined,
+      }
       if (editStrategy) {
         return backtest.updateStrategy(editStrategy.id, { name, description: description || undefined, rules })
       }
@@ -381,24 +391,40 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
         </button>
       </div>
       {side === 'both' && (
-        <p className="text-xs text-slate-500 -mt-2">Señal de entrada → abre long. Señal de salida → cierra y abre short. Siguiente entrada → cierra short y abre long. Siempre en el mercado.</p>
+        <p className="text-xs text-slate-500 -mt-2">Condiciones independientes para Long y Short. Cada lado tiene sus propias reglas de entrada y salida.</p>
       )}
 
-      {/* Entry conditions */}
-      <ConditionGroupEditor
-        group={entry}
-        onChange={setEntry}
-        title={side === 'short' ? 'Condiciones de ENTRADA (cuándo abrir corto)' : 'Condiciones de ENTRADA (cuándo comprar)'}
-        color="border-emerald-700/50"
-      />
-
-      {/* Exit conditions */}
-      <ConditionGroupEditor
-        group={exit}
-        onChange={setExit}
-        title={side === 'short' ? 'Condiciones de SALIDA (cuándo cerrar corto)' : 'Condiciones de SALIDA (cuándo vender)'}
-        color="border-red-700/50"
-      />
+      {side === 'both' ? (
+        <>
+          {/* Long conditions */}
+          <div className="border border-emerald-700/30 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-emerald-400">Long</h3>
+            <ConditionGroupEditor group={entry} onChange={setEntry} title="Entrada Long (cuándo abrir largo)" color="border-emerald-700/50" />
+            <ConditionGroupEditor group={exit} onChange={setExit} title="Salida Long (cuándo cerrar largo)" color="border-red-700/50" />
+          </div>
+          {/* Short conditions */}
+          <div className="border border-red-700/30 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-red-400">Short</h3>
+            <ConditionGroupEditor group={entryShort} onChange={setEntryShort} title="Entrada Short (cuándo abrir corto)" color="border-red-700/50" />
+            <ConditionGroupEditor group={exitShort} onChange={setExitShort} title="Salida Short (cuándo cerrar corto)" color="border-amber-700/50" />
+          </div>
+        </>
+      ) : (
+        <>
+          <ConditionGroupEditor
+            group={entry}
+            onChange={setEntry}
+            title={side === 'short' ? 'Condiciones de ENTRADA (cuándo abrir corto)' : 'Condiciones de ENTRADA (cuándo comprar)'}
+            color="border-emerald-700/50"
+          />
+          <ConditionGroupEditor
+            group={exit}
+            onChange={setExit}
+            title={side === 'short' ? 'Condiciones de SALIDA (cuándo cerrar corto)' : 'Condiciones de SALIDA (cuándo vender)'}
+            color="border-red-700/50"
+          />
+        </>
+      )}
 
       {/* Risk management */}
       <div className="border border-amber-700/50 rounded-lg p-4 space-y-3">
