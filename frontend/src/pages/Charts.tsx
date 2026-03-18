@@ -569,9 +569,12 @@ export default function Charts() {
       chart.timeScale().fitContent()
     }
 
-    // Sync visible range to oscillator charts
+    // Sync visible range to oscillator charts + save range continuously
     chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-      if (isSyncingRef.current || !range) return
+      if (!range) return
+      // Always save current range so it's restored if chart recreates
+      savedRangeRef.current = range
+      if (isSyncingRef.current) return
       isSyncingRef.current = true
       oscChartsRef.current.forEach((oscChart) => {
         try { oscChart.timeScale().setVisibleLogicalRange(range) } catch { /* chart may be disposed */ }
