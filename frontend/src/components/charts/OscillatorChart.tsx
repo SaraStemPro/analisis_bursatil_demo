@@ -13,7 +13,8 @@ import { IMPULSE_LABELS, CORRECTIVE_LABELS } from '../../types/drawings'
 
 interface OscillatorChartProps {
   indicator: IndicatorSeries
-  times: Time[]
+  times: Time[]       // history times — used for spacer (scroll sync)
+  indTimes?: Time[]   // indicator dates — used for data mapping (fixes offset)
   color: string
   interval: string
   syncingRef: React.MutableRefObject<boolean>
@@ -28,10 +29,12 @@ interface OscillatorChartProps {
 const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
 
 export default function OscillatorChart({
-  indicator, times, color, interval, syncingRef,
+  indicator, times, indTimes, color, interval, syncingRef,
   onRegister, onUnregister, onVisibleRangeChange,
   chartId, isActive, onActivate,
 }: OscillatorChartProps) {
+  // Use indicator's own dates for data mapping, fall back to history times
+  const dataTimes = indTimes ?? times
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<SeriesType, Time> | null>(null)
@@ -159,7 +162,7 @@ export default function OscillatorChart({
           title: `${indicator.name} ${seriesKey}`,
         })
         const histData = values
-          .map((v, i) => (v !== null ? { time: times[i], value: v, color: v >= 0 ? '#10b981' : '#ef4444' } : null))
+          .map((v, i) => (v !== null && i < dataTimes.length ? { time: dataTimes[i], value: v, color: v >= 0 ? '#10b981' : '#ef4444' } : null))
           .filter(Boolean) as { time: Time; value: number; color: string }[]
         histSeries.setData(histData)
         if (!firstSeries) firstSeries = histSeries as ISeriesApi<SeriesType, Time>
@@ -170,7 +173,7 @@ export default function OscillatorChart({
           title: `${indicator.name} ${seriesKey}`,
         })
         const lineData = values
-          .map((v, i) => (v !== null ? { time: times[i], value: v } : null))
+          .map((v, i) => (v !== null && i < dataTimes.length ? { time: dataTimes[i], value: v } : null))
           .filter(Boolean) as { time: Time; value: number }[]
         lineSeries.setData(lineData)
         if (!firstSeries) firstSeries = lineSeries as ISeriesApi<SeriesType, Time>
