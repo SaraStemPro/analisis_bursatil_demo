@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, createSeriesMarkers } from 'lightweight-charts'
@@ -687,13 +687,19 @@ export default function Charts() {
     return def && !def.overlay
   }) ?? []
 
-  // History times for oscillator spacer (must match main chart for sync)
-  const oscTimes = history?.data.map((d) => toChartTime(d.date, interval)) ?? []
+  // Memoize oscillator times to prevent OscillatorChart recreation on unrelated re-renders
+  const oscTimes = useMemo(
+    () => history?.data.map((d) => toChartTime(d.date, interval)) ?? [],
+    [history, interval],
+  )
 
   // Indicator dates for data mapping (fixes 2-bar offset)
-  const oscIndDates = indicatorData?.dates
-    ? indicatorData.dates.map((d) => toChartTime(d, interval))
-    : oscTimes
+  const oscIndDates = useMemo(
+    () => indicatorData?.dates
+      ? indicatorData.dates.map((d) => toChartTime(d, interval))
+      : oscTimes,
+    [indicatorData?.dates, interval, oscTimes],
+  )
 
   const handleOscRangeChange = useCallback((range: LogicalRange | null, sourceChartId: string) => {
     if (isSyncingRef.current || !range) return

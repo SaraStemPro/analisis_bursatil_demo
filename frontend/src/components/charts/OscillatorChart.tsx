@@ -188,18 +188,18 @@ export default function OscillatorChart({
     })
 
     // Fixed horizontal reference lines per indicator type
-    const REF_LINES: Record<string, { value: number; color: string }[]> = {
+    const REF_LINES: Record<string, { value: number; color: string; showLabel: boolean }[]> = {
       RSI: [
-        { value: 70, color: '#ef4444' },
-        { value: 30, color: '#10b981' },
+        { value: 70, color: '#ef4444', showLabel: true },
+        { value: 30, color: '#10b981', showLabel: true },
       ],
       STOCH: [
-        { value: 80, color: '#ef4444' },
-        { value: 50, color: '#94a3b8' },
-        { value: 20, color: '#10b981' },
+        { value: 80, color: '#ef4444', showLabel: false },
+        { value: 50, color: '#94a3b8', showLabel: false },
+        { value: 20, color: '#10b981', showLabel: false },
       ],
       MACD: [
-        { value: 0, color: '#94a3b8' },
+        { value: 0, color: '#94a3b8', showLabel: false },
       ],
     }
     const refLines = REF_LINES[indicator.name]
@@ -210,7 +210,7 @@ export default function OscillatorChart({
           color: rl.color,
           lineWidth: 1,
           lineStyle: 2,
-          axisLabelVisible: false,
+          axisLabelVisible: rl.showLabel,
           title: '',
         })
       })
