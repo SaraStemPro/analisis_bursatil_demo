@@ -25,7 +25,10 @@ export default function OrderForm({ initialTicker }: Props) {
     queryKey: ['demoQuote', ticker],
     queryFn: () => market.quote(ticker),
     enabled: ticker.length > 0,
+    refetchInterval: 60_000,
   })
+
+  const marketClosed = quote && ['CLOSED', 'PREPRE', 'POSTPOST'].includes(quote.market_state.toUpperCase())
 
   const orderMut = useMutation({
     mutationFn: (data: { ticker: string; type: string; quantity: number; notes: string }) => demo.createOrder(data),
@@ -72,18 +75,23 @@ export default function OrderForm({ initialTicker }: Props) {
         </div>
         <button
           onClick={() => handleOrder('buy')}
-          disabled={!ticker || orderMut.isPending}
+          disabled={!ticker || orderMut.isPending || !!marketClosed}
           className="flex items-center gap-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded text-white font-medium text-sm"
         >
           <ArrowUpCircle size={16} /> Comprar (Long)
         </button>
         <button
           onClick={() => handleOrder('sell')}
-          disabled={!ticker || orderMut.isPending}
+          disabled={!ticker || orderMut.isPending || !!marketClosed}
           className="flex items-center gap-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded text-white font-medium text-sm"
         >
           <ArrowDownCircle size={16} /> Vender (Short)
         </button>
+        {marketClosed && (
+          <span className="text-amber-400 text-xs flex items-center gap-1">
+            Mercado cerrado
+          </span>
+        )}
       </div>
 
       {/* Product description */}

@@ -168,9 +168,24 @@ def get_portfolio(db: Session, user_id: str) -> PortfolioResponse:
 def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
 
+    # Check market state — block orders when market is closed
+    ticker = body.ticker.upper()
+    try:
+        from .market_service import get_quote
+        quote_data = get_quote(ticker)
+        market_state = quote_data.market_state.upper()
+        if market_state in ("CLOSED", "PREPRE", "POSTPOST"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mercado cerrado para {ticker}. Solo puedes operar en horario de mercado.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # If quote fails, allow order (don't block on Yahoo errors)
+
     current_price = _get_current_price(body.ticker)
     base_price = body.price if body.price else Decimal(str(current_price))
-    ticker = body.ticker.upper()
     is_cfd = _is_cfd(ticker)
 
     # FX conversion for USD-denominated assets
@@ -256,8 +271,23 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
 def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
     ticker = body.ticker.upper()
-    is_cfd = _is_cfd(ticker)
 
+    # Check market state
+    try:
+        from .market_service import get_quote
+        quote_data = get_quote(ticker)
+        market_state = quote_data.market_state.upper()
+        if market_state in ("CLOSED", "PREPRE", "POSTPOST"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mercado cerrado para {ticker}. No puedes cerrar posiciones fuera de horario.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    is_cfd = _is_cfd(ticker)
     current_price = _get_current_price(ticker)
     base_price = Decimal(str(current_price))
 
