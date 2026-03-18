@@ -137,6 +137,10 @@ export default function OscillatorChart({
       ...CHART_THEME,
       autoSize: true,
       height: 180,
+      crosshair: {
+        horzLine: { visible: true, labelVisible: true },
+        vertLine: { visible: true, labelVisible: true },
+      },
       timeScale: { ...CHART_THEME.timeScale, timeVisible: isIntraday, secondsVisible: false },
     })
     chartInstanceRef.current = chart

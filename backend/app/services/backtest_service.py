@@ -1204,6 +1204,7 @@ def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsR
     has_independent_short = is_both and rules.entry_short is not None and rules.exit_short is not None
 
     signals: list[Signal] = []
+    is_intraday = interval in ("1m", "5m", "15m", "1h", "4h")
 
     # Stateful tracking
     in_long = False     # currently in a long position
@@ -1218,7 +1219,10 @@ def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsR
 
     for i in range(visible_start, len(df)):
         dt = df.index[i]
-        date_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+        # Normalize date format to match chart's toChartTime():
+        # - Intraday: full ISO (frontend converts to Unix + Madrid offset)
+        # - Daily+: YYYY-MM-DD only (frontend uses string directly)
+        date_str = dt.isoformat() if is_intraday else str(dt.date()) if hasattr(dt, 'date') else dt.isoformat().split('T')[0]
 
         if is_both:
             if has_independent_short:
