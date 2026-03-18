@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, createSeriesMarkers } from 'lightweight-charts'
+import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, CrosshairMode, createSeriesMarkers } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams, LogicalRange } from 'lightweight-charts'
 import { market, indicators, backtest } from '../api'
 import type { IndicatorDefinition, IndicatorRequest, Strategy, StrategySignal } from '../types'
@@ -370,6 +370,7 @@ export default function Charts() {
     chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#ffffff' }, textColor: '#374151' },
       grid: { vertLines: { color: '#e5e7eb' }, horzLines: { color: '#e5e7eb' } },
+      crosshair: { mode: CrosshairMode.Normal },
       autoSize: true,
       height: 450,
       timeScale: { borderColor: '#d1d5db', timeVisible: isIntraday, secondsVisible: false },

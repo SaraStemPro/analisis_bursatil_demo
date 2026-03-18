@@ -18,6 +18,8 @@ export default function OrderForm({ initialTicker }: Props) {
   }, [initialTicker])
   const [tickerName, setTickerName] = useState('')
   const [quantity, setQuantity] = useState(1)
+  const [stopLossMode, setStopLossMode] = useState<'price' | 'pct'>('pct')
+  const [stopLossValue, setStopLossValue] = useState<string>('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
 
@@ -31,7 +33,7 @@ export default function OrderForm({ initialTicker }: Props) {
   const marketClosed = quote && ['CLOSED', 'PREPRE', 'POSTPOST'].includes(quote.market_state.toUpperCase())
 
   const orderMut = useMutation({
-    mutationFn: (data: { ticker: string; type: string; quantity: number; notes: string }) => demo.createOrder(data),
+    mutationFn: (data: { ticker: string; type: string; quantity: number; stop_loss?: number; notes: string }) => demo.createOrder(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })
@@ -40,6 +42,7 @@ export default function OrderForm({ initialTicker }: Props) {
       setTicker('')
       setTickerName('')
       setQuantity(1)
+      setStopLossValue('')
       setNotes('')
       setError('')
     },
@@ -48,11 +51,27 @@ export default function OrderForm({ initialTicker }: Props) {
 
   const handleOrder = (type: 'buy' | 'sell') => {
     if (!ticker) return
+    if (!stopLossValue || Number(stopLossValue) <= 0) {
+      setError('El stop loss es obligatorio. Define un precio o % de pérdida máxima.')
+      return
+    }
     if (!notes.trim()) {
       setError('El diario de trading es obligatorio. Justifica tu operación.')
       return
     }
-    orderMut.mutate({ ticker, type, quantity, notes: notes.trim() })
+    // Compute stop_loss price
+    let stopLossPrice: number | undefined
+    if (quote) {
+      if (stopLossMode === 'price') {
+        stopLossPrice = Number(stopLossValue)
+      } else {
+        const pct = Number(stopLossValue) / 100
+        stopLossPrice = type === 'buy'
+          ? quote.price * (1 - pct)
+          : quote.price * (1 + pct)
+      }
+    }
+    orderMut.mutate({ ticker, type, quantity, stop_loss: stopLossPrice, notes: notes.trim() })
   }
 
   return (
@@ -72,6 +91,30 @@ export default function OrderForm({ initialTicker }: Props) {
             onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
             className="block mt-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white w-24 focus:outline-none focus:border-emerald-500 text-sm"
           />
+        </div>
+        <div>
+          <label className="text-sm text-slate-400">Stop Loss <span className="text-red-400">*</span></label>
+          <div className="flex mt-1 gap-1">
+            <select
+              value={stopLossMode}
+              onChange={(e) => { setStopLossMode(e.target.value as 'price' | 'pct'); setStopLossValue('') }}
+              className="px-2 py-2 bg-slate-800 border border-slate-600 rounded-l text-white text-xs w-14"
+            >
+              <option value="pct">%</option>
+              <option value="price">Precio</option>
+            </select>
+            <input
+              type="number"
+              step="any"
+              min={0.01}
+              value={stopLossValue}
+              onChange={(e) => { setStopLossValue(e.target.value); if (error) setError('') }}
+              placeholder={stopLossMode === 'pct' ? 'Ej: 5' : 'Ej: 150.00'}
+              className={`px-2 py-2 bg-slate-800 border rounded-r text-white w-24 focus:outline-none text-sm ${
+                error && !stopLossValue ? 'border-red-500' : 'border-slate-600 focus:border-emerald-500'
+              }`}
+            />
+          </div>
         </div>
         <button
           onClick={() => handleOrder('buy')}

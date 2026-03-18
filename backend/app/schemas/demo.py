@@ -47,9 +47,11 @@ class PositionResponse(BaseModel):
     side: str = "long"  # "long" | "short"
     portfolio_group: str | None = None
     currency: str = "EUR"  # "EUR" | "USD"
-    fx_rate_entry: Decimal | None = None  # EUR/USD rate when position opened
-    fx_rate_current: Decimal | None = None  # EUR/USD rate now
-    fx_pnl: Decimal | None = None  # P&L from currency movement only (EUR)
+    fx_rate_entry: Decimal | None = None
+    fx_rate_current: Decimal | None = None
+    fx_pnl: Decimal | None = None
+    stop_loss: Decimal | None = None
+    invested_value: Decimal | None = None
 
     model_config = {"from_attributes": True}
 

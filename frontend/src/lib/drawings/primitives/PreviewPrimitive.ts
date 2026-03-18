@@ -27,11 +27,11 @@ class PreviewRenderer implements IPrimitivePaneRenderer {
 
   draw(target: CanvasRenderingTarget2D): void {
     if (this.tool === 'trendline' || this.tool === 'elliott') {
-      drawLine(target, this.x1, this.y1, this.x2, this.y2, '#ffffff80', 2, true)
+      drawLine(target, this.x1, this.y1, this.x2, this.y2, '#00000080', 2, true)
     } else if (this.tool === 'hline') {
-      drawLine(target, 0, this.y2, this.chartWidth, this.y2, '#ffffff80', 1.5, true)
+      drawLine(target, 0, this.y2, this.chartWidth, this.y2, '#00000080', 1.5, true)
     } else if (this.tool === 'vline') {
-      drawLine(target, this.x2, 0, this.x2, 2000, '#ffffff80', 1.5, true)
+      drawLine(target, this.x2, 0, this.x2, 2000, '#00000080', 1.5, true)
     } else if (this.tool === 'fibonacci') {
       // Draw preview fib levels
       for (let i = 0; i < this.fibLevels.length - 1; i++) {

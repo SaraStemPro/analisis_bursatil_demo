@@ -824,6 +824,13 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 fx_now = None
                 currency = "EUR"
 
+            # Invested value (margin for CFD, full for spot)
+            inv_val = margin_invested if is_cfd else avg_price * long_held
+            if entry_fx is not None:
+                inv_val = _usd_to_eur(inv_val, entry_fx)
+            # Stop loss from latest open buy order
+            sl = first_buy.stop_loss if first_buy and first_buy.stop_loss else None
+
             positions.append(
                 PositionResponse(
                     ticker=ticker,
@@ -838,6 +845,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                     fx_rate_entry=entry_fx,
                     fx_rate_current=round(fx_now, 6) if fx_now else None,
                     fx_pnl=round(fx_pnl, 2) if fx_pnl is not None else None,
+                    stop_loss=round(sl, 5) if sl else None,
+                    invested_value=round(inv_val, 2),
                 )
             )
 
@@ -881,6 +890,11 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                 fx_now = None
                 currency = "EUR"
 
+            inv_val_s = margin_invested if is_cfd else avg_price * short_held
+            if entry_fx is not None:
+                inv_val_s = _usd_to_eur(inv_val_s, entry_fx)
+            sl_s = first_sell.stop_loss if first_sell and first_sell.stop_loss else None
+
             positions.append(
                 PositionResponse(
                     ticker=ticker,
@@ -895,6 +909,8 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
                     fx_rate_entry=entry_fx,
                     fx_rate_current=round(fx_now, 6) if fx_now else None,
                     fx_pnl=round(fx_pnl, 2) if fx_pnl is not None else None,
+                    stop_loss=round(sl_s, 5) if sl_s else None,
+                    invested_value=round(inv_val_s, 2),
                 )
             )
 

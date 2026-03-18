@@ -133,6 +133,10 @@ export default function Demo() {
                       <th className="px-3 py-2 text-right">P. cierre</th>
                       <th className="px-3 py-2 text-right">P&L</th>
                       <th className="px-3 py-2 text-right">%</th>
+                      <th className="px-3 py-2 text-right">Invertido</th>
+                      <th className="px-3 py-2 text-right">% cap.</th>
+                      <th className="px-3 py-2 text-right">Stop Loss</th>
+                      <th className="px-3 py-2 text-right">Riesgo</th>
                       <th className="px-3 py-2 text-right">Riesgo FX</th>
                       <th className="px-3 py-2 w-8"></th>
                     </tr>
@@ -167,6 +171,31 @@ export default function Demo() {
                           </td>
                           <td className={`px-3 py-2 text-right ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isProfit ? '+' : ''}{Number(p.pnl_pct).toFixed(2)}%
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-300">
+                            {p.invested_value != null ? `${Number(p.invested_value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€` : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-400">
+                            {p.invested_value != null && portfolio ? `${(Number(p.invested_value) / Number(portfolio.total_value) * 100).toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {p.stop_loss ? (
+                              <span className="text-amber-400">{fmtPrice(p.stop_loss)}</span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {p.stop_loss && p.invested_value ? (() => {
+                              const sl = Number(p.stop_loss)
+                              const entry = Number(p.avg_price)
+                              const qty = p.quantity
+                              const riskEur = isLong ? (entry - sl) * qty : (sl - entry) * qty
+                              const riskPct = Number(p.invested_value) > 0 ? (riskEur / Number(portfolio?.total_value || 1) * 100) : 0
+                              return (
+                                <span className="text-red-400">
+                                  {riskEur.toFixed(0)}€ <span className="text-[10px]">({riskPct.toFixed(1)}%)</span>
+                                </span>
+                              )
+                            })() : <span className="text-slate-600">—</span>}
                           </td>
                           <td className="px-3 py-2 text-right">
                             {p.fx_pnl != null ? (
@@ -277,7 +306,7 @@ export default function Demo() {
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <button
-                          onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name, currency: (p.currency || 'EUR') as 'EUR' | 'USD', fx_rate_entry: null, fx_rate_current: null, fx_pnl: p.fx_pnl })}
+                          onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name, currency: (p.currency || 'EUR') as 'EUR' | 'USD', fx_rate_entry: null, fx_rate_current: null, fx_pnl: p.fx_pnl, stop_loss: p.stop_loss ?? null, invested_value: p.invested_value ?? null })}
                           className="text-slate-500 hover:text-red-400 transition-colors"
                           title="Cerrar posicion (total o parcial)"
                         >

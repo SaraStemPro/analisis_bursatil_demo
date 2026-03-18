@@ -117,7 +117,9 @@ export interface Position {
   currency: 'EUR' | 'USD'
   fx_rate_entry: number | null
   fx_rate_current: number | null
-  fx_pnl: number | null  // P&L from currency movement only (EUR)
+  fx_pnl: number | null
+  stop_loss: number | null
+  invested_value: number | null
 }
 
 export interface Portfolio {
@@ -152,7 +154,7 @@ export interface Order {
 
 export interface Cartera {
   name: string
-  positions: { ticker: string; quantity: number; avg_price: number; current_price: number; pnl: number; pnl_pct: number; side: string; currency: string; fx_pnl: number | null }[]
+  positions: { ticker: string; quantity: number; avg_price: number; current_price: number; pnl: number; pnl_pct: number; side: string; currency: string; fx_pnl: number | null; stop_loss?: number | null; invested_value?: number | null }[]
   total_invested: number
   total_current: number
   total_pnl: number
