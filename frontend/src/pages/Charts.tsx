@@ -510,14 +510,38 @@ export default function Charts() {
       }
     }
 
-    // Strategy signal markers
+    // Strategy signal markers — snap to nearest chart candle
     if (strategySignals.length > 0 && history.data.length > 0) {
+      // Build a set of valid chart times for snapping
+      const chartTimeSet = new Set(times.map((t) => String(t)))
+      // For intraday, build a lookup from Unix seconds → chart Time
+      const isIntradayChart = INTRADAY_INTERVALS.has(interval)
+      let timesUnix: number[] = []
+      if (isIntradayChart) {
+        timesUnix = times.map((t) => Number(t))
+      }
+
       strategySignals.forEach((sig) => {
-        const sigDate = sig.date.split('T')[0]
         const isEntry = sig.type.startsWith('entry')
         const isLong = sig.type.includes('long')
+
+        // Convert signal date to chart time
+        let sigTime = toChartTime(sig.date, interval)
+
+        // If the exact time doesn't exist in chart, snap to nearest candle
+        if (!chartTimeSet.has(String(sigTime)) && isIntradayChart && timesUnix.length > 0) {
+          const sigUnix = Number(sigTime)
+          let bestIdx = 0
+          let bestDiff = Math.abs(timesUnix[0] - sigUnix)
+          for (let j = 1; j < timesUnix.length; j++) {
+            const diff = Math.abs(timesUnix[j] - sigUnix)
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = j }
+          }
+          sigTime = times[bestIdx]
+        }
+
         allMarkers.push({
-          time: toChartTime(sigDate, interval),
+          time: sigTime,
           position: isLong ? 'belowBar' : 'aboveBar',
           shape: isLong ? 'arrowUp' : 'arrowDown',
           color: isEntry ? (isLong ? '#10b981' : '#ef4444') : '#94a3b8',

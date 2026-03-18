@@ -156,11 +156,11 @@ export default function OscillatorChart({
     spacerSeries.setData(times.map((t) => ({ time: t, value: 0 })))
 
     let firstSeries: ISeriesApi<SeriesType, Time> | null = null
+    let lineIdx = 0 // counter for non-histogram line series
 
-    Object.entries(indicator.data).forEach(([seriesKey, values], subIdx) => {
-      const seriesColor = subIdx === 0 ? color : INDICATOR_COLORS[(subIdx) % INDICATOR_COLORS.length]
-
+    Object.entries(indicator.data).forEach(([seriesKey, values]) => {
       if (indicator.name === 'MACD' && seriesKey === 'histogram') {
+        const seriesColor = color
         const histSeries = chart.addSeries(HistogramSeries, {
           color: seriesColor,
           title: `${indicator.name} ${seriesKey}`,
@@ -171,6 +171,9 @@ export default function OscillatorChart({
         histSeries.setData(histData)
         if (!firstSeries) firstSeries = histSeries as ISeriesApi<SeriesType, Time>
       } else {
+        // First line gets the base color, subsequent lines get distinct colors
+        const seriesColor = lineIdx === 0 ? color : INDICATOR_COLORS[(lineIdx + 2) % INDICATOR_COLORS.length]
+        lineIdx++
         const lineSeries = chart.addSeries(LineSeries, {
           color: seriesColor,
           lineWidth: 2,
