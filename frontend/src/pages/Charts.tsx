@@ -219,14 +219,26 @@ export default function Charts() {
     fetchSignals()
   }, [selectedSignalStrategy, ticker, period, interval])
 
-  const getIndicatorDef = useCallback(
+  const getIndicatorDefFn = useCallback(
     (name: string) => catalog?.indicators.find((i) => i.name === name),
     [catalog],
   )
+  const getIndicatorDefRef = useRef(getIndicatorDefFn)
+  getIndicatorDefRef.current = getIndicatorDefFn
+  const getIndicatorDef = useCallback(
+    (name: string) => getIndicatorDefRef.current(name),
+    [],
+  )
 
-  const getIndicatorColor = useCallback(
+  const getIndicatorColorFn = useCallback(
     (key: string, idx: number) => indicatorColors[key] ?? INDICATOR_COLORS[idx % INDICATOR_COLORS.length],
     [indicatorColors],
+  )
+  const getIndicatorColorRef = useRef(getIndicatorColorFn)
+  getIndicatorColorRef.current = getIndicatorColorFn
+  const getIndicatorColor = useCallback(
+    (key: string, idx: number) => getIndicatorColorRef.current(key, idx),
+    [],
   )
 
   // Finalize drawing helper — reads arrowDirection/elliottWaveType from store at call time

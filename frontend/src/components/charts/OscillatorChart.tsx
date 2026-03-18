@@ -208,9 +208,9 @@ export default function OscillatorChart({
         (firstSeries as ISeriesApi<SeriesType, Time>).createPriceLine({
           price: rl.value,
           color: rl.color,
-          lineWidth: 2,
-          lineStyle: 1,
-          axisLabelVisible: true,
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: false,
           title: '',
         })
       })
