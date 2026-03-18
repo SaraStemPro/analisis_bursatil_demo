@@ -16,7 +16,7 @@ export default function Navbar() {
   const location = useLocation()
 
   return (
-    <nav className="bg-slate-900 text-white border-b border-slate-700">
+    <nav className="bg-white text-gray-900 border-b border-gray-300">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
         <Link to="/" className="text-lg font-bold text-emerald-400">
           AnalisisBursatil
@@ -29,8 +29,8 @@ export default function Navbar() {
               to={to}
               className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors ${
                 location.pathname === to
-                  ? 'bg-slate-700 text-emerald-400'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  ? 'bg-gray-200 text-emerald-400'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
               <Icon size={16} />
@@ -42,8 +42,8 @@ export default function Navbar() {
               to="/admin"
               className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors ${
                 location.pathname === '/admin'
-                  ? 'bg-slate-700 text-amber-400'
-                  : 'text-amber-500/70 hover:bg-slate-800 hover:text-amber-400'
+                  ? 'bg-gray-200 text-amber-400'
+                  : 'text-amber-500/70 hover:bg-gray-100 hover:text-amber-400'
               }`}
             >
               <Shield size={16} />
@@ -53,11 +53,11 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Link to="/profile" className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white">
+          <Link to="/profile" className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-gray-900">
             <User size={16} />
             <span className="hidden md:inline">{user?.name}</span>
           </Link>
-          <button onClick={logout} className="text-slate-400 hover:text-red-400 transition-colors">
+          <button onClick={logout} className="text-gray-500 hover:text-red-400 transition-colors">
             <LogOut size={16} />
           </button>
         </div>

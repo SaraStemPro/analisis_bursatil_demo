@@ -33,20 +33,20 @@ export default function PortfolioSummaryPanel() {
   const label = getDiversityLabel(summary.diversity_score)
 
   return (
-    <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+    <div className="bg-white rounded-lg p-5 border border-gray-300">
       <h2 className="font-semibold mb-3">Resumen del portfolio</h2>
 
       <div className="grid grid-cols-3 gap-4 mb-4">
         <div>
-          <p className="text-sm text-slate-400">Invertido</p>
+          <p className="text-sm text-gray-500">Invertido</p>
           <p className="text-lg font-bold">{summary.invested.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
         </div>
         <div>
-          <p className="text-sm text-slate-400">Posiciones</p>
+          <p className="text-sm text-gray-500">Posiciones</p>
           <p className="text-lg font-bold">{summary.positions_count}</p>
         </div>
         <div>
-          <p className="text-sm text-slate-400">Diversificacion</p>
+          <p className="text-sm text-gray-500">Diversificacion</p>
           <p className={`text-lg font-bold ${label.color}`}>{summary.diversity_score}%</p>
         </div>
       </div>
@@ -54,16 +54,16 @@ export default function PortfolioSummaryPanel() {
       {/* Diversity score bar */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-1">
-          <span className="text-sm text-slate-400">Diversificacion</span>
+          <span className="text-sm text-gray-500">Diversificacion</span>
           <span className={`text-sm font-medium ${label.color}`}>{label.text}</span>
         </div>
-        <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${label.barColor}`}
             style={{ width: `${summary.diversity_score}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
+        <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
           <span>Concentrado</span>
           <span>Moderado</span>
           <span>Diversificado</span>
@@ -73,14 +73,14 @@ export default function PortfolioSummaryPanel() {
       {/* Sector allocation */}
       {summary.sectors.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Distribucion por sector</h3>
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Distribucion por sector</h3>
           <div className="space-y-2">
             {summary.sectors.map((s) => (
               <div key={s.sector} className="flex items-center gap-2 text-sm">
                 <div className={`w-3 h-3 rounded-full flex-shrink-0 ${SECTOR_COLORS[s.sector] || 'bg-slate-500'}`} />
-                <span className="text-slate-300 flex-1 truncate">{s.sector}</span>
-                <span className="text-slate-400 w-16 text-right">{s.weight_pct}%</span>
-                <div className="w-24 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <span className="text-gray-700 flex-1 truncate">{s.sector}</span>
+                <span className="text-gray-500 w-16 text-right">{s.weight_pct}%</span>
+                <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${SECTOR_COLORS[s.sector] || 'bg-slate-500'}`} style={{ width: `${s.weight_pct}%` }} />
                 </div>
               </div>

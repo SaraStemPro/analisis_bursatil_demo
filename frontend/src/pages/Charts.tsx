@@ -117,6 +117,8 @@ export default function Charts() {
   const drawingManagerRef = useRef(new DrawingManager())
   const previewRef = useRef(new PreviewPrimitive())
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  // Track overlay indicator series for imperative color updates
+  const overlaySeriesRef = useRef<Map<string, ISeriesApi<SeriesType, Time>>>(new Map())
   // Stable refs for chart event handlers — prevents chart recreation on state changes
   const handleChartClickRef = useRef<(params: MouseEventParams<Time>) => void>(() => {})
   const handleChartDblClickRef = useRef<() => void>(() => {})
@@ -416,6 +418,7 @@ export default function Charts() {
     const indTimes = indicatorData?.dates
       ? indicatorData.dates.map((d) => toChartTime(d, interval))
       : times
+    overlaySeriesRef.current.clear()
     if (indicatorData) {
       indicatorData.indicators.forEach((ind, respIdx) => {
         const def = getIndicatorDef(ind.name)
@@ -436,6 +439,8 @@ export default function Charts() {
             .map((v, i) => (v !== null && i < indTimes.length ? { time: indTimes[i], value: v } : null))
             .filter(Boolean) as { time: Time; value: number }[]
           lineSeries.setData(lineData)
+          // Store ref for imperative color updates
+          if (ai && subIdx === 0) overlaySeriesRef.current.set(ai.id, lineSeries as ISeriesApi<SeriesType, Time>)
         })
       })
     }
@@ -618,6 +623,17 @@ export default function Charts() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor])
 
+  // Instant color update for overlay indicators (no chart recreation)
+  useEffect(() => {
+    overlaySeriesRef.current.forEach((series, id) => {
+      const idx = activeIndicators.findIndex((a) => a.id === id)
+      if (idx >= 0) {
+        const newColor = indicatorColors[id] ?? INDICATOR_COLORS[idx % INDICATOR_COLORS.length]
+        series.applyOptions({ color: newColor })
+      }
+    })
+  }, [indicatorColors, activeIndicators])
+
   // Update markers when strategy signals change (without recreating chart)
   useEffect(() => {
     if (!candleSeriesRef.current || !history?.data.length) return
@@ -794,26 +810,26 @@ export default function Charts() {
       {/* Search + Quote */}
       <div className="flex flex-col md:flex-row gap-4 items-start">
         <div className="relative w-full md:w-80">
-          <div className="flex items-center bg-slate-900 border border-slate-700 rounded">
-            <Search size={16} className="ml-3 text-slate-400" />
+          <div className="flex items-center bg-white border border-gray-300 rounded">
+            <Search size={16} className="ml-3 text-gray-500" />
             <input
               type="text"
               placeholder="Buscar ticker o nombre..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 bg-transparent text-white placeholder-slate-400 focus:outline-none"
+              className="w-full px-3 py-2 bg-transparent text-gray-900 placeholder-slate-400 focus:outline-none"
             />
           </div>
           {searchResults && searchQuery.length > 1 && (
-            <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
               {searchResults.slice(0, 8).map((r) => (
                 <button
                   key={r.symbol}
                   onClick={() => { setTicker(r.symbol); setSearchQuery('') }}
-                  className="w-full text-left px-3 py-2 hover:bg-slate-800 text-sm"
+                  className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm"
                 >
                   <span className="font-medium text-emerald-400">{r.symbol}</span>
-                  <span className="text-slate-400 ml-2">{r.name}</span>
+                  <span className="text-gray-500 ml-2">{r.name}</span>
                 </button>
               ))}
             </div>
@@ -826,7 +842,7 @@ export default function Charts() {
                 <span
                   key={t}
                   className={`inline-flex items-center gap-0.5 rounded text-xs transition-colors ${
-                    t === ticker ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    t === ticker ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
                   <button
@@ -859,21 +875,21 @@ export default function Charts() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Ver en Yahoo Finance"
-                  className="text-slate-400 hover:text-emerald-400 transition-colors"
+                  className="text-gray-500 hover:text-emerald-400 transition-colors"
                 >
                   <ExternalLink size={14} />
                 </a>
                 <button
                   onClick={() => navigate(`/demo?buy=${quote.symbol}`)}
                   title="Comprar en Paper Trading"
-                  className="flex items-center gap-1 px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 rounded text-white text-xs font-medium transition-colors"
+                  className="flex items-center gap-1 px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 rounded text-gray-900 text-xs font-medium transition-colors"
                 >
                   <ShoppingCart size={12} /> Comprar
                 </button>
               </div>
-              <p className="text-sm text-slate-400">{quote.name}</p>
+              <p className="text-sm text-gray-500">{quote.name}</p>
               {/* Feature 12: exchange + market state */}
-              <p className="text-xs text-slate-500">{quote.exchange} · {quote.market_state}</p>
+              <p className="text-xs text-gray-400">{quote.exchange} · {quote.market_state}</p>
             </div>
             <div className="text-right">
               <div className="flex items-center justify-end gap-2">
@@ -889,7 +905,7 @@ export default function Charts() {
                   }}
                   disabled={quoteFetching}
                   title="Refrescar precio"
-                  className="text-slate-500 hover:text-emerald-400 disabled:animate-spin transition-colors"
+                  className="text-gray-400 hover:text-emerald-400 disabled:animate-spin transition-colors"
                 >
                   <RefreshCw size={14} />
                 </button>
@@ -897,8 +913,8 @@ export default function Charts() {
               <p className={`text-sm ${quote.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {quote.change >= 0 ? '+' : ''}{fmtChange(quote.change, quote.price)} ({quote.change_percent.toFixed(2)}%)
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Ask (compra): {fmtPrice(askPrice(quote.price))} <span className="text-slate-600">(+{(SPREAD_PCT * 100).toFixed(2)}%)</span>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Ask (compra): {fmtPrice(askPrice(quote.price))} <span className="text-gray-400">(+{(SPREAD_PCT * 100).toFixed(2)}%)</span>
               </p>
               {isCfd(ticker) && (
                 <p className="text-xs text-amber-400/80 mt-0.5">
@@ -922,12 +938,12 @@ export default function Charts() {
               const valid = validIntervals(p)
               if (!valid.includes(interval)) setInterval(valid.includes('1d') ? '1d' : valid[valid.length - 1])
             }}
-            className={`px-3 py-1 rounded text-sm ${period === p ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+            className={`px-3 py-1 rounded text-sm ${period === p ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
           >
             {p.toUpperCase()}
           </button>
         ))}
-        <span className="text-slate-600 mx-1">|</span>
+        <span className="text-gray-400 mx-1">|</span>
         {ALL_INTERVALS.map((i) => {
           const valid = validIntervals(period).includes(i)
           return (
@@ -938,19 +954,19 @@ export default function Charts() {
               title={!valid ? `Reduce el período para usar ${i}` : undefined}
               className={`px-3 py-1 rounded text-sm ${
                 interval === i ? 'bg-blue-600 text-white'
-                : valid ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                : 'bg-slate-900 text-slate-600 cursor-not-allowed'
+                : valid ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-white text-gray-400 cursor-not-allowed'
               }`}
             >
               {i}
             </button>
           )
         })}
-        <span className="text-slate-600 mx-1">|</span>
+        <span className="text-gray-400 mx-1">|</span>
         {/* Feature 3: Hoy button */}
         <button
           onClick={scrollToToday}
-          className="px-3 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700"
+          className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200"
           title="Scroll al día actual"
         >
           Hoy
@@ -959,7 +975,7 @@ export default function Charts() {
         <button
           onClick={toggleLogScale}
           className={`px-3 py-1 rounded text-sm font-mono ${
-            logScale ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            logScale ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
           title="Escala logarítmica"
         >
@@ -973,7 +989,7 @@ export default function Charts() {
           <button
             onClick={() => setShowPatternSelector((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
-              activePatterns.size > 0 ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              activePatterns.size > 0 ? 'bg-amber-600 text-gray-900' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
             <CandlestickChart size={14} />
@@ -982,7 +998,7 @@ export default function Charts() {
             {showPatternSelector ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           {activePatterns.size > 0 && !showPatternSelector && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-gray-500">
               {PATTERN_CATALOG.filter((p) => activePatterns.has(p.type)).map((p) => p.label.split(' — ')[0]).join(' · ')}
             </span>
           )}
@@ -991,7 +1007,7 @@ export default function Charts() {
           <button
             onClick={() => setShowSignalSelector((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
-              selectedSignalStrategy ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              selectedSignalStrategy ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
             <FlaskConical size={14} />
@@ -1000,13 +1016,13 @@ export default function Charts() {
             {showSignalSelector ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           {selectedSignalStrategy && !showSignalSelector && (
-            <span className="text-xs text-slate-400">{selectedSignalStrategy.name}</span>
+            <span className="text-xs text-gray-500">{selectedSignalStrategy.name}</span>
           )}
         </div>
         {showPatternSelector && (
-          <div className="bg-slate-900 rounded-lg border border-slate-700 p-3">
+          <div className="bg-white rounded-lg border border-gray-300 p-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-slate-400 font-medium">Selecciona patrones a mostrar</span>
+              <span className="text-xs text-gray-500 font-medium">Selecciona patrones a mostrar</span>
               <button
                 onClick={toggleAllPatterns}
                 className="text-xs text-emerald-400 hover:text-emerald-300"
@@ -1016,7 +1032,7 @@ export default function Charts() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {PATTERN_CATALOG.map((p) => (
-                <label key={p.type} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800 cursor-pointer">
+                <label key={p.type} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={activePatterns.has(p.type)}
@@ -1024,8 +1040,8 @@ export default function Charts() {
                     className="accent-emerald-500"
                   />
                   <div>
-                    <span className="text-sm text-slate-200">{p.label}</span>
-                    <p className="text-[10px] text-slate-500 leading-tight">{p.description}</p>
+                    <span className="text-sm text-gray-800">{p.label}</span>
+                    <p className="text-[10px] text-gray-400 leading-tight">{p.description}</p>
                   </div>
                 </label>
               ))}
@@ -1033,9 +1049,9 @@ export default function Charts() {
           </div>
         )}
         {showSignalSelector && (
-          <div className="bg-slate-900 rounded-lg border border-emerald-700/50 p-3">
+          <div className="bg-white rounded-lg border border-emerald-700/50 p-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-slate-400 font-medium">Selecciona una estrategia</span>
+              <span className="text-xs text-gray-500 font-medium">Selecciona una estrategia</span>
               {selectedSignalStrategy && (
                 <button onClick={() => setSelectedSignalStrategy(null)} className="text-xs text-red-400 hover:text-red-300">Desactivar</button>
               )}
@@ -1046,18 +1062,18 @@ export default function Charts() {
                   key={s.id}
                   onClick={() => { setSelectedSignalStrategy(s); setShowSignalSelector(false) }}
                   className={`text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
-                    selectedSignalStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-slate-800 hover:bg-slate-700'
+                    selectedSignalStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-gray-100 hover:bg-gray-200'
                   }`}
                 >
-                  <span className="font-medium text-slate-200">{s.name}</span>
+                  <span className="font-medium text-gray-800">{s.name}</span>
                   {s.is_template && <span className="text-xs text-blue-400 ml-1.5">plantilla</span>}
-                  {s.description && <p className="text-[10px] text-slate-500 leading-tight mt-0.5">{s.description}</p>}
+                  {s.description && <p className="text-[10px] text-gray-400 leading-tight mt-0.5">{s.description}</p>}
                 </button>
               ))}
-              {allStrategies.length === 0 && <p className="text-xs text-slate-500 italic col-span-2">Sin estrategias disponibles</p>}
+              {allStrategies.length === 0 && <p className="text-xs text-gray-400 italic col-span-2">Sin estrategias disponibles</p>}
             </div>
             {selectedSignalStrategy && strategySignals.length > 0 && (
-              <div className="mt-2 flex gap-3 text-xs text-slate-400">
+              <div className="mt-2 flex gap-3 text-xs text-gray-500">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Entrada Long (L)</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Entrada Short (S)</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400 inline-block"></span> Salida (xL/xS)</span>
@@ -1072,25 +1088,25 @@ export default function Charts() {
         <DrawingToolbar />
         <div className="flex-1 relative">
           {historyLoading && !history && (
-            <div className="bg-slate-900 rounded-lg border border-slate-700 h-[450px] flex items-center justify-center">
+            <div className="bg-white rounded-lg border border-gray-300 h-[450px] flex items-center justify-center">
               <div className="text-center">
                 <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-3" />
-                <p className="text-sm text-slate-400">Cargando gráfico...</p>
+                <p className="text-sm text-gray-500">Cargando gráfico...</p>
               </div>
             </div>
           )}
           {historyError && !history && (
-            <div className="bg-slate-900 rounded-lg border border-red-500/50 h-[450px] flex items-center justify-center">
+            <div className="bg-white rounded-lg border border-red-500/50 h-[450px] flex items-center justify-center">
               <div className="text-center px-6">
                 <p className="text-sm text-red-400 mb-2">
                   {(historyErrorObj as Error)?.message?.includes('no disponible')
                     ? 'Servicio de datos temporalmente saturado'
                     : 'Error al cargar los datos del gráfico'}
                 </p>
-                <p className="text-xs text-slate-500 mb-3">Demasiadas peticiones simultáneas a Yahoo Finance</p>
+                <p className="text-xs text-gray-400 mb-3">Demasiadas peticiones simultáneas a Yahoo Finance</p>
                 <button
                   onClick={() => refetchHistory()}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded transition-colors"
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-gray-900 text-sm rounded transition-colors"
                 >
                   Reintentar
                 </button>
@@ -1100,8 +1116,8 @@ export default function Charts() {
           <div
             ref={chartRef}
             onClick={() => setActiveChartId('main')}
-            className={`bg-slate-900 rounded-lg border transition-colors ${
-              activeChartId === 'main' ? 'border-emerald-500' : 'border-slate-700'
+            className={`bg-white rounded-lg border transition-colors ${
+              activeChartId === 'main' ? 'border-emerald-500' : 'border-gray-300'
             } ${activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''} ${!history?.data?.length ? 'hidden' : ''}`}
           />
           {/* Text input overlay */}
@@ -1110,7 +1126,7 @@ export default function Charts() {
               <input
                 autoFocus
                 placeholder="Escribe tu nota..."
-                className="bg-slate-800 border border-emerald-500 text-white px-3 py-2 rounded text-sm w-60 focus:outline-none"
+                className="bg-gray-100 border border-emerald-500 text-gray-900 px-3 py-2 rounded text-sm w-60 focus:outline-none"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') finalizeText(e.currentTarget.value)
                   if (e.key === 'Escape') { setTextInput({ show: false, point: null }); resetInteraction() }
@@ -1162,7 +1178,7 @@ export default function Charts() {
               : ''
 
             return (
-              <div key={ind.id} className="bg-slate-900 rounded-lg p-3 border border-slate-700">
+              <div key={ind.id} className="bg-white rounded-lg p-3 border border-gray-300">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <label className="relative w-3 h-3 rounded-full cursor-pointer" style={{ backgroundColor: color }}>
@@ -1174,20 +1190,20 @@ export default function Charts() {
                       />
                     </label>
                     <span className="font-medium text-sm">{def?.display_name ?? ind.name}{paramSummary}</span>
-                    {def && !def.overlay && <span className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded">osc</span>}
+                    {def && !def.overlay && <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">osc</span>}
                   </div>
                   <div className="flex items-center gap-1">
                     {def && def.params.length > 0 && (
                       <button
                         onClick={() => setEditingIndicator(isEditing ? null : ind.id)}
-                        className={`p-1 rounded hover:bg-slate-700 ${isEditing ? 'text-emerald-400' : 'text-slate-500'}`}
+                        className={`p-1 rounded hover:bg-gray-200 ${isEditing ? 'text-emerald-400' : 'text-gray-400'}`}
                       >
                         <Settings2 size={14} />
                       </button>
                     )}
                     <button
                       onClick={() => removeIndicator(ind.id)}
-                      className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-red-400"
+                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-400"
                     >
                       <X size={14} />
                     </button>
@@ -1196,27 +1212,27 @@ export default function Charts() {
 
                 {/* Last values */}
                 {indData && (
-                  <div className="text-xs text-slate-400 space-x-3">
+                  <div className="text-xs text-gray-500 space-x-3">
                     {Object.entries(indData.data).map(([key, vals]) => {
                       const last = [...vals].reverse().find((v) => v !== null)
-                      return <span key={key}>{key}: <span className="text-slate-200">{last != null ? fmtPrice(last) : 'N/A'}</span></span>
+                      return <span key={key}>{key}: <span className="text-gray-800">{last != null ? fmtPrice(last) : 'N/A'}</span></span>
                     })}
                   </div>
                 )}
 
                 {/* Param editor */}
                 {isEditing && def && (
-                  <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
+                  <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
                     {def.params.map((p) => (
                       <div key={p.name} className="flex items-center gap-2">
-                        <label className="text-xs text-slate-400 w-20">{p.name}</label>
+                        <label className="text-xs text-gray-500 w-20">{p.name}</label>
                         <input
                           type="number"
                           value={ind.params[p.name] ?? p.default}
                           min={p.min ?? undefined}
                           max={p.max ?? undefined}
                           onChange={(e) => updateParam(ind.id, p.name, Number(e.target.value))}
-                          className="flex-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-emerald-500"
+                          className="flex-1 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:border-emerald-500"
                         />
                       </div>
                     ))}
@@ -1230,12 +1246,12 @@ export default function Charts() {
 
       {/* Indicators catalog — Feature 6: filter out VWAP */}
       {catalog && (
-        <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
+        <div className="bg-white rounded-lg p-4 border border-gray-300">
           <h3 className="font-semibold mb-3">Indicadores ({activeIndicators.length}/5)</h3>
           <div className="space-y-3">
             {categories.map((cat) => (
               <div key={cat}>
-                <p className="text-xs font-medium text-slate-400 uppercase mb-1">{cat}</p>
+                <p className="text-xs font-medium text-gray-500 uppercase mb-1">{cat}</p>
                 <div className="flex flex-wrap gap-2">
                   {catalog.indicators.filter((i) => i.category === cat && i.name !== 'VWAP').map((ind) => {
                     const count = activeIndicators.filter((a) => a.name === ind.name).length
@@ -1246,7 +1262,7 @@ export default function Charts() {
                         onClick={() => isMulti ? addIndicator(ind) : toggleIndicator(ind)}
                         disabled={activeIndicators.length >= 5 && count === 0}
                         className={`px-3 py-1 rounded text-sm transition-colors ${
-                          count > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          count > 0 ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         } disabled:opacity-40`}
                       >
                         {ind.display_name}{count > 0 && isMulti ? ` (${count})` : ''}{isMulti ? ' +' : ''}

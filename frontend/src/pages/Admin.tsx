@@ -23,14 +23,14 @@ export default function Admin() {
 
   const fmtMoney = (v: number) => v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
   const fmtPct = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
-  const pnlColor = (v: number) => v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-slate-400'
+  const pnlColor = (v: number) => v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-gray-500'
   const fmtPrice = (v: number) => {
     if (v < 10) return v.toFixed(5)
     if (v < 100) return v.toFixed(4)
     return v.toFixed(2)
   }
 
-  if (isLoading) return <div className="text-slate-400 text-center py-12">Cargando posiciones...</div>
+  if (isLoading) return <div className="text-gray-500 text-center py-12">Cargando posiciones...</div>
 
   const totalStudents = students?.length ?? 0
   const studentsWithPositions = students?.filter(s => s.positions.length > 0).length ?? 0
@@ -39,15 +39,15 @@ export default function Admin() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Panel del profesor</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Panel del profesor</h1>
+          <p className="text-gray-500 text-sm mt-1">
             {totalStudents} estudiantes registrados, {studentsWithPositions} con posiciones abiertas
           </p>
         </div>
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-sm disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm disabled:opacity-50"
         >
           <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           Actualizar
@@ -63,21 +63,21 @@ export default function Admin() {
           const totalPositions = students?.reduce((a, s) => a + s.positions.length, 0) ?? 0
           return (
             <>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-xs text-slate-400">P&L total clase</div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <div className="text-xs text-gray-500">P&L total clase</div>
                 <div className={`text-lg font-bold ${pnlColor(totalPnl)}`}>{fmtMoney(totalPnl)}</div>
               </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-xs text-slate-400">P&L medio</div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <div className="text-xs text-gray-500">P&L medio</div>
                 <div className={`text-lg font-bold ${pnlColor(avgPnlPct)}`}>{fmtPct(avgPnlPct)}</div>
               </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-xs text-slate-400">Total invertido</div>
-                <div className="text-lg font-bold text-white">{fmtMoney(totalInvested)}</div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Total invertido</div>
+                <div className="text-lg font-bold text-gray-900">{fmtMoney(totalInvested)}</div>
               </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-xs text-slate-400">Posiciones abiertas</div>
-                <div className="text-lg font-bold text-white">{totalPositions}</div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Posiciones abiertas</div>
+                <div className="text-lg font-bold text-gray-900">{totalPositions}</div>
               </div>
             </>
           )
@@ -87,47 +87,47 @@ export default function Admin() {
       {/* Students list */}
       <div className="space-y-2">
         {students?.map(s => (
-          <div key={s.email} className="bg-slate-800 rounded-lg overflow-hidden">
+          <div key={s.email} className="bg-gray-100 rounded-lg overflow-hidden">
             {/* Student header */}
             <button
               onClick={() => toggle(s.email)}
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-750 transition-colors text-left"
             >
               <div className="flex items-center gap-3">
-                {expanded.has(s.email) ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+                {expanded.has(s.email) ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
                 <div>
-                  <span className="font-medium text-white">{s.username}</span>
-                  <span className="text-slate-500 text-xs ml-2">{s.email}</span>
+                  <span className="font-medium text-gray-900">{s.username}</span>
+                  <span className="text-gray-400 text-xs ml-2">{s.email}</span>
                 </div>
               </div>
               <div className="flex items-center gap-6 text-sm">
                 <div className="text-right">
-                  <div className="text-slate-400 text-xs">Valor total</div>
-                  <div className="text-white font-medium">{fmtMoney(s.total_value)}</div>
+                  <div className="text-gray-500 text-xs">Valor total</div>
+                  <div className="text-gray-900 font-medium">{fmtMoney(s.total_value)}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-slate-400 text-xs">P&L</div>
+                  <div className="text-gray-500 text-xs">P&L</div>
                   <div className={`font-medium ${pnlColor(s.total_pnl)}`}>
                     {fmtMoney(s.total_pnl)} ({fmtPct(s.total_pnl_pct)})
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-slate-400 text-xs">Posiciones</div>
-                  <div className="text-white">{s.positions.length}</div>
+                  <div className="text-gray-500 text-xs">Posiciones</div>
+                  <div className="text-gray-900">{s.positions.length}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-slate-400 text-xs">Disponible</div>
-                  <div className="text-white">{fmtMoney(s.balance)}</div>
+                  <div className="text-gray-500 text-xs">Disponible</div>
+                  <div className="text-gray-900">{fmtMoney(s.balance)}</div>
                 </div>
               </div>
             </button>
 
             {/* Expanded positions */}
             {expanded.has(s.email) && s.positions.length > 0 && (
-              <div className="border-t border-slate-700 px-4 py-2">
+              <div className="border-t border-gray-300 px-4 py-2">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-slate-500 text-xs">
+                    <tr className="text-gray-400 text-xs">
                       <th className="text-left py-1">Ticker</th>
                       <th className="text-left py-1">Lado</th>
                       <th className="text-right py-1">Cant.</th>
@@ -141,14 +141,14 @@ export default function Admin() {
                   </thead>
                   <tbody>
                     {s.positions.map((p, i) => (
-                      <tr key={`${p.ticker}-${p.side}-${i}`} className="border-t border-slate-700/50">
+                      <tr key={`${p.ticker}-${p.side}-${i}`} className="border-t border-gray-300/50">
                         <td className="py-1.5 font-medium text-cyan-400">{p.ticker}</td>
                         <td className={`py-1.5 ${p.side === 'long' ? 'text-emerald-400' : 'text-red-400'}`}>
                           {p.side === 'long' ? 'Long' : 'Short'}
                         </td>
-                        <td className="py-1.5 text-right text-white">{p.quantity}</td>
-                        <td className="py-1.5 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
-                        <td className="py-1.5 text-right text-slate-300">{fmtPrice(p.current_price)}</td>
+                        <td className="py-1.5 text-right text-gray-900">{p.quantity}</td>
+                        <td className="py-1.5 text-right text-gray-700">{fmtPrice(p.avg_price)}</td>
+                        <td className="py-1.5 text-right text-gray-700">{fmtPrice(p.current_price)}</td>
                         <td className={`py-1.5 text-right font-medium ${pnlColor(p.pnl)}`}>{fmtMoney(p.pnl)}</td>
                         <td className={`py-1.5 text-right ${pnlColor(p.pnl_pct)}`}>{fmtPct(p.pnl_pct)}</td>
                         <td className="py-1.5 text-right">
@@ -157,10 +157,10 @@ export default function Admin() {
                               {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
                             </span>
                           ) : (
-                            <span className="text-slate-600 text-xs">—</span>
+                            <span className="text-gray-400 text-xs">—</span>
                           )}
                         </td>
-                        <td className="py-1.5 pl-3 text-slate-500 text-xs">{p.portfolio_group || '—'}</td>
+                        <td className="py-1.5 pl-3 text-gray-400 text-xs">{p.portfolio_group || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -168,7 +168,7 @@ export default function Admin() {
               </div>
             )}
             {expanded.has(s.email) && s.positions.length === 0 && (
-              <div className="border-t border-slate-700 px-4 py-3 text-slate-500 text-sm">
+              <div className="border-t border-gray-300 px-4 py-3 text-gray-400 text-sm">
                 Sin posiciones abiertas
               </div>
             )}
@@ -177,7 +177,7 @@ export default function Admin() {
       </div>
 
       {totalStudents === 0 && (
-        <div className="text-center text-slate-500 py-12">
+        <div className="text-center text-gray-400 py-12">
           No hay estudiantes registrados todavia
         </div>
       )}

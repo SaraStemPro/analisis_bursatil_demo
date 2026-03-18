@@ -283,8 +283,8 @@ export default function OscillatorChart({
     <div className="relative" onClick={onActivate}>
       <div
         ref={chartContainerRef}
-        className={`bg-slate-900 rounded-lg border transition-colors ${
-          isActive ? 'border-emerald-500' : 'border-slate-700'
+        className={`bg-white rounded-lg border transition-colors ${
+          isActive ? 'border-emerald-500' : 'border-gray-300'
         } ${activeTool && activeChartId === chartId ? 'cursor-crosshair' : ''}`}
       />
     </div>

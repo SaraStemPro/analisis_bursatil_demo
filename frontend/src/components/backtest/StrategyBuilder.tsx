@@ -75,11 +75,11 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
 
   return (
     <div className="space-y-1.5">
-      <span className="text-xs text-slate-500">{label}</span>
+      <span className="text-xs text-gray-400">{label}</span>
       <select
         value={operand.type}
         onChange={(e) => onChange(makeDefaultOperand(e.target.value as ConditionOperandType))}
-        className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+        className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
       >
         <option value="indicator">Indicador</option>
         <option value="price">Precio</option>
@@ -98,7 +98,7 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
               ind?.params.forEach(p => { params[p.key] = p.default })
               onChange({ ...operand, name: e.target.value, params })
             }}
-            className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+            className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
           >
             {INDICATORS.map(i => <option key={i.name} value={i.name}>{i.label}</option>)}
           </select>
@@ -106,12 +106,12 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
             <div className="flex gap-2">
               {indDef.params.map(p => (
                 <div key={p.key} className="flex-1">
-                  <label className="text-xs text-slate-500">{p.label}</label>
+                  <label className="text-xs text-gray-400">{p.label}</label>
                   <input
                     type="number"
                     value={operand.params?.[p.key] ?? p.default}
                     onChange={(e) => onChange({ ...operand, params: { ...operand.params, [p.key]: Number(e.target.value) } })}
-                    className="block w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+                    className="block w-full px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
                   />
                 </div>
               ))}
@@ -119,11 +119,11 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
           )}
           {operand.name === 'BBANDS' && (
             <div>
-              <label className="text-xs text-slate-500">Banda</label>
+              <label className="text-xs text-gray-400">Banda</label>
               <select
                 value={String(operand.params?.['band'] ?? 'lower')}
                 onChange={(e) => onChange({ ...operand, params: { ...operand.params, band: e.target.value } })}
-                className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+                className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
               >
                 {BBANDS_BANDS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
               </select>
@@ -136,7 +136,7 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
         <select
           value={operand.field || 'close'}
           onChange={(e) => onChange({ ...operand, field: e.target.value as PriceField })}
-          className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+          className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
         >
           {PRICE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
@@ -148,7 +148,7 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
           step="any"
           value={operand.value ?? 0}
           onChange={(e) => onChange({ ...operand, value: Number(e.target.value) })}
-          className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+          className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
         />
       )}
 
@@ -156,7 +156,7 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
         <select
           value={operand.pattern || 'bullish_hammer'}
           onChange={(e) => onChange({ ...operand, pattern: e.target.value as CandlePattern })}
-          className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+          className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
         >
           {CANDLE_PATTERNS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
@@ -175,7 +175,7 @@ function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps
   const needsUpper = condition.comparator === 'between' || condition.comparator === 'outside'
 
   return (
-    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 space-y-2">
+    <div className="bg-gray-100 rounded-lg p-3 border border-gray-300 space-y-2">
       <div className="flex justify-between items-start">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
           <OperandEditor
@@ -184,7 +184,7 @@ function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps
             label="Izquierda"
           />
           <div className="space-y-1.5">
-            <span className="text-xs text-slate-500">Comparador</span>
+            <span className="text-xs text-gray-400">Comparador</span>
             <select
               value={condition.comparator}
               onChange={(e) => {
@@ -196,20 +196,20 @@ function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps
                   right_upper: needsUp && !condition.right_upper ? makeDefaultOperand('value') : needsUp ? condition.right_upper : undefined,
                 })
               }}
-              className="block w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+              className="block w-full px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-900"
             >
               {COMPARATORS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
             {/* Offset: velas atrás */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 whitespace-nowrap">Velas atrás:</span>
+              <span className="text-xs text-gray-400 whitespace-nowrap">Velas atrás:</span>
               <input
                 type="number"
                 min="0"
                 max="100"
                 value={condition.offset || 0}
                 onChange={(e) => onChange({ ...condition, offset: Number(e.target.value) })}
-                className="w-14 px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white text-center"
+                className="w-14 px-1.5 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900 text-center"
               />
               {(condition.offset ?? 0) > 0 && (
                 <span className="text-xs text-amber-400">{condition.offset} velas antes</span>
@@ -222,7 +222,7 @@ function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps
             label="Derecha"
           />
         </div>
-        <button onClick={onRemove} className="ml-2 mt-5 text-slate-500 hover:text-red-400">
+        <button onClick={onRemove} className="ml-2 mt-5 text-gray-400 hover:text-red-400">
           <Trash2 size={14} />
         </button>
       </div>
@@ -252,11 +252,11 @@ function ConditionGroupEditor({ group, onChange, title, color }: ConditionGroupE
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-sm">{title}</h4>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Operador:</span>
+          <span className="text-xs text-gray-500">Operador:</span>
           <select
             value={group.operator}
             onChange={(e) => onChange({ ...group, operator: e.target.value as LogicalOperator })}
-            className="px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white"
+            className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-900"
           >
             <option value="AND">AND (todas)</option>
             <option value="OR">OR (alguna)</option>
@@ -267,7 +267,7 @@ function ConditionGroupEditor({ group, onChange, title, color }: ConditionGroupE
       {group.conditions.map((cond, i) => (
         <div key={i}>
           {i > 0 && (
-            <div className="text-center text-xs text-slate-500 py-1">{group.operator}</div>
+            <div className="text-center text-xs text-gray-400 py-1">{group.operator}</div>
           )}
           <ConditionEditor
             condition={cond}
@@ -286,7 +286,7 @@ function ConditionGroupEditor({ group, onChange, title, color }: ConditionGroupE
 
       <button
         onClick={() => onChange({ ...group, conditions: [...group.conditions, makeDefaultCondition()] })}
-        className="flex items-center gap-1 text-sm text-slate-400 hover:text-white"
+        className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
       >
         <Plus size={14} /> Añadir condición
       </button>
@@ -340,58 +340,58 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
   })
 
   return (
-    <div className="bg-slate-900 rounded-lg p-5 border border-purple-700/50 space-y-5">
+    <div className="bg-white rounded-lg p-5 border border-purple-700/50 space-y-5">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-lg">{editStrategy ? 'Editar estrategia' : 'Nueva estrategia'}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20} /></button>
+        <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={20} /></button>
       </div>
 
       {/* Name & description */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label className="text-sm text-slate-400">Nombre</label>
+          <label className="text-sm text-gray-500">Nombre</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Mi estrategia"
-            className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-purple-500"
+            className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 focus:outline-none focus:border-purple-500"
           />
         </div>
         <div>
-          <label className="text-sm text-slate-400">Descripción (opcional)</label>
+          <label className="text-sm text-gray-500">Descripción (opcional)</label>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Descripción breve de la estrategia"
-            className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:border-purple-500"
+            className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 focus:outline-none focus:border-purple-500"
           />
         </div>
       </div>
 
       {/* Side selector */}
       <div className="flex items-center gap-3">
-        <span className="text-sm text-slate-400">Tipo de posición:</span>
+        <span className="text-sm text-gray-500">Tipo de posición:</span>
         <button
           onClick={() => setSide('long')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'long' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'long' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:text-gray-900'}`}
         >
           Long
         </button>
         <button
           onClick={() => setSide('short')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'short' ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'short' ? 'bg-red-600 text-gray-900' : 'bg-gray-100 text-gray-500 hover:text-gray-900'}`}
         >
           Short
         </button>
         <button
           onClick={() => setSide('both')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'both' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${side === 'both' ? 'bg-purple-600 text-gray-900' : 'bg-gray-100 text-gray-500 hover:text-gray-900'}`}
         >
           Long + Short
         </button>
       </div>
       {side === 'both' && (
-        <p className="text-xs text-slate-500 -mt-2">Condiciones independientes para Long y Short. Cada lado tiene sus propias reglas de entrada y salida.</p>
+        <p className="text-xs text-gray-400 -mt-2">Condiciones independientes para Long y Short. Cada lado tiene sus propias reglas de entrada y salida.</p>
       )}
 
       {side === 'both' ? (
@@ -433,16 +433,16 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
         {/* Stop loss type */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-400">Tipo de Stop Loss</label>
+            <label className="text-xs text-gray-500">Tipo de Stop Loss</label>
             <select
               value={risk.stop_loss_type}
               onChange={(e) => setRisk({ ...risk, stop_loss_type: e.target.value as StopLossType })}
-              className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+              className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm"
             >
               <option value="fixed">Fijo (% de pérdida)</option>
               <option value="fractal">{side === 'short' ? 'Dinámico (fractal de resistencia)' : side === 'both' ? 'Dinámico (fractal soporte/resistencia)' : 'Dinámico (fractal de soporte)'}</option>
             </select>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {risk.stop_loss_type === 'fractal'
                 ? side === 'short'
                   ? 'El stop se coloca en el último fractal de resistencia (máximo local)'
@@ -453,7 +453,7 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
             </p>
           </div>
           <div>
-            <label className="text-xs text-slate-400">
+            <label className="text-xs text-gray-500">
               {risk.stop_loss_type === 'fractal' ? 'Stop Loss fallback (%)' : 'Stop Loss (%)'}
             </label>
             <input
@@ -462,28 +462,28 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
               value={risk.stop_loss_pct ?? ''}
               onChange={(e) => setRisk({ ...risk, stop_loss_pct: e.target.value ? Number(e.target.value) : null })}
               placeholder="Sin stop"
-              className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+              className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm"
             />
             {risk.stop_loss_type === 'fractal' && (
-              <p className="text-xs text-slate-500 mt-1">Se usa si no hay fractal disponible</p>
+              <p className="text-xs text-gray-400 mt-1">Se usa si no hay fractal disponible</p>
             )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-slate-400">Take Profit (%)</label>
+            <label className="text-xs text-gray-500">Take Profit (%)</label>
             <input
               type="number"
               step="0.5"
               value={risk.take_profit_pct ?? ''}
               onChange={(e) => setRisk({ ...risk, take_profit_pct: e.target.value ? Number(e.target.value) : null })}
               placeholder="Sin take profit"
-              className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+              className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm"
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400">Capital por operación (%)</label>
+            <label className="text-xs text-gray-500">Capital por operación (%)</label>
             <input
               type="number"
               step="5"
@@ -491,12 +491,12 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
               max="100"
               value={risk.position_size_pct}
               onChange={(e) => setRisk({ ...risk, position_size_pct: Number(e.target.value) })}
-              className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+              className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm"
             />
-            <p className="text-xs text-slate-500 mt-1">% del capital disponible que se invierte en cada trade. Ej: 100% = usar todo el cash, 50% = invertir la mitad</p>
+            <p className="text-xs text-gray-400 mt-1">% del capital disponible que se invierte en cada trade. Ej: 100% = usar todo el cash, 50% = invertir la mitad</p>
           </div>
           <div>
-            <label className="text-xs text-slate-400">Riesgo máx. por trade (%)</label>
+            <label className="text-xs text-gray-500">Riesgo máx. por trade (%)</label>
             <input
               type="number"
               step="0.5"
@@ -505,9 +505,9 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
               value={risk.max_risk_pct ?? ''}
               onChange={(e) => setRisk({ ...risk, max_risk_pct: e.target.value ? Number(e.target.value) : null })}
               placeholder="Sin límite"
-              className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+              className="block mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm"
             />
-            <p className="text-xs text-slate-500 mt-1">Ajusta el tamaño de posición para no arriesgar más de este % del capital (ej: 2%)</p>
+            <p className="text-xs text-gray-400 mt-1">Ajusta el tamaño de posición para no arriesgar más de este % del capital (ej: 2%)</p>
           </div>
         </div>
       </div>
@@ -521,7 +521,7 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
         >
           <Save size={16} /> {createMut.isPending ? 'Guardando...' : editStrategy ? 'Guardar cambios' : 'Crear estrategia'}
         </button>
-        <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white text-sm">
+        <button onClick={onClose} className="px-4 py-2 text-gray-500 hover:text-gray-900 text-sm">
           Cancelar
         </button>
         {createMut.isError && (

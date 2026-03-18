@@ -9,7 +9,7 @@ function typeLabel(type: string, side: string | null): { text: string; color: st
     const sideLabel = side === 'short' ? 'Short' : 'Long'
     return { text: `Cierre ${sideLabel}`, color: 'text-amber-400' }
   }
-  return { text: type, color: 'text-slate-400' }
+  return { text: type, color: 'text-gray-500' }
 }
 
 export default function OrderHistory() {
@@ -19,12 +19,12 @@ export default function OrderHistory() {
   if (!orders || orders.length === 0) return null
 
   return (
-    <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+    <div className="bg-white rounded-lg p-5 border border-gray-300">
       <h2 className="font-semibold mb-3">Historial de ordenes</h2>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-slate-400 text-left border-b border-slate-700">
+            <tr className="text-gray-500 text-left border-b border-gray-300">
               <th className="pb-2">Fecha</th>
               <th className="pb-2">Ticker</th>
               <th className="pb-2">Tipo</th>
@@ -39,12 +39,12 @@ export default function OrderHistory() {
             {orders.slice(0, 30).map((o) => {
               const t = typeLabel(o.type, o.side)
               return (
-                <tr key={o.id} className="border-b border-slate-800">
+                <tr key={o.id} className="border-b border-gray-200">
                   <td className="py-2">{new Date(o.created_at).toLocaleDateString('es-ES')}</td>
                   <td className="py-2">
                     <button
                       onClick={() => navigate(`/charts?ticker=${o.ticker}`)}
-                      className="font-medium text-white hover:text-emerald-400"
+                      className="font-medium text-gray-900 hover:text-emerald-400"
                     >
                       {o.ticker}
                     </button>
@@ -57,12 +57,12 @@ export default function OrderHistory() {
                   </td>
                   <td className="py-2">
                     <span className={`px-2 py-0.5 rounded text-xs ${
-                      o.status === 'open' ? 'bg-blue-900 text-blue-300' : 'bg-slate-800 text-slate-400'
+                      o.status === 'open' ? 'bg-blue-900 text-blue-300' : 'bg-gray-100 text-gray-500'
                     }`}>
                       {o.status === 'open' ? 'Abierta' : 'Cerrada'}
                     </span>
                   </td>
-                  <td className="py-2 text-slate-400 max-w-[200px] truncate" title={o.notes || ''}>
+                  <td className="py-2 text-gray-500 max-w-[200px] truncate" title={o.notes || ''}>
                     {o.notes || '-'}
                   </td>
                 </tr>

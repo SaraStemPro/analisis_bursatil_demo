@@ -56,7 +56,7 @@ export default function OrderForm({ initialTicker }: Props) {
   }
 
   return (
-    <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+    <div className="bg-white rounded-lg p-5 border border-gray-300">
       <h2 className="font-semibold mb-3">Nueva orden</h2>
       <div className="flex flex-wrap gap-3 items-end">
         <TickerSearchInput
@@ -64,13 +64,13 @@ export default function OrderForm({ initialTicker }: Props) {
           onChange={(t, name) => { setTicker(t); if (name) setTickerName(name) }}
         />
         <div>
-          <label className="text-sm text-slate-400">Cantidad</label>
+          <label className="text-sm text-gray-500">Cantidad</label>
           <input
             type="number"
             min={1}
             value={quantity}
             onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
-            className="block mt-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white w-24 focus:outline-none focus:border-emerald-500 text-sm"
+            className="block mt-1 px-3 py-2 bg-gray-100 border border-gray-300 rounded text-gray-900 w-24 focus:outline-none focus:border-emerald-500 text-sm"
           />
         </div>
         <button
@@ -100,20 +100,20 @@ export default function OrderForm({ initialTicker }: Props) {
         const ask = askPrice(quote.price)
         const cost = totalCost(ticker, quote.price, quantity)
         return (
-          <div className="mt-3 p-3 bg-slate-800 rounded text-sm">
-            <p className="text-slate-300">
-              Vas a operar con <span className="font-bold text-white">{quantity}</span>{' '}
+          <div className="mt-3 p-3 bg-gray-100 rounded text-sm">
+            <p className="text-gray-700">
+              Vas a operar con <span className="font-bold text-gray-900">{quantity}</span>{' '}
               {cfd ? 'contratos' : 'unidades'} de{' '}
               <span className="font-bold text-emerald-400">{tickerName || ticker}</span>
               {cfd && <span className="text-amber-400/80 text-xs ml-1">({cfdLabel(ticker)})</span>}
             </p>
-            <div className="mt-1.5 space-y-0.5 text-xs text-slate-400">
-              <p>Precio mid: <span className="text-white">{quote.price.toFixed(quote.price < 10 ? 5 : 2)} {quote.currency}</span> · Ask (compra): <span className="text-white">{ask.toFixed(ask < 10 ? 5 : 2)} {quote.currency}</span> <span className="text-slate-600">(+{(SPREAD_PCT * 100).toFixed(2)}% spread)</span></p>
+            <div className="mt-1.5 space-y-0.5 text-xs text-gray-500">
+              <p>Precio mid: <span className="text-gray-900">{quote.price.toFixed(quote.price < 10 ? 5 : 2)} {quote.currency}</span> · Ask (compra): <span className="text-gray-900">{ask.toFixed(ask < 10 ? 5 : 2)} {quote.currency}</span> <span className="text-gray-400">(+{(SPREAD_PCT * 100).toFixed(2)}% spread)</span></p>
               {cfd && (
-                <p>Margen por contrato (5%): <span className="text-white">{marginPerContract(ticker, quote.price).toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}</span></p>
+                <p>Margen por contrato (5%): <span className="text-gray-900">{marginPerContract(ticker, quote.price).toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}</span></p>
               )}
-              <p className="text-slate-300 font-medium">
-                {cfd ? 'Margen total' : 'Coste total'}: <span className="text-white">{cost.toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}</span>
+              <p className="text-gray-700 font-medium">
+                {cfd ? 'Margen total' : 'Coste total'}: <span className="text-gray-900">{cost.toLocaleString('es-ES', { style: 'currency', currency: quote.currency })}</span>
               </p>
             </div>
           </div>
@@ -122,7 +122,7 @@ export default function OrderForm({ initialTicker }: Props) {
 
       {/* Diario de operaciones */}
       <div className="mt-3">
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-gray-500">
           Diario de Trading — ¿por qué abres esta posición? <span className="text-red-400">*</span>
         </label>
         <textarea
@@ -131,8 +131,8 @@ export default function OrderForm({ initialTicker }: Props) {
           maxLength={500}
           rows={2}
           placeholder="Ej: Soporte en media de 200, RSI sobrevendido, patrón de martillo..."
-          className={`block mt-1 w-full px-3 py-2 bg-slate-800 border rounded text-white text-sm focus:outline-none resize-none placeholder:text-slate-500 ${
-            error && !notes.trim() ? 'border-red-500 focus:border-red-500' : 'border-slate-600 focus:border-emerald-500'
+          className={`block mt-1 w-full px-3 py-2 bg-gray-100 border rounded text-gray-900 text-sm focus:outline-none resize-none placeholder:text-gray-400 ${
+            error && !notes.trim() ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-emerald-500'
           }`}
         />
       </div>

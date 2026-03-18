@@ -20,32 +20,32 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Hola, {user?.name}</h1>
-        <p className="text-slate-400 mt-1">Bienvenid@ a tu plataforma de análisis bursátil.</p>
+        <p className="text-gray-500 mt-1">Bienvenid@ a tu plataforma de análisis bursátil.</p>
       </div>
 
       {portfolio && (
-        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+        <div className="bg-white rounded-lg p-5 border border-gray-300">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={20} className="text-emerald-400" />
             <h2 className="font-semibold">Tu portfolio</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-sm text-slate-400">Valor total</p>
+              <p className="text-sm text-gray-500">Valor total</p>
               <p className="text-lg font-bold">{Number(portfolio.total_value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">Saldo disponible</p>
+              <p className="text-sm text-gray-500">Saldo disponible</p>
               <p className="text-lg font-bold">{Number(portfolio.balance).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">P&L total</p>
+              <p className="text-sm text-gray-500">P&L total</p>
               <p className={`text-lg font-bold ${Number(portfolio.total_pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {Number(portfolio.total_pnl) >= 0 ? '+' : ''}{Number(portfolio.total_pnl).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
               </p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">Rendimiento</p>
+              <p className="text-sm text-gray-500">Rendimiento</p>
               <p className={`text-lg font-bold ${Number(portfolio.total_pnl_pct) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {Number(portfolio.total_pnl_pct) >= 0 ? '+' : ''}{Number(portfolio.total_pnl_pct).toFixed(2)}%
               </p>
@@ -59,15 +59,15 @@ export default function Dashboard() {
           <Link
             key={to}
             to={to}
-            className="bg-slate-900 rounded-lg p-5 border border-slate-700 hover:border-slate-500 transition-colors group"
+            className="bg-white rounded-lg p-5 border border-gray-300 hover:border-slate-500 transition-colors group"
           >
             <div className="flex items-center gap-3 mb-2">
               <div className={`${color} p-2 rounded`}>
-                <Icon size={20} className="text-white" />
+                <Icon size={20} className="text-gray-900" />
               </div>
               <h3 className="font-semibold group-hover:text-emerald-400 transition-colors">{label}</h3>
             </div>
-            <p className="text-sm text-slate-400">{desc}</p>
+            <p className="text-sm text-gray-500">{desc}</p>
           </Link>
         ))}
       </div>
@@ -75,29 +75,29 @@ export default function Dashboard() {
       {/* Tutor IA — bloque destacado */}
       <Link
         to="/tutor"
-        className="block bg-slate-900 rounded-lg p-6 border border-amber-700/50 hover:border-amber-500/70 transition-colors group"
+        className="block bg-white rounded-lg p-6 border border-amber-700/50 hover:border-amber-500/70 transition-colors group"
       >
         <div className="flex items-center gap-3 mb-2">
           <div className="bg-amber-600 p-3 rounded">
-            <MessageCircle size={24} className="text-white" />
+            <MessageCircle size={24} className="text-gray-900" />
           </div>
           <div>
             <h3 className="text-lg font-semibold group-hover:text-amber-400 transition-colors">Tutor IA</h3>
-            <p className="text-sm text-slate-400">Pregunta al tutor basado en los apuntes del curso. Sube PDFs, consulta dudas y repasa conceptos clave de análisis bursátil.</p>
+            <p className="text-sm text-gray-500">Pregunta al tutor basado en los apuntes del curso. Sube PDFs, consulta dudas y repasa conceptos clave de análisis bursátil.</p>
           </div>
         </div>
       </Link>
 
       {/* Ranking */}
       {ranking && ranking.length > 0 && (
-        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+        <div className="bg-white rounded-lg p-5 border border-gray-300">
           <div className="flex items-center gap-2 mb-4">
             <Trophy size={20} className="text-amber-400" />
             <h2 className="font-semibold">Ranking</h2>
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 text-left border-b border-slate-700">
+              <tr className="text-gray-500 text-left border-b border-gray-300">
                 <th className="pb-2 px-2 w-10">#</th>
                 <th className="pb-2 px-2">Usuario</th>
                 <th className="pb-2 px-2 text-right">Valor portfolio</th>
@@ -109,7 +109,7 @@ export default function Dashboard() {
               {ranking.map((r, idx) => {
                 const isMe = r.username === user?.name
                 return (
-                  <tr key={r.username} className={`border-b border-slate-800 ${isMe ? 'bg-emerald-900/20' : ''}`}>
+                  <tr key={r.username} className={`border-b border-gray-200 ${isMe ? 'bg-emerald-900/20' : ''}`}>
                     <td className="py-2 px-2 font-medium">
                       {idx === 0 ? <span className="text-xl">🥇</span>
                         : idx === 1 ? <span className="text-xl">🥈</span>
@@ -126,7 +126,7 @@ export default function Dashboard() {
                     <td className={`py-2 px-2 text-right font-medium ${r.total_pnl_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {r.total_pnl_pct >= 0 ? '+' : ''}{r.total_pnl_pct.toFixed(2)}%
                     </td>
-                    <td className="py-2 px-2 text-right text-slate-400">{r.positions_count}</td>
+                    <td className="py-2 px-2 text-right text-gray-500">{r.positions_count}</td>
                   </tr>
                 )
               })}

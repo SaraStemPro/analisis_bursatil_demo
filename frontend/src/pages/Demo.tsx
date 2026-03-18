@@ -77,7 +77,7 @@ export default function Demo() {
 
       {/* Portfolio overview */}
       {portfolio && (
-        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+        <div className="bg-white rounded-lg p-5 border border-gray-300">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-semibold text-lg">Portfolio</h2>
             <div className="flex items-center gap-2">
@@ -85,33 +85,33 @@ export default function Demo() {
                 <button
                   onClick={() => { if (confirm('¿Cerrar TODAS las posiciones al precio actual?')) closeAllMut.mutate() }}
                   disabled={closeAllMut.isPending}
-                  className="flex items-center gap-1 text-sm text-slate-400 hover:text-amber-400 disabled:opacity-50"
+                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-amber-400 disabled:opacity-50"
                 >
                   <XCircle size={14} /> {closeAllMut.isPending ? 'Cerrando...' : 'Cerrar todo'}
                 </button>
               )}
-              <button onClick={() => resetMut.mutate()} className="flex items-center gap-1 text-sm text-slate-400 hover:text-red-400">
+              <button onClick={() => resetMut.mutate()} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-400">
                 <RotateCcw size={14} /> Resetear
               </button>
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <div>
-              <p className="text-sm text-slate-400">Valor total</p>
+              <p className="text-sm text-gray-500">Valor total</p>
               <p className="text-lg font-bold">{Number(portfolio.total_value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">Saldo</p>
+              <p className="text-sm text-gray-500">Saldo</p>
               <p className="text-lg font-bold">{Number(portfolio.balance).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">P&L</p>
+              <p className="text-sm text-gray-500">P&L</p>
               <p className={`text-lg font-bold ${Number(portfolio.total_pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {Number(portfolio.total_pnl) >= 0 ? '+' : ''}{Number(portfolio.total_pnl).toFixed(2)}€
               </p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">Rendimiento</p>
+              <p className="text-sm text-gray-500">Rendimiento</p>
               <p className={`text-lg font-bold ${Number(portfolio.total_pnl_pct) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {Number(portfolio.total_pnl_pct) >= 0 ? '+' : ''}{Number(portfolio.total_pnl_pct).toFixed(2)}%
               </p>
@@ -121,11 +121,11 @@ export default function Demo() {
           {/* Open positions — list format */}
           {hasPositions && (
             <div>
-              <h3 className="text-sm font-medium text-slate-400 mb-2">Posiciones individuales ({individualPositions.length})</h3>
-              <div className="border border-slate-700 rounded-lg overflow-hidden">
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Posiciones individuales ({individualPositions.length})</h3>
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-800/50">
+                    <tr className="text-gray-500 text-left border-b border-gray-300 bg-gray-100">
                       <th className="px-3 py-2">Ticker</th>
                       <th className="px-3 py-2">Tipo</th>
                       <th className="px-3 py-2 text-right">Cantidad</th>
@@ -142,11 +142,11 @@ export default function Demo() {
                       const isLong = p.side === 'long'
                       const isProfit = Number(p.pnl) >= 0
                       return (
-                        <tr key={`${p.ticker}-${p.side}`} className="border-b border-slate-800 hover:bg-slate-800/50">
+                        <tr key={`${p.ticker}-${p.side}`} className="border-b border-gray-200 hover:bg-gray-100">
                           <td className="px-3 py-2">
                             <button
                               onClick={() => navigate(`/charts?ticker=${p.ticker}`)}
-                              className="font-medium text-white hover:text-emerald-400 inline-flex items-center gap-1"
+                              className="font-medium text-gray-900 hover:text-emerald-400 inline-flex items-center gap-1"
                             >
                               {p.ticker}
                               <ExternalLink size={11} className="opacity-40" />
@@ -159,9 +159,9 @@ export default function Demo() {
                               {isLong ? 'LONG' : 'SHORT'}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right text-white">{p.quantity}</td>
-                          <td className="px-3 py-2 text-right text-slate-300" title={isLong ? 'Ask (con spread)' : 'Bid (sin spread)'}>{fmtPrice(p.avg_price)}</td>
-                          <td className="px-3 py-2 text-right text-white" title={isLong ? 'Bid (sin spread)' : 'Ask (con spread)'}>{fmtPrice(p.current_price)} <span className="text-[10px] text-slate-500">{isLong ? 'bid' : 'ask'}</span></td>
+                          <td className="px-3 py-2 text-right text-gray-900">{p.quantity}</td>
+                          <td className="px-3 py-2 text-right text-gray-700" title={isLong ? 'Ask (con spread)' : 'Bid (sin spread)'}>{fmtPrice(p.avg_price)}</td>
+                          <td className="px-3 py-2 text-right text-gray-900" title={isLong ? 'Bid (sin spread)' : 'Ask (con spread)'}>{fmtPrice(p.current_price)} <span className="text-[10px] text-gray-400">{isLong ? 'bid' : 'ask'}</span></td>
                           <td className={`px-3 py-2 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
                           </td>
@@ -175,16 +175,16 @@ export default function Demo() {
                                 title={`TC entrada: ${Number(p.fx_rate_entry).toFixed(4)} | TC actual: ${Number(p.fx_rate_current).toFixed(4)}`}
                               >
                                 {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
-                                <span className="text-[10px] text-slate-500 ml-1">USD</span>
+                                <span className="text-[10px] text-gray-400 ml-1">USD</span>
                               </span>
                             ) : (
-                              <span className="text-slate-600 text-xs">—</span>
+                              <span className="text-gray-400 text-xs">—</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <button
                               onClick={() => setClosingPosition(p)}
-                              className="text-slate-500 hover:text-red-400 transition-colors"
+                              className="text-gray-400 hover:text-red-400 transition-colors"
                               title="Cerrar posicion"
                             >
                               <X size={14} />
@@ -203,14 +203,14 @@ export default function Demo() {
 
       {/* Carteras */}
       {carteras && carteras.length > 0 && carteras.map((c: Cartera) => (
-        <div key={c.name} className="bg-slate-900 rounded-lg p-5 border border-cyan-700/50">
+        <div key={c.name} className="bg-white rounded-lg p-5 border border-cyan-700/50">
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold flex items-center gap-2">
               <Briefcase size={18} className="text-cyan-400" />
               {c.name}
             </h2>
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-slate-400">{c.positions.length} posiciones &middot; {c.sectors} sectores</span>
+              <span className="text-gray-500">{c.positions.length} posiciones &middot; {c.sectors} sectores</span>
               <span className={`font-medium ${c.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {c.total_pnl >= 0 ? '+' : ''}{c.total_pnl.toFixed(2)}€ ({c.total_pnl_pct >= 0 ? '+' : ''}{c.total_pnl_pct.toFixed(2)}%)
               </span>
@@ -223,20 +223,20 @@ export default function Demo() {
               <button
                 onClick={() => { if (confirm(`¿Cerrar TODA la cartera "${c.name}"?`)) closeCarteraMut.mutate(c.name) }}
                 disabled={closeCarteraMut.isPending}
-                className="flex items-center gap-1 text-slate-400 hover:text-amber-400 disabled:opacity-50"
+                className="flex items-center gap-1 text-gray-500 hover:text-amber-400 disabled:opacity-50"
               >
                 <XCircle size={14} /> Cerrar cartera
               </button>
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
-            <div><p className="text-slate-400 text-xs">Invertido</p><p className="font-medium">${c.total_invested.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
-            <div><p className="text-slate-400 text-xs">Valor actual</p><p className="font-medium">${c.total_current.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
+            <div><p className="text-gray-500 text-xs">Invertido</p><p className="font-medium">${c.total_invested.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
+            <div><p className="text-gray-500 text-xs">Valor actual</p><p className="font-medium">${c.total_current.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
           </div>
-          <div className="border border-slate-700 rounded-lg overflow-hidden">
+          <div className="border border-gray-300 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-800/50">
+                <tr className="text-gray-500 text-left border-b border-gray-300 bg-gray-100">
                   <th className="px-3 py-1.5">Ticker</th>
                   <th className="px-3 py-1.5 text-right">Cant.</th>
                   <th className="px-3 py-1.5 text-right">P. entrada</th>
@@ -251,15 +251,15 @@ export default function Demo() {
                 {c.positions.map((p) => {
                   const isProfit = p.pnl >= 0
                   return (
-                    <tr key={`${p.ticker}-${p.side}`} className="border-b border-slate-800 hover:bg-slate-800/50">
+                    <tr key={`${p.ticker}-${p.side}`} className="border-b border-gray-200 hover:bg-gray-100">
                       <td className="px-3 py-1.5">
-                        <button onClick={() => navigate(`/charts?ticker=${p.ticker}`)} className="font-medium text-white hover:text-cyan-400 inline-flex items-center gap-1">
+                        <button onClick={() => navigate(`/charts?ticker=${p.ticker}`)} className="font-medium text-gray-900 hover:text-cyan-400 inline-flex items-center gap-1">
                           {p.ticker} <ExternalLink size={10} className="opacity-40" />
                         </button>
                       </td>
-                      <td className="px-3 py-1.5 text-right text-white">{p.quantity}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
-                      <td className="px-3 py-1.5 text-right text-white">{fmtPrice(p.current_price)} <span className="text-[10px] text-slate-500">{p.side === 'long' ? 'bid' : 'ask'}</span></td>
+                      <td className="px-3 py-1.5 text-right text-gray-900">{p.quantity}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-700">{fmtPrice(p.avg_price)}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-900">{fmtPrice(p.current_price)} <span className="text-[10px] text-gray-400">{p.side === 'long' ? 'bid' : 'ask'}</span></td>
                       <td className={`px-3 py-1.5 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
                       </td>
@@ -272,13 +272,13 @@ export default function Demo() {
                             {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
                           </span>
                         ) : (
-                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-gray-400 text-xs">—</span>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <button
                           onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name, currency: (p.currency || 'EUR') as 'EUR' | 'USD', fx_rate_entry: null, fx_rate_current: null, fx_pnl: p.fx_pnl })}
-                          className="text-slate-500 hover:text-red-400 transition-colors"
+                          className="text-gray-400 hover:text-red-400 transition-colors"
                           title="Cerrar posicion (total o parcial)"
                         >
                           <X size={14} />
@@ -301,13 +301,13 @@ export default function Demo() {
 
       {/* Performance */}
       {perf && perf.total_trades > 0 && (
-        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
+        <div className="bg-white rounded-lg p-5 border border-gray-300">
           <h2 className="font-semibold mb-3">Rendimiento</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-slate-400">Rentabilidad</p><p className="font-medium">{perf.total_return_pct.toFixed(2)}%</p></div>
-            <div><p className="text-slate-400">Win rate</p><p className="font-medium">{perf.win_rate.toFixed(1)}%</p></div>
-            <div><p className="text-slate-400">Max drawdown</p><p className="font-medium text-red-400">{perf.max_drawdown_pct.toFixed(2)}%</p></div>
-            <div><p className="text-slate-400">Trades</p><p className="font-medium">{perf.total_trades} ({perf.profitable_trades}W / {perf.losing_trades}L)</p></div>
+            <div><p className="text-gray-500">Rentabilidad</p><p className="font-medium">{perf.total_return_pct.toFixed(2)}%</p></div>
+            <div><p className="text-gray-500">Win rate</p><p className="font-medium">{perf.win_rate.toFixed(1)}%</p></div>
+            <div><p className="text-gray-500">Max drawdown</p><p className="font-medium text-red-400">{perf.max_drawdown_pct.toFixed(2)}%</p></div>
+            <div><p className="text-gray-500">Trades</p><p className="font-medium">{perf.total_trades} ({perf.profitable_trades}W / {perf.losing_trades}L)</p></div>
           </div>
         </div>
       )}
