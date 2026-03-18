@@ -90,10 +90,12 @@ export default function Charts() {
   const [activePatterns, setActivePatterns] = useState<Set<PatternType>>(new Set())
   const [showPatternSelector, setShowPatternSelector] = useState(false)
 
-  // Strategy signals overlay
+  // Strategy signals overlay — use ref to avoid chart recreation on signal update
   const [showSignalSelector, setShowSignalSelector] = useState(false)
   const [selectedSignalStrategy, setSelectedSignalStrategy] = useState<Strategy | null>(null)
   const [strategySignals, setStrategySignals] = useState<StrategySignal[]>([])
+  const strategySignalsRef = useRef<StrategySignal[]>([])
+  strategySignalsRef.current = strategySignals
 
   // Feature 5: log scale
   const [logScale, setLogScale] = useState(false)
@@ -511,7 +513,8 @@ export default function Charts() {
     }
 
     // Strategy signal markers — snap to nearest chart candle
-    if (strategySignals.length > 0 && history.data.length > 0) {
+    const currentSignals = strategySignalsRef.current
+    if (currentSignals.length > 0 && history.data.length > 0) {
       // Build a set of valid chart times for snapping
       const chartTimeSet = new Set(times.map((t) => String(t)))
       // For intraday, build a lookup from Unix seconds → chart Time
@@ -521,7 +524,7 @@ export default function Charts() {
         timesUnix = times.map((t) => Number(t))
       }
 
-      strategySignals.forEach((sig) => {
+      currentSignals.forEach((sig) => {
         const isEntry = sig.type.startsWith('entry')
         const isLong = sig.type.includes('long')
 
@@ -598,7 +601,56 @@ export default function Charts() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor, strategySignals])
+  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor])
+
+  // Update markers when strategy signals change (without recreating chart)
+  useEffect(() => {
+    if (!candleSeriesRef.current || !history?.data.length) return
+    // Detach old markers
+    if (markersPluginRef.current) {
+      markersPluginRef.current.detach()
+      markersPluginRef.current = null
+    }
+    // Rebuild all markers (patterns + fractals + signals)
+    const times = history.data.map((d) => toChartTime(d.date, interval))
+    const allMarkers: { time: Time; position: 'aboveBar' | 'belowBar'; shape: 'arrowUp' | 'arrowDown'; color: string; text: string }[] = []
+
+    // Pattern markers
+    if (activePatterns.size > 0) {
+      const patterns = detectPatterns(history.data).filter((p) => activePatterns.has(p.type))
+      patterns.forEach((p) => {
+        allMarkers.push({ time: toChartTime(p.date, interval), position: p.position as 'aboveBar' | 'belowBar', shape: p.position === 'belowBar' ? 'arrowUp' : 'arrowDown', color: p.color, text: p.label })
+      })
+    }
+
+    // Signal markers
+    if (strategySignals.length > 0) {
+      const chartTimeSet = new Set(times.map((t) => String(t)))
+      const isIntradayChart = INTRADAY_INTERVALS.has(interval)
+      const timesUnix = isIntradayChart ? times.map((t) => Number(t)) : []
+
+      strategySignals.forEach((sig) => {
+        const isEntry = sig.type.startsWith('entry')
+        const isLong = sig.type.includes('long')
+        let sigTime = toChartTime(sig.date, interval)
+        if (!chartTimeSet.has(String(sigTime)) && isIntradayChart && timesUnix.length > 0) {
+          let bestIdx = 0, bestDiff = Math.abs(timesUnix[0] - Number(sigTime))
+          for (let j = 1; j < timesUnix.length; j++) {
+            const diff = Math.abs(timesUnix[j] - Number(sigTime))
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = j }
+          }
+          sigTime = times[bestIdx]
+        }
+        allMarkers.push({ time: sigTime, position: isLong ? 'belowBar' : 'aboveBar', shape: isLong ? 'arrowUp' : 'arrowDown', color: isEntry ? (isLong ? '#10b981' : '#ef4444') : '#94a3b8', text: isEntry ? (isLong ? 'L' : 'S') : (isLong ? 'xL' : 'xS') })
+      })
+    }
+
+    allMarkers.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0))
+    if (allMarkers.length > 0) {
+      markersPluginRef.current = createSeriesMarkers(candleSeriesRef.current, allMarkers)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategySignals])
 
   // Feature 5: toggle log scale imperatively
   const toggleLogScale = () => {
