@@ -1,4 +1,4 @@
-import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Minus, Trash2, X } from 'lucide-react'
+import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Minus, Trash2, X, Square, Circle } from 'lucide-react'
 import { useDrawingStore } from '../../context/drawing-store'
 import type { DrawingToolType } from '../../types/drawings'
 
@@ -21,6 +21,8 @@ const TOOLS: { type: DrawingToolType; icon: IconComponent; label: string }[] = [
   { type: 'text', icon: Type, label: 'Texto' },
   { type: 'fibonacci', icon: GitBranch, label: 'Fibonacci' },
   { type: 'elliott', icon: Activity, label: 'Elliott' },
+  { type: 'rect', icon: Square, label: 'Rectángulo' },
+  { type: 'circle', icon: Circle, label: 'Elipse' },
 ]
 
 const GUIDANCE: Record<DrawingToolType, string> = {
@@ -31,6 +33,8 @@ const GUIDANCE: Record<DrawingToolType, string> = {
   text: 'Click un punto para añadir texto',
   fibonacci: 'Click 2 puntos (máximo y mínimo)',
   elliott: 'Click puntos, doble-click para terminar',
+  rect: 'Click 2 puntos (esquinas opuestas)',
+  circle: 'Click 2 puntos (esquinas del borde)',
 }
 
 const COLOR_PALETTE = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#ffffff']
@@ -136,7 +140,7 @@ export default function DrawingToolbar() {
       {selectedId && (
         <button
           onClick={() => {
-            if (window.confirm('¿Eliminar este dibujo?')) removeDrawing(selectedId)
+            removeDrawing(selectedId)
           }}
           title="Borrar seleccionado"
           className="p-2 rounded text-red-400 hover:bg-red-900/30"

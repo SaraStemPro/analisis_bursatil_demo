@@ -52,6 +52,28 @@ class PreviewRenderer implements IPrimitivePaneRenderer {
           ctx.fillText(`${(lvl.level * 100).toFixed(1)}%`, 8, lvl.y - 2)
         })
       }
+    } else if (this.tool === 'rect') {
+      drawFilledRect(target, this.x1, this.y1, this.x2, this.y2, '#00000040', 0.15)
+      drawLine(target, this.x1, this.y1, this.x2, this.y1, '#00000080', 1.5, true)
+      drawLine(target, this.x2, this.y1, this.x2, this.y2, '#00000080', 1.5, true)
+      drawLine(target, this.x2, this.y2, this.x1, this.y2, '#00000080', 1.5, true)
+      drawLine(target, this.x1, this.y2, this.x1, this.y1, '#00000080', 1.5, true)
+    } else if (this.tool === 'circle') {
+      target.useMediaCoordinateSpace(({ context: ctx }) => {
+        const cx = (this.x1 + this.x2) / 2, cy = (this.y1 + this.y2) / 2
+        const rx = Math.abs(this.x2 - this.x1) / 2, ry = Math.abs(this.y2 - this.y1) / 2
+        if (rx > 0 && ry > 0) {
+          ctx.beginPath()
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+          ctx.fillStyle = '#00000015'
+          ctx.fill()
+          ctx.strokeStyle = '#00000080'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([6, 4])
+          ctx.stroke()
+          ctx.setLineDash([])
+        }
+      })
     }
   }
 }

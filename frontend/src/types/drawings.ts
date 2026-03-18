@@ -1,4 +1,4 @@
-export type DrawingToolType = 'trendline' | 'arrow' | 'text' | 'fibonacci' | 'elliott' | 'hline' | 'vline'
+export type DrawingToolType = 'trendline' | 'arrow' | 'text' | 'fibonacci' | 'elliott' | 'hline' | 'vline' | 'rect' | 'circle'
 
 export interface DrawingPoint {
   time: string
@@ -49,7 +49,15 @@ export interface VLineDrawing extends BaseDrawing {
   type: 'vline'
 }
 
-export type Drawing = TrendlineDrawing | ArrowDrawing | TextDrawing | FibonacciDrawing | ElliottWaveDrawing | HLineDrawing | VLineDrawing
+export interface RectDrawing extends BaseDrawing {
+  type: 'rect'
+}
+
+export interface CircleDrawing extends BaseDrawing {
+  type: 'circle'
+}
+
+export type Drawing = TrendlineDrawing | ArrowDrawing | TextDrawing | FibonacciDrawing | ElliottWaveDrawing | HLineDrawing | VLineDrawing | RectDrawing | CircleDrawing
 
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
 
@@ -65,6 +73,8 @@ export function requiredPoints(type: DrawingToolType): number | null {
       return 1
     case 'trendline':
     case 'fibonacci':
+    case 'rect':
+    case 'circle':
       return 2
     case 'elliott':
       return null // variable, finished by double-click

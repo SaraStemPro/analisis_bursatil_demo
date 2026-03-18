@@ -5,7 +5,7 @@ import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries,
 import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams, LogicalRange } from 'lightweight-charts'
 import { market, indicators, backtest } from '../api'
 import type { IndicatorDefinition, IndicatorRequest, Strategy, StrategySignal } from '../types'
-import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing, HLineDrawing, VLineDrawing } from '../types/drawings'
+import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing, HLineDrawing, VLineDrawing, RectDrawing, CircleDrawing } from '../types/drawings'
 import { requiredPoints, FIB_LEVELS, IMPULSE_LABELS, CORRECTIVE_LABELS } from '../types/drawings'
 import { useDrawingStore } from '../context/drawing-store'
 import { DrawingManager } from '../lib/drawings/DrawingManager'
@@ -156,7 +156,7 @@ export default function Charts() {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { resetInteraction(); previewRef.current.clear() }
-      if (e.key === 'Delete' && selectedId && window.confirm('¿Eliminar este dibujo?')) removeDrawing(selectedId)
+      if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
@@ -277,6 +277,12 @@ export default function Charts() {
         break
       case 'vline':
         drawing = { id, type: 'vline', points, color: LINE_DEFAULT_COLOR, visible: true, chartId: 'main' } as VLineDrawing
+        break
+      case 'rect':
+        drawing = { id, type: 'rect', points, color, visible: true, chartId: 'main' } as RectDrawing
+        break
+      case 'circle':
+        drawing = { id, type: 'circle', points, color, visible: true, chartId: 'main' } as CircleDrawing
         break
       default:
         return

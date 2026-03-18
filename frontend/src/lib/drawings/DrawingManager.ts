@@ -9,8 +9,10 @@ import { FibonacciPrimitive } from './primitives/FibonacciPrimitive'
 import { ElliottWavePrimitive } from './primitives/ElliottWavePrimitive'
 import { HLinePrimitive } from './primitives/HLinePrimitive'
 import { VLinePrimitive } from './primitives/VLinePrimitive'
+import { RectPrimitive } from './primitives/RectPrimitive'
+import { CirclePrimitive } from './primitives/CirclePrimitive'
 
-type AnyPrimitive = TrendlinePrimitive | ArrowPrimitive | TextPrimitive | FibonacciPrimitive | ElliottWavePrimitive | HLinePrimitive | VLinePrimitive
+type AnyPrimitive = TrendlinePrimitive | ArrowPrimitive | TextPrimitive | FibonacciPrimitive | ElliottWavePrimitive | HLinePrimitive | VLinePrimitive | RectPrimitive | CirclePrimitive
 
 export class DrawingManager {
   private _series: ISeriesApi<SeriesType, Time> | null = null
@@ -97,6 +99,8 @@ export class DrawingManager {
       case 'elliott': return new ElliottWavePrimitive(drawing)
       case 'hline': return new HLinePrimitive(drawing)
       case 'vline': return new VLinePrimitive(drawing)
+      case 'rect': return new RectPrimitive(drawing)
+      case 'circle': return new CirclePrimitive(drawing)
     }
   }
 }

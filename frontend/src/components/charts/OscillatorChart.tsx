@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { createChart, LineSeries, HistogramSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, SeriesType, Time, LogicalRange, MouseEventParams } from 'lightweight-charts'
 import type { IndicatorSeries } from '../../types'
-import type { Drawing, DrawingPoint } from '../../types/drawings'
+import type { Drawing, DrawingPoint, RectDrawing, CircleDrawing } from '../../types/drawings'
 import { requiredPoints, FIB_LEVELS } from '../../types/drawings'
 import { useDrawingStore } from '../../context/drawing-store'
 import { DrawingManager } from '../../lib/drawings/DrawingManager'
@@ -77,6 +77,12 @@ export default function OscillatorChart({
         break
       case 'vline':
         drawing = { id, type: 'vline', points, color: drawingColor, visible: true, chartId } as VLineDrawing
+        break
+      case 'rect':
+        drawing = { id, type: 'rect', points, color: drawingColor, visible: true, chartId } as RectDrawing
+        break
+      case 'circle':
+        drawing = { id, type: 'circle', points, color: drawingColor, visible: true, chartId } as CircleDrawing
         break
       default:
         return
