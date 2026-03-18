@@ -469,6 +469,25 @@ def delete_run(db: Session, user_id: str, run_id: str) -> None:
     db.commit()
 
 
+def delete_all_runs(db: Session, user_id: str) -> None:
+    # Delete portfolio runs first (cascade to child runs)
+    portfolio_runs = db.query(BacktestPortfolioRun).filter(BacktestPortfolioRun.user_id == user_id).all()
+    for pr in portfolio_runs:
+        child_runs = db.query(BacktestRun).filter(BacktestRun.portfolio_run_id == pr.id).all()
+        for cr in child_runs:
+            db.query(BacktestTrade).filter(BacktestTrade.run_id == cr.id).delete()
+            db.delete(cr)
+        db.delete(pr)
+
+    # Delete remaining single runs
+    runs = db.query(BacktestRun).filter(BacktestRun.user_id == user_id).all()
+    for r in runs:
+        db.query(BacktestTrade).filter(BacktestTrade.run_id == r.id).delete()
+        db.delete(r)
+
+    db.commit()
+
+
 def compare_runs(db: Session, user_id: str, run_ids: list[UUID]) -> BacktestCompareResponse:
     runs = []
     for rid in run_ids:

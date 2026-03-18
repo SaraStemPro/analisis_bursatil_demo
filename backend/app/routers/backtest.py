@@ -121,6 +121,14 @@ def delete_run(
     backtest_service.delete_run(db, current_user.id, run_id)
 
 
+@router.delete("/runs", status_code=204)
+def delete_all_runs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    backtest_service.delete_all_runs(db, current_user.id)
+
+
 # --- Comparación ---
 
 @router.post("/compare", response_model=BacktestCompareResponse)

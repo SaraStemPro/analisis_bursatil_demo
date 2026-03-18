@@ -118,6 +118,7 @@ export const backtest = {
   getRun: (id: string) => api.get<BacktestRun>(`/backtest/runs/${id}`),
   getRunTrades: (id: string) => api.get<BacktestTrade[]>(`/backtest/runs/${id}/trades`),
   deleteRun: (id: string) => api.delete<void>(`/backtest/runs/${id}`),
+  deleteAllRuns: () => api.delete<void>('/backtest/runs'),
   compare: (run_ids: string[]) => api.post<{ runs: BacktestRun[] }>('/backtest/compare', { run_ids }),
   // Portfolio (multi-ticker)
   universes: () => api.get<Record<string, { label: string; count: number }>>('/backtest/universes'),

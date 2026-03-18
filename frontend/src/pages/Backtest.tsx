@@ -145,6 +145,16 @@ export default function Backtest() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['portfolio-runs'] }); setActivePortfolioRun(null) },
   })
 
+  const deleteAllMut = useMutation({
+    mutationFn: () => backtest.deleteAllRuns(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['runs'] })
+      qc.invalidateQueries({ queryKey: ['portfolio-runs'] })
+      setActiveRun(null)
+      setActivePortfolioRun(null)
+    },
+  })
+
   const deleteStratMut = useMutation({
     mutationFn: (id: string) => backtest.deleteStrategy(id),
     onSuccess: () => {
@@ -430,7 +440,7 @@ export default function Backtest() {
         {!selectedStrategy && (
           <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
             <h2 className="font-semibold mb-3">Historial</h2>
-            <RunHistory runs={runs} portfolioRuns={portfolioRuns} onView={viewRun} onViewPortfolio={viewPortfolioRun} onDelete={(id) => deleteMut.mutate(id)} onDeletePortfolio={(id) => deletePortfolioMut.mutate(id)} />
+            <RunHistory runs={runs} portfolioRuns={portfolioRuns} onView={viewRun} onViewPortfolio={viewPortfolioRun} onDelete={(id) => deleteMut.mutate(id)} onDeletePortfolio={(id) => deletePortfolioMut.mutate(id)} onDeleteAll={() => { if (confirm('¿Borrar todo el historial de backtests?')) deleteAllMut.mutate() }} />
           </div>
         )}
       </div>
@@ -439,7 +449,7 @@ export default function Backtest() {
       {selectedStrategy && ((runs && runs.length > 0) || (portfolioRuns && portfolioRuns.length > 0)) && (
         <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <h2 className="font-semibold mb-3">Historial de backtests</h2>
-          <RunHistory runs={runs} portfolioRuns={portfolioRuns} onView={viewRun} onViewPortfolio={viewPortfolioRun} onDelete={(id) => deleteMut.mutate(id)} onDeletePortfolio={(id) => deletePortfolioMut.mutate(id)} />
+          <RunHistory runs={runs} portfolioRuns={portfolioRuns} onView={viewRun} onViewPortfolio={viewPortfolioRun} onDelete={(id) => deleteMut.mutate(id)} onDeletePortfolio={(id) => deletePortfolioMut.mutate(id)} onDeleteAll={() => { if (confirm('¿Borrar todo el historial de backtests?')) deleteAllMut.mutate() }} />
         </div>
       )}
 
@@ -942,13 +952,14 @@ function OperandDisplay({ operand, onParamChange, onValueChange }: {
 }
 
 
-function RunHistory({ runs, portfolioRuns, onView, onViewPortfolio, onDelete, onDeletePortfolio }: {
+function RunHistory({ runs, portfolioRuns, onView, onViewPortfolio, onDelete, onDeletePortfolio, onDeleteAll }: {
   runs: BacktestRunSummary[] | undefined
   portfolioRuns: PortfolioRunSummary[] | undefined
   onView: (id: string) => void
   onViewPortfolio: (id: string) => void
   onDelete: (id: string) => void
   onDeletePortfolio: (id: string) => void
+  onDeleteAll: () => void
 }) {
   // Merge and sort by date
   type HistoryItem = { type: 'single'; data: BacktestRunSummary } | { type: 'portfolio'; data: PortfolioRunSummary }
@@ -958,7 +969,15 @@ function RunHistory({ runs, portfolioRuns, onView, onViewPortfolio, onDelete, on
   ].sort((a, b) => new Date(b.data.created_at).getTime() - new Date(a.data.created_at).getTime())
 
   return (
-    <div className="space-y-2 max-h-64 overflow-y-auto">
+    <div className="space-y-2">
+      {items.length > 0 && (
+        <div className="flex justify-end mb-1">
+          <button onClick={onDeleteAll} className="text-xs text-slate-500 hover:text-red-400 flex items-center gap-1">
+            <Trash2 size={12} /> Borrar todo
+          </button>
+        </div>
+      )}
+      <div className="max-h-64 overflow-y-auto space-y-2">
       {items.map((item) => item.type === 'single' ? (
         <div key={item.data.id} className="flex items-center justify-between bg-slate-800 rounded px-3 py-2 text-sm">
           <button onClick={() => onView(item.data.id)} className="text-left flex-1">
@@ -988,6 +1007,7 @@ function RunHistory({ runs, portfolioRuns, onView, onViewPortfolio, onDelete, on
         </div>
       ))}
       {items.length === 0 && <p className="text-sm text-slate-500">Sin backtests aún</p>}
+      </div>
     </div>
   )
 }
