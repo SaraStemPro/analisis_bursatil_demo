@@ -364,3 +364,36 @@ class PortfolioRunSummary(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Strategy Signals (for chart overlay) ---
+
+class SignalsRequest(BaseModel):
+    strategy_id: UUID | None = Field(default=None)
+    rules: StrategyRules | None = Field(default=None)
+    ticker: str = Field(min_length=1, max_length=20)
+    period: str = Field(default="3mo", description="Período de datos: 1d, 5d, 1mo, 3mo, 6mo, 1y, 5y, max")
+    interval: str = Field(default="1d")
+
+    @model_validator(mode="after")
+    def validate_strategy_source(self):
+        if not self.strategy_id and not self.rules:
+            raise ValueError("Debe proporcionar 'strategy_id' o 'rules'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        valid = {"1m", "5m", "15m", "1h", "4h", "1d", "1wk"}
+        if self.interval not in valid:
+            raise ValueError(f"'interval' debe ser uno de: {', '.join(sorted(valid))}")
+        return self
+
+
+class Signal(BaseModel):
+    date: str
+    type: str  # 'entry_long', 'entry_short', 'exit_long', 'exit_short'
+
+
+class SignalsResponse(BaseModel):
+    signals: list[Signal]
+    ticker: str

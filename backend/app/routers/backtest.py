@@ -13,6 +13,8 @@ from ..schemas.backtest import (
     PortfolioBacktestRequest,
     PortfolioBacktestResponse,
     PortfolioRunSummary,
+    SignalsRequest,
+    SignalsResponse,
     StrategyCreateRequest,
     StrategyResponse,
     StrategyUpdateRequest,
@@ -138,6 +140,17 @@ def compare(
     current_user: User = Depends(get_current_user),
 ):
     return backtest_service.compare_runs(db, current_user.id, body.run_ids)
+
+
+# --- Signals (chart overlay) ---
+
+@router.post("/signals", response_model=SignalsResponse)
+def compute_signals(
+    body: SignalsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return backtest_service.compute_signals(db, current_user.id, body)
 
 
 # --- Portfolio (multi-ticker) ---

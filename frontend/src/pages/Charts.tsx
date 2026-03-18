@@ -3,8 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, createSeriesMarkers } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesType, Time, MouseEventParams, LogicalRange } from 'lightweight-charts'
-import { market, indicators } from '../api'
-import type { IndicatorDefinition, IndicatorRequest } from '../types'
+import { market, indicators, backtest } from '../api'
+import type { IndicatorDefinition, IndicatorRequest, Strategy, StrategySignal } from '../types'
 import type { Drawing, DrawingPoint, FibonacciDrawing, TrendlineDrawing, ArrowDrawing, TextDrawing, ElliottWaveDrawing, HLineDrawing, VLineDrawing } from '../types/drawings'
 import { requiredPoints, FIB_LEVELS, IMPULSE_LABELS, CORRECTIVE_LABELS } from '../types/drawings'
 import { useDrawingStore } from '../context/drawing-store'
@@ -16,7 +16,7 @@ import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/re
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
-import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw } from 'lucide-react'
+import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical } from 'lucide-react'
 import { isCfd, askPrice, marginPerContract, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
@@ -84,6 +84,11 @@ export default function Charts() {
   // Feature 11: pattern selector — set of active pattern types
   const [activePatterns, setActivePatterns] = useState<Set<PatternType>>(new Set())
   const [showPatternSelector, setShowPatternSelector] = useState(false)
+
+  // Strategy signals overlay
+  const [showSignalSelector, setShowSignalSelector] = useState(false)
+  const [selectedSignalStrategy, setSelectedSignalStrategy] = useState<Strategy | null>(null)
+  const [strategySignals, setStrategySignals] = useState<StrategySignal[]>([])
 
   // Feature 5: log scale
   const [logScale, setLogScale] = useState(false)
@@ -179,6 +184,33 @@ export default function Charts() {
     queryFn: () => indicators.calculate({ ticker, period, interval, indicators: activeIndicators }),
     enabled: activeIndicators.length > 0,
   })
+
+  // Strategy signals
+  const { data: btTemplates } = useQuery({ queryKey: ['templates'], queryFn: backtest.templates })
+  const { data: btStrategies } = useQuery({ queryKey: ['strategies'], queryFn: backtest.strategies })
+  const allStrategies = [...(btTemplates ?? []), ...(btStrategies ?? [])]
+
+  // Fetch signals when strategy selected
+  useEffect(() => {
+    if (!selectedSignalStrategy) {
+      setStrategySignals([])
+      return
+    }
+    const fetchSignals = async () => {
+      try {
+        const res = await backtest.signals({
+          rules: selectedSignalStrategy.rules,
+          ticker,
+          period,
+          interval,
+        })
+        setStrategySignals(res.signals)
+      } catch {
+        setStrategySignals([])
+      }
+    }
+    fetchSignals()
+  }, [selectedSignalStrategy, ticker, period, interval])
 
   const getIndicatorDef = useCallback(
     (name: string) => catalog?.indicators.find((i) => i.name === name),
@@ -468,6 +500,22 @@ export default function Charts() {
       }
     }
 
+    // Strategy signal markers
+    if (strategySignals.length > 0 && history.data.length > 0) {
+      strategySignals.forEach((sig) => {
+        const sigDate = sig.date.split('T')[0]
+        const isEntry = sig.type.startsWith('entry')
+        const isLong = sig.type.includes('long')
+        allMarkers.push({
+          time: toChartTime(sigDate, interval),
+          position: isLong ? 'belowBar' : 'aboveBar',
+          shape: isLong ? 'arrowUp' : 'arrowDown',
+          color: isEntry ? (isLong ? '#10b981' : '#ef4444') : '#94a3b8',
+          text: isEntry ? (isLong ? 'L' : 'S') : (isLong ? 'xL' : 'xS'),
+        })
+      })
+    }
+
     // Sort markers by time and attach
     allMarkers.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0))
     if (allMarkers.length > 0) {
@@ -517,7 +565,7 @@ export default function Charts() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor])
+  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor, strategySignals])
 
   // Feature 5: toggle log scale imperatively
   const toggleLogScale = () => {
@@ -797,7 +845,7 @@ export default function Charts() {
 
       {/* Feature 11: Pattern selector */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowPatternSelector((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
@@ -813,6 +861,22 @@ export default function Charts() {
             <span className="text-xs text-slate-400">
               {PATTERN_CATALOG.filter((p) => activePatterns.has(p.type)).map((p) => p.label.split(' — ')[0]).join(' · ')}
             </span>
+          )}
+
+          {/* Strategy signals button */}
+          <button
+            onClick={() => setShowSignalSelector((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
+              selectedSignalStrategy ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <FlaskConical size={14} />
+            Señales de estrategia
+            {selectedSignalStrategy && <span className="text-xs opacity-80">({strategySignals.length})</span>}
+            {showSignalSelector ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {selectedSignalStrategy && !showSignalSelector && (
+            <span className="text-xs text-slate-400">{selectedSignalStrategy.name}</span>
           )}
         </div>
         {showPatternSelector && (
@@ -842,6 +906,39 @@ export default function Charts() {
                 </label>
               ))}
             </div>
+          </div>
+        )}
+        {showSignalSelector && (
+          <div className="bg-slate-900 rounded-lg border border-emerald-700/50 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-400 font-medium">Selecciona una estrategia</span>
+              {selectedSignalStrategy && (
+                <button onClick={() => setSelectedSignalStrategy(null)} className="text-xs text-red-400 hover:text-red-300">Desactivar</button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+              {allStrategies.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => { setSelectedSignalStrategy(s); setShowSignalSelector(false) }}
+                  className={`text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                    selectedSignalStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-slate-800 hover:bg-slate-700'
+                  }`}
+                >
+                  <span className="font-medium text-slate-200">{s.name}</span>
+                  {s.is_template && <span className="text-xs text-blue-400 ml-1.5">plantilla</span>}
+                  {s.description && <p className="text-[10px] text-slate-500 leading-tight mt-0.5">{s.description}</p>}
+                </button>
+              ))}
+              {allStrategies.length === 0 && <p className="text-xs text-slate-500 italic col-span-2">Sin estrategias disponibles</p>}
+            </div>
+            {selectedSignalStrategy && strategySignals.length > 0 && (
+              <div className="mt-2 flex gap-3 text-xs text-slate-400">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Entrada Long (L)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Entrada Short (S)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400 inline-block"></span> Salida (xL/xS)</span>
+              </div>
+            )}
           </div>
         )}
       </div>

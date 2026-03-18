@@ -25,6 +25,9 @@ from ..schemas.backtest import (
     PortfolioBacktestResponse,
     PortfolioRunSummary,
     PortfolioTickerResult,
+    Signal,
+    SignalsRequest,
+    SignalsResponse,
     StrategyCreateRequest,
     StrategyResponse,
     StrategyRules,
@@ -1074,6 +1077,83 @@ def _calculate_metrics(
         worst_trade_pnl=round(min(pnls), 2) if pnls else None,
         buy_and_hold_return_pct=round(bh_return_pct, 2),
     )
+
+
+# ──────────────────────────────────────
+# Strategy signals (chart overlay)
+# ──────────────────────────────────────
+
+def compute_signals(db: Session, user_id: str, body: SignalsRequest) -> SignalsResponse:
+    """Evaluate strategy conditions on historical data and return signal points."""
+    # Resolve rules
+    if body.rules:
+        rules = body.rules
+    else:
+        strategy_resp = get_strategy(db, user_id, str(body.strategy_id))
+        rules = strategy_resp.rules
+
+    ticker = body.ticker.upper()
+    tk = yf.Ticker(ticker)
+
+    # Download data with warmup
+    warmup_bars = _calc_warmup(rules)
+    interval = body.interval
+
+    df = tk.history(period=body.period, interval=interval)
+    if df.empty:
+        raise HTTPException(status_code=400, detail=f"Sin datos para {ticker}")
+
+    # If warmup is needed, download extra data before the visible range
+    if warmup_bars > 10:
+        if interval in ("1m", "5m", "15m"):
+            warmup_td = pd.Timedelta(hours=warmup_bars)
+        elif interval in ("1h", "4h"):
+            warmup_td = pd.Timedelta(days=warmup_bars // 6 + 1)
+        else:
+            warmup_td = pd.Timedelta(days=int(warmup_bars * 1.6))
+        warmup_start = df.index[0] - warmup_td
+        df_extended = tk.history(start=warmup_start.strftime("%Y-%m-%d"),
+                                 end=df.index[-1].strftime("%Y-%m-%d"),
+                                 interval=interval)
+        if not df_extended.empty:
+            # Merge: use extended data before visible range, keep original data
+            df = pd.concat([df_extended[~df_extended.index.isin(df.index)], df]).sort_index()
+
+    # Compute indicators
+    indicator_data = _compute_all_indicators(df, rules)
+
+    # Find visible start index (skip warmup)
+    visible_start = max(warmup_bars, 0)
+
+    side = rules.side
+    is_both = side == StrategySide.both
+
+    signals: list[Signal] = []
+
+    for i in range(visible_start, len(df)):
+        entry_signal = _evaluate_group(rules.entry, i, df, indicator_data)
+        exit_signal = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+
+        dt = df.index[i]
+        date_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+
+        if is_both:
+            if entry_signal:
+                signals.append(Signal(date=date_str, type="entry_long"))
+            if exit_signal:
+                signals.append(Signal(date=date_str, type="entry_short"))
+        elif side == StrategySide.short:
+            if entry_signal:
+                signals.append(Signal(date=date_str, type="entry_short"))
+            if exit_signal:
+                signals.append(Signal(date=date_str, type="exit_short"))
+        else:  # long
+            if entry_signal:
+                signals.append(Signal(date=date_str, type="entry_long"))
+            if exit_signal:
+                signals.append(Signal(date=date_str, type="exit_long"))
+
+    return SignalsResponse(signals=signals, ticker=ticker)
 
 
 # ──────────────────────────────────────

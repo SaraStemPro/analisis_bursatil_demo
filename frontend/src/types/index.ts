@@ -436,6 +436,16 @@ export interface PortfolioBacktestRun {
   completed_at: string | null
 }
 
+export interface StrategySignal {
+  date: string
+  type: 'entry_long' | 'entry_short' | 'exit_long' | 'exit_short'
+}
+
+export interface SignalsResponse {
+  signals: StrategySignal[]
+  ticker: string
+}
+
 export interface PortfolioRunSummary {
   id: string
   strategy_name: string | null
