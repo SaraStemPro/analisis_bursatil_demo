@@ -182,7 +182,8 @@ export default function Charts() {
     queryFn: () => market.history(ticker, period, interval),
     retry: 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
-    staleTime: 120_000, // 2 min — avoids redundant fetches
+    staleTime: 120_000,
+    placeholderData: (prev) => prev,  // keep previous chart visible while loading new data
   })
 
   const { data: catalog } = useQuery({
@@ -194,12 +195,14 @@ export default function Charts() {
     queryKey: ['indicators', ticker, period, interval, indicatorRequests],
     queryFn: () => indicators.calculate({ ticker, period, interval, indicators: indicatorRequests }),
     enabled: indicatorRequests.length > 0,
+    placeholderData: (prev) => prev,  // keep previous data while fetching new interval
+    staleTime: 60_000,
   })
 
-  // Strategy signals
-  const { data: btTemplates } = useQuery({ queryKey: ['templates'], queryFn: backtest.templates })
-  const { data: btStrategies } = useQuery({ queryKey: ['strategies'], queryFn: backtest.strategies })
-  const allStrategies = [...(btTemplates ?? []), ...(btStrategies ?? [])]
+  // Strategy signals — only fetch strategies when selector is open
+  const { data: btTemplates } = useQuery({ queryKey: ['templates'], queryFn: backtest.templates, enabled: showSignalSelector })
+  const { data: btStrategies } = useQuery({ queryKey: ['strategies'], queryFn: backtest.strategies, enabled: showSignalSelector })
+  const allStrategies = useMemo(() => [...(btTemplates ?? []), ...(btStrategies ?? [])], [btTemplates, btStrategies])
 
   // Fetch signals when strategy selected
   useEffect(() => {
