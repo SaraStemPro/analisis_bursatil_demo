@@ -592,10 +592,8 @@ export default function Charts() {
     return def && !def.overlay
   }) ?? []
 
-  // Use indicator dates for oscillators to match indicator data alignment
-  const oscTimes = indicatorData?.dates
-    ? indicatorData.dates.map((d) => toChartTime(d, interval))
-    : (history?.data.map((d) => toChartTime(d.date, interval)) ?? [])
+  // Oscillator spacer MUST use history times (same as main chart) for scroll sync
+  const oscTimes = history?.data.map((d) => toChartTime(d.date, interval)) ?? []
 
   // Handle synced range from oscillators — logical ranges now aligned via spacer series
   const handleOscRangeChange = useCallback((range: LogicalRange | null, sourceChartId: string) => {
