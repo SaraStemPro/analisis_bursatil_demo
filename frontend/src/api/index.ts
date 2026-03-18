@@ -44,6 +44,8 @@ export const demo = {
   portfolio: () => api.get<Portfolio>('/demo/portfolio'),
   createOrder: (data: { ticker: string; type: string; quantity: number; price?: number; stop_loss?: number; take_profit?: number; portfolio_group?: string; notes: string }) =>
     api.post<Order>('/demo/order', data),
+  updateStopLoss: (data: { ticker: string; side: string; stop_loss: number | null }) =>
+    api.patch<{ ok: boolean }>('/demo/stop-loss', data),
   closePosition: (data: { ticker: string; quantity: number; side: string }) =>
     api.post<Order>('/demo/close-position', data),
   closeAll: () => api.post<Order[]>('/demo/close-all', {}),

@@ -18,7 +18,7 @@ export default function OrderForm({ initialTicker }: Props) {
   }, [initialTicker])
   const [tickerName, setTickerName] = useState('')
   const [quantity, setQuantity] = useState(1)
-  const [stopLossMode, setStopLossMode] = useState<'price' | 'pct'>('pct')
+  const [stopLossMode, setStopLossMode] = useState<'price' | 'pct'>('price')
   const [stopLossValue, setStopLossValue] = useState<string>('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')

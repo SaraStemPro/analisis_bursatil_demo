@@ -268,6 +268,24 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
     return _order_to_response(order)
 
 
+def update_stop_loss(db: Session, user_id: str, ticker: str, side: str, stop_loss: float | None) -> dict:
+    """Update stop loss for all open orders of a position."""
+    portfolio = get_or_create_portfolio(db, user_id)
+    order_type = "buy" if side == "long" else "sell"
+    orders = (
+        db.query(Order)
+        .filter(Order.portfolio_id == portfolio.id, Order.ticker == ticker.upper(),
+                Order.type == order_type, Order.status == "open")
+        .all()
+    )
+    if not orders:
+        raise HTTPException(status_code=404, detail="Posicion no encontrada")
+    for o in orders:
+        o.stop_loss = Decimal(str(stop_loss)) if stop_loss else None
+    db.commit()
+    return {"ok": True, "updated": len(orders)}
+
+
 def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
     ticker = body.ticker.upper()

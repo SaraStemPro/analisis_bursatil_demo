@@ -83,7 +83,11 @@ export default function Charts() {
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
 
   // Build request list for backend (strip id)
-  const indicatorRequests: IndicatorRequest[] = activeIndicators.map(({ name, params }) => ({ name, params }))
+  // Memoize to prevent React Query from seeing a new key reference on every render
+  const indicatorRequests = useMemo<IndicatorRequest[]>(
+    () => activeIndicators.map(({ name, params }) => ({ name, params })),
+    [activeIndicators],
+  )
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
 
   // Feature 11: pattern selector — set of active pattern types

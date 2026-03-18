@@ -60,6 +60,15 @@ def close_pos(
     return demo_service.close_position(db, current_user.id, body)
 
 
+@router.patch("/stop-loss")
+def update_stop_loss(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return demo_service.update_stop_loss(db, current_user.id, body["ticker"], body["side"], body.get("stop_loss"))
+
+
 @router.post("/close-all", response_model=list[OrderResponse], status_code=201)
 def close_all(
     db: Session = Depends(get_db),

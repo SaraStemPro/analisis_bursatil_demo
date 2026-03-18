@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { demo } from '../api'
 import type { Position } from '../types'
-import { RotateCcw, X, ExternalLink, XCircle, Briefcase } from 'lucide-react'
+import { RotateCcw, X, ExternalLink, XCircle, Briefcase, Pencil } from 'lucide-react'
 import type { Cartera } from '../types'
 import OrderForm from '../components/demo/OrderForm'
 import ClosePositionDialog from '../components/demo/ClosePositionDialog'
@@ -55,6 +55,14 @@ export default function Demo() {
   const resetMut = useMutation({
     mutationFn: () => demo.reset(),
     onSuccess: invalidateAll,
+  })
+
+  const [editingSL, setEditingSL] = useState<{ ticker: string; side: string } | null>(null)
+  const [editingSLValue, setEditingSLValue] = useState('')
+
+  const updateSLMut = useMutation({
+    mutationFn: (data: { ticker: string; side: string; stop_loss: number | null }) => demo.updateStopLoss(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['portfolio'] }); setEditingSL(null) },
   })
 
   const closeAllMut = useMutation({
@@ -179,9 +187,29 @@ export default function Demo() {
                             {p.invested_value != null && portfolio ? `${(Number(p.invested_value) / Number(portfolio.total_value) * 100).toFixed(1)}%` : '—'}
                           </td>
                           <td className="px-3 py-2 text-right">
-                            {p.stop_loss ? (
-                              <span className="text-amber-400">{fmtPrice(p.stop_loss)}</span>
-                            ) : <span className="text-slate-600">—</span>}
+                            {editingSL?.ticker === p.ticker && editingSL?.side === p.side ? (
+                              <input
+                                autoFocus
+                                type="number"
+                                step="any"
+                                value={editingSLValue}
+                                onChange={(e) => setEditingSLValue(e.target.value)}
+                                onBlur={() => { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null }); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null }); } if (e.key === 'Escape') setEditingSL(null) }}
+                                className="w-20 px-1 py-0.5 bg-slate-800 border border-amber-500 rounded text-amber-400 text-xs text-right focus:outline-none"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => { setEditingSL({ ticker: p.ticker, side: p.side }); setEditingSLValue(p.stop_loss ? String(p.stop_loss) : '') }}
+                                className="inline-flex items-center gap-1 hover:text-amber-300 transition-colors"
+                                title="Editar stop loss"
+                              >
+                                {p.stop_loss ? (
+                                  <span className="text-amber-400">{fmtPrice(p.stop_loss)}</span>
+                                ) : <span className="text-slate-600">—</span>}
+                                <Pencil size={10} className="text-slate-600" />
+                              </button>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">
                             {p.stop_loss && p.invested_value ? (() => {
