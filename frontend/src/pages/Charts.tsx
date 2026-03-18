@@ -15,7 +15,7 @@ import type { PatternType } from '../lib/patterns'
 import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/recentTickers'
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
-import OscillatorChart from '../components/charts/OscillatorChart'
+// OscillatorChart no longer used — oscillators render inside main chart
 import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical } from 'lucide-react'
 import { isCfd, askPrice, marginPerContract, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
@@ -96,9 +96,7 @@ export default function Charts() {
   // Feature 1: recent tickers
   const [recentTickers, setRecentTickers] = useState<string[]>(() => getRecentTickers())
 
-  // Feature 9: synced range for oscillators — ref-based to avoid re-render loops
-  const isSyncingRef = useRef(false)
-  const oscChartsRef = useRef<Map<string, IChartApi>>(new Map())
+  // Refs for chart state
 
   // Feature 4: preserve scale
   const savedRangeRef = useRef<LogicalRange | null>(null)
@@ -348,14 +346,25 @@ export default function Charts() {
     try {
 
     const isIntraday = INTRADAY_INTERVALS.has(interval)
+    // Calculate chart height: taller when oscillators present
+    const hasOscillators = indicatorData?.indicators.some((ind) => {
+      const def = catalog?.indicators.find((c) => c.name === ind.name)
+      return def && !def.overlay && ind.name !== 'FRACTALS'
+    })
+    const chartHeight = hasOscillators ? 600 : 450
     chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#0f172a' }, textColor: '#94a3b8' },
       grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
       autoSize: true,
-      height: 450,
+      height: chartHeight,
       timeScale: { borderColor: '#334155', timeVisible: isIntraday, secondsVisible: false },
       rightPriceScale: { borderColor: '#334155', mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
     })
+
+    // When oscillators present, constrain price to top 65% and oscillators to bottom 30%
+    if (hasOscillators) {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.38 } })
+    }
 
     const firstPrice = history.data[0]?.close ?? 100
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -381,7 +390,9 @@ export default function Charts() {
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     })
-    chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: hasOscillators ? { top: 0.52, bottom: 0.38 } : { top: 0.8, bottom: 0 },
+    })
     volumeSeries.setData(
       history.data.map((d) => ({
         time: toChartTime(d.date, interval),
@@ -418,6 +429,56 @@ export default function Charts() {
             .filter(Boolean) as { time: Time; value: number }[]
           lineSeries.setData(lineData)
         })
+      })
+    }
+
+    // Draw oscillator indicators in same chart with separate price scale (bottom pane)
+    if (indicatorData && hasOscillators) {
+      let oscIdx = 0
+      indicatorData.indicators.forEach((ind) => {
+        const def = catalog?.indicators.find((c) => c.name === ind.name)
+        if (!def || def.overlay || ind.name === 'FRACTALS') return
+
+        const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
+        const baseColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
+        const scaleId = `osc-${ind.name}`
+
+        // Position oscillator in bottom portion of chart
+        chart.priceScale(scaleId).applyOptions({
+          scaleMargins: { top: 0.68, bottom: 0.02 },
+          borderVisible: false,
+        })
+
+        Object.entries(ind.data).forEach(([seriesKey, values], subIdx) => {
+          const seriesColor = subIdx === 0 ? baseColor : INDICATOR_COLORS[(oscIdx + subIdx) % INDICATOR_COLORS.length]
+
+          if (ind.name === 'MACD' && seriesKey === 'histogram') {
+            const histSeries = chart.addSeries(HistogramSeries, {
+              color: seriesColor,
+              priceScaleId: scaleId,
+              title: `${ind.name} hist`,
+              lastValueVisible: false,
+            })
+            const histData = values
+              .map((v, i) => (v !== null && i < indTimes.length ? { time: indTimes[i], value: v, color: v >= 0 ? '#10b98180' : '#ef444480' } : null))
+              .filter(Boolean) as { time: Time; value: number; color: string }[]
+            histSeries.setData(histData)
+          } else {
+            const lineSeries = chart.addSeries(LineSeries, {
+              color: seriesColor,
+              lineWidth: 2,
+              priceScaleId: scaleId,
+              title: `${ind.name} ${seriesKey}`,
+              lastValueVisible: subIdx === 0,
+              crosshairMarkerVisible: subIdx === 0,
+            })
+            const lineData = values
+              .map((v, i) => (v !== null && i < indTimes.length ? { time: indTimes[i], value: v } : null))
+              .filter(Boolean) as { time: Time; value: number }[]
+            lineSeries.setData(lineData)
+          }
+        })
+        oscIdx++
       })
     }
 
@@ -537,16 +598,7 @@ export default function Charts() {
       chart.timeScale().fitContent()
     }
 
-    // Feature 9: sync visible range to oscillators — logical ranges now aligned
-    // thanks to spacer series in each OscillatorChart
-    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-      if (isSyncingRef.current || !range) return
-      isSyncingRef.current = true
-      oscChartsRef.current.forEach((oscChart) => {
-        try { oscChart.timeScale().setVisibleLogicalRange(range) } catch { /* chart may be disposed */ }
-      })
-      requestAnimationFrame(() => { isSyncingRef.current = false })
-    })
+    // Oscillators are now in the same chart — no cross-chart sync needed
 
     } catch (err) {
       console.error('[Charts] Error creating chart:', err)
@@ -570,7 +622,7 @@ export default function Charts() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor, strategySignals])
+  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor, strategySignals, catalog])
 
   // Feature 5: toggle log scale imperatively
   const toggleLogScale = () => {
@@ -586,43 +638,9 @@ export default function Charts() {
     chartInstanceRef.current?.timeScale().scrollToRealTime()
   }
 
-  // Oscillator indicators (Feature 10: separate charts)
-  const oscillatorIndicators = indicatorData?.indicators.filter((ind) => {
-    const def = getIndicatorDef(ind.name)
-    return def && !def.overlay
-  }) ?? []
+  // Oscillators now rendered inside main chart
 
-  // Oscillator spacer MUST use history times (same as main chart) for scroll sync
-  const oscTimes = history?.data.map((d) => toChartTime(d.date, interval)) ?? []
-
-  // Handle synced range from oscillators — logical ranges now aligned via spacer series
-  const handleOscRangeChange = useCallback((range: LogicalRange | null, sourceChartId: string) => {
-    if (isSyncingRef.current || !range) return
-    isSyncingRef.current = true
-    try { chartInstanceRef.current?.timeScale().setVisibleLogicalRange(range) } catch { /* */ }
-    oscChartsRef.current.forEach((oscChart, id) => {
-      if (id !== sourceChartId) {
-        try { oscChart.timeScale().setVisibleLogicalRange(range) } catch { /* */ }
-      }
-    })
-    requestAnimationFrame(() => { isSyncingRef.current = false })
-  }, [])
-
-  // Register/unregister oscillator chart instances for direct sync
-  const registerOscChart = useCallback((chartId: string, chart: IChartApi) => {
-    oscChartsRef.current.set(chartId, chart)
-    // Apply current main chart logical range immediately
-    if (chartInstanceRef.current) {
-      const mainRange = chartInstanceRef.current.timeScale().getVisibleLogicalRange()
-      if (mainRange) {
-        try { chart.timeScale().setVisibleLogicalRange(mainRange) } catch { /* */ }
-      }
-    }
-  }, [])
-
-  const unregisterOscChart = useCallback((chartId: string) => {
-    oscChartsRef.current.delete(chartId)
-  }, [])
+  // Oscillators now rendered inside main chart — no separate sync needed
 
   const toggleIndicator = (ind: IndicatorDefinition) => {
     setActiveIndicators((prev) => {
@@ -1004,28 +1022,7 @@ export default function Charts() {
         </div>
       </div>
 
-      {/* Feature 10: Separate oscillator charts */}
-      {oscillatorIndicators.map((ind) => {
-        const aiIdx = activeIndicators.findIndex((a) => a.name === ind.name)
-        const oscColor = getIndicatorColor(ind.name, aiIdx >= 0 ? aiIdx : 0)
-        const oscChartId = `osc-${ind.name}`
-        return (
-          <OscillatorChart
-            key={ind.name}
-            indicator={ind}
-            times={oscTimes}
-            color={oscColor}
-            interval={interval}
-            syncingRef={isSyncingRef}
-            onRegister={registerOscChart}
-            onUnregister={unregisterOscChart}
-            onVisibleRangeChange={handleOscRangeChange}
-            chartId={oscChartId}
-            isActive={activeChartId === oscChartId}
-            onActivate={() => setActiveChartId(oscChartId)}
-          />
-        )
-      })}
+      {/* Oscillators now rendered inside main chart — no separate charts needed */}
 
       {/* Active indicators with params */}
       {activeIndicators.length > 0 && (
