@@ -29,6 +29,7 @@ interface DrawingStore {
   arrowDirection: 'up' | 'down'
   moveMode: boolean
   activeChartId: string
+  clipboard: Drawing | null
 
   setTicker: (ticker: string) => void
   addDrawing: (drawing: Drawing) => void
@@ -44,6 +45,8 @@ interface DrawingStore {
   setArrowDirection: (dir: 'up' | 'down') => void
   setMoveMode: (mode: boolean) => void
   setActiveChartId: (chartId: string) => void
+  copySelected: () => void
+  paste: () => void
 }
 
 export const useDrawingStore = create<DrawingStore>((set, get) => ({
@@ -56,6 +59,7 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   arrowDirection: 'up',
   moveMode: false,
   activeChartId: 'main',
+  clipboard: null,
 
   setTicker: (ticker) => {
     set({ ticker, drawings: load(ticker), selectedId: null })
@@ -125,5 +129,27 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
 
   setActiveChartId: (chartId) => {
     set({ activeChartId: chartId })
+  },
+
+  copySelected: () => {
+    const { selectedId, drawings } = get()
+    if (!selectedId) return
+    const drawing = drawings.find((d) => d.id === selectedId)
+    if (drawing) set({ clipboard: structuredClone(drawing) })
+  },
+
+  paste: () => {
+    const { clipboard, ticker, drawings } = get()
+    if (!clipboard) return
+    // Offset price slightly so the paste is visible next to the original
+    const offset = clipboard.points[0]?.price ? clipboard.points[0].price * 0.02 : 1
+    const newDrawing: Drawing = {
+      ...structuredClone(clipboard),
+      id: crypto.randomUUID(),
+      points: clipboard.points.map((p) => ({ ...p, price: p.price + offset })),
+    } as Drawing
+    const updated = [...drawings, newDrawing]
+    save(ticker, updated)
+    set({ drawings: updated, selectedId: newDrawing.id })
   },
 }))

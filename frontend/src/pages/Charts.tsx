@@ -134,6 +134,7 @@ export default function Charts() {
     drawings, activeTool, selectedId, activeChartId,
     setTicker: setDrawingTicker,
     resetInteraction, removeDrawing, setActiveChartId,
+    copySelected, paste,
   } = useDrawingStore()
 
   // Filter drawings for main chart
@@ -161,10 +162,13 @@ export default function Charts() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { resetInteraction(); previewRef.current.clear() }
       if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
+      // Copy/paste drawings
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedId) { copySelected(); e.preventDefault() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') { paste(); e.preventDefault() }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [resetInteraction, selectedId, removeDrawing])
+  }, [resetInteraction, selectedId, removeDrawing, copySelected, paste])
 
   const { data: searchResults } = useQuery({
     queryKey: ['search', searchQuery],
@@ -952,6 +956,7 @@ export default function Charts() {
 
       {/* Period + Interval selectors + Feature 3: Hoy + Feature 5: LOG */}
       <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-slate-500 font-medium mr-1">Horizonte temporal</span>
         {PERIODS.map((p) => (
           <button
             key={p}
@@ -967,6 +972,7 @@ export default function Charts() {
           </button>
         ))}
         <span className="text-slate-600 mx-1">|</span>
+        <span className="text-xs text-slate-500 font-medium mr-1">Timeframe</span>
         {ALL_INTERVALS.map((i) => {
           const valid = validIntervals(period).includes(i)
           return (
