@@ -865,7 +865,7 @@ def _short_quantity(db: Session, portfolio_id: str, ticker: str) -> int:
 
 
 def _avg_buy_price(db: Session, portfolio_id: str, ticker: str) -> Decimal:
-    """Precio medio de compra ponderado por cantidad."""
+    """Precio medio de compra ponderado por cantidad (solo posición abierta, FIFO)."""
     buys = (
         db.query(Order)
         .filter(
@@ -873,18 +873,40 @@ def _avg_buy_price(db: Session, portfolio_id: str, ticker: str) -> Decimal:
             Order.ticker == ticker.upper(),
             Order.type == "buy",
         )
+        .order_by(Order.created_at)
         .all()
     )
     if not buys:
         return Decimal(0)
 
-    total_cost = sum(o.price * o.quantity for o in buys)
-    total_qty = sum(o.quantity for o in buys)
+    # Total closed long quantity (to consume from oldest buys first)
+    closed = sum(
+        o.quantity for o in db.query(Order).filter(
+            Order.portfolio_id == portfolio_id,
+            Order.ticker == ticker.upper(),
+            Order.type == "close",
+            Order.side == "long",
+        ).all()
+    )
+
+    # FIFO: skip fully consumed buys, partial on the boundary
+    total_cost = Decimal(0)
+    total_qty = 0
+    remaining_to_skip = closed
+    for o in buys:
+        if remaining_to_skip >= o.quantity:
+            remaining_to_skip -= o.quantity
+            continue
+        active_qty = o.quantity - remaining_to_skip
+        remaining_to_skip = 0
+        total_cost += o.price * active_qty
+        total_qty += active_qty
+
     return total_cost / total_qty if total_qty else Decimal(0)
 
 
 def _avg_sell_price(db: Session, portfolio_id: str, ticker: str) -> Decimal:
-    """Precio medio de venta (short) ponderado por cantidad."""
+    """Precio medio de venta (short) ponderado por cantidad (solo posición abierta, FIFO)."""
     sells = (
         db.query(Order)
         .filter(
@@ -892,13 +914,35 @@ def _avg_sell_price(db: Session, portfolio_id: str, ticker: str) -> Decimal:
             Order.ticker == ticker.upper(),
             Order.type == "sell",
         )
+        .order_by(Order.created_at)
         .all()
     )
     if not sells:
         return Decimal(0)
 
-    total_revenue = sum(o.price * o.quantity for o in sells)
-    total_qty = sum(o.quantity for o in sells)
+    # Total closed short quantity (to consume from oldest sells first)
+    closed = sum(
+        o.quantity for o in db.query(Order).filter(
+            Order.portfolio_id == portfolio_id,
+            Order.ticker == ticker.upper(),
+            Order.type == "close",
+            Order.side == "short",
+        ).all()
+    )
+
+    # FIFO: skip fully consumed sells, partial on the boundary
+    total_revenue = Decimal(0)
+    total_qty = 0
+    remaining_to_skip = closed
+    for o in sells:
+        if remaining_to_skip >= o.quantity:
+            remaining_to_skip -= o.quantity
+            continue
+        active_qty = o.quantity - remaining_to_skip
+        remaining_to_skip = 0
+        total_revenue += o.price * active_qty
+        total_qty += active_qty
+
     return total_revenue / total_qty if total_qty else Decimal(0)
 
 
