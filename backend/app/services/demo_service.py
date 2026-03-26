@@ -268,7 +268,6 @@ def _check_stop_losses(db: Session, portfolio: Portfolio) -> None:
 
 def get_portfolio(db: Session, user_id: str) -> PortfolioResponse:
     portfolio = get_or_create_portfolio(db, user_id)
-    _check_stop_losses(db, portfolio)
     positions = _calculate_positions(db, portfolio)
     total_positions_value = Decimal(str(sum(_position_value(p) for p in positions)))
     total_value = portfolio.balance + total_positions_value
