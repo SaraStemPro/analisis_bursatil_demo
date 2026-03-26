@@ -28,6 +28,7 @@ interface DrawingStore {
   elliottWaveType: 'impulse' | 'corrective'
   arrowDirection: 'up' | 'down'
   moveMode: boolean
+  pasteMode: boolean
   dragAnchor: DrawingPoint | null
   activeChartId: string
   clipboard: Drawing | null
@@ -61,6 +62,7 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   elliottWaveType: 'impulse',
   arrowDirection: 'up',
   moveMode: false,
+  pasteMode: false,
   dragAnchor: null,
   activeChartId: 'main',
   clipboard: null,
@@ -112,7 +114,7 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   },
 
   resetInteraction: () => {
-    set({ activeTool: null, pendingPoints: [], selectedId: null, moveMode: false, dragAnchor: null })
+    set({ activeTool: null, pendingPoints: [], selectedId: null, moveMode: false, pasteMode: false, dragAnchor: null })
   },
 
   selectDrawing: (id) => {
@@ -139,7 +141,7 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
     const { selectedId, drawings } = get()
     if (!selectedId) return
     const drawing = drawings.find((d) => d.id === selectedId)
-    if (drawing) set({ clipboard: structuredClone(drawing) })
+    if (drawing) set({ clipboard: structuredClone(drawing), pasteMode: true, selectedId: null })
   },
 
   paste: (cursorPoint?: DrawingPoint) => {

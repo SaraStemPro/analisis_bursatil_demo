@@ -41,7 +41,7 @@ const COLOR_PALETTE = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#
 
 export default function DrawingToolbar() {
   const {
-    activeTool, selectTool, pendingPoints, selectedId, moveMode,
+    activeTool, selectTool, pendingPoints, selectedId, moveMode, pasteMode,
     removeDrawing, clearAll, drawings, resetInteraction,
     elliottWaveType, setElliottWaveType,
     arrowDirection, setArrowDirection,
@@ -128,10 +128,12 @@ export default function DrawingToolbar() {
       {/* Copy */}
       <button
         onClick={() => selectedId && copySelected()}
-        disabled={!selectedId}
-        title="Copiar (luego Ctrl+V en el gráfico)"
+        disabled={!selectedId && !pasteMode}
+        title={pasteMode ? 'Click en el gráfico para pegar' : 'Copiar y pegar'}
         className={`p-2 rounded transition-colors ${
-          selectedId ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-700 cursor-not-allowed'
+          pasteMode ? 'bg-emerald-600 text-white'
+          : selectedId ? 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          : 'text-slate-700 cursor-not-allowed'
         }`}
       >
         <Copy size={18} />
@@ -212,11 +214,18 @@ export default function DrawingToolbar() {
         </div>
       )}
 
-      {/* Move mode guidance */}
+      {/* Mode guidance */}
       {moveMode && (
         <div className="mt-1 px-1">
           <p className="text-[9px] text-blue-400 leading-tight text-center">
             Click en el gráfico para colocar
+          </p>
+        </div>
+      )}
+      {pasteMode && (
+        <div className="mt-1 px-1">
+          <p className="text-[9px] text-emerald-400 leading-tight text-center">
+            Click en el gráfico para pegar
           </p>
         </div>
       )}

@@ -131,7 +131,7 @@ export default function Charts() {
 
   // Drawing store
   const {
-    drawings, activeTool, activeChartId, moveMode,
+    drawings, activeTool, activeChartId, moveMode, pasteMode,
     setTicker: setDrawingTicker,
     resetInteraction, setActiveChartId,
   } = useDrawingStore()
@@ -322,6 +322,16 @@ export default function Charts() {
     if (store.moveMode) {
       const point = getPoint()
       if (point) store.finishDrag(point)
+      return
+    }
+
+    // If in paste mode, click to place the copy
+    if (store.pasteMode && store.clipboard) {
+      const point = getPoint()
+      if (point) {
+        store.paste(point)
+        useDrawingStore.setState({ pasteMode: false })
+      }
       return
     }
 
@@ -1053,6 +1063,7 @@ export default function Charts() {
         <button
           onClick={() => {
             chartInstanceRef.current?.timeScale().fitContent()
+            chartInstanceRef.current?.priceScale('right').applyOptions({ autoScale: true })
             savedRangeRef.current = null
           }}
           className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700"
@@ -1197,7 +1208,7 @@ export default function Charts() {
             onClick={() => setActiveChartId('main')}
             className={`bg-slate-900 rounded-lg border transition-colors ${
               activeChartId === 'main' ? 'border-emerald-500' : 'border-slate-700'
-            } ${moveMode && activeChartId === 'main' ? 'cursor-grabbing' : activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''} ${!history?.data?.length ? 'hidden' : ''}`}
+            } ${(moveMode || pasteMode) && activeChartId === 'main' ? 'cursor-crosshair' : activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''} ${!history?.data?.length ? 'hidden' : ''}`}
           />
           {/* Text input overlay */}
           {textInput.show && (
