@@ -16,7 +16,7 @@ import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/re
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
-import { Search, Settings2, X, CandlestickChart, LineChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical } from 'lucide-react'
+import { Search, Settings2, X, CandlestickChart, LineChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical, Maximize2 } from 'lucide-react'
 import { isCfd, askPrice, marginPerContract, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
@@ -133,8 +133,7 @@ export default function Charts() {
   const {
     drawings, activeTool, selectedId, activeChartId, moveMode,
     setTicker: setDrawingTicker,
-    resetInteraction, removeDrawing, setActiveChartId,
-    copySelected, paste,
+    resetInteraction, setActiveChartId,
   } = useDrawingStore()
 
   // Track last cursor position for paste-at-cursor
@@ -160,18 +159,18 @@ export default function Charts() {
     drawingManagerRef.current.syncDrawings(mainDrawings)
   }, [mainDrawings])
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — always read fresh state from store to avoid stale closures
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { resetInteraction(); previewRef.current.clear() }
-      if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
-      // Copy/paste drawings
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedId) { copySelected(); e.preventDefault() }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') { paste(cursorPointRef.current ?? undefined); e.preventDefault() }
+      const s = useDrawingStore.getState()
+      if (e.key === 'Escape') { s.resetInteraction(); previewRef.current.clear() }
+      if (e.key === 'Delete' && s.selectedId) s.removeDrawing(s.selectedId)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && s.selectedId) { s.copySelected(); e.preventDefault() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && s.clipboard) { s.paste(cursorPointRef.current ?? undefined); e.preventDefault() }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [resetInteraction, selectedId, removeDrawing, copySelected, paste])
+  }, [])
 
   const { data: searchResults } = useQuery({
     queryKey: ['search', searchQuery],
@@ -319,23 +318,17 @@ export default function Charts() {
     // Only handle clicks if main chart is active
     if (store.activeChartId !== 'main') return
 
-    // If in move mode, finalize the drag
-    if (store.moveMode && store.dragAnchor) {
+    // If in move mode, click to place the drawing
+    if (store.moveMode) {
       const point = getPoint()
       if (point) store.finishDrag(point)
       return
     }
 
-    // If no tool active, check for hit-test selection or start drag
+    // If no tool active, check for hit-test selection
     if (!store.activeTool) {
       const hoveredId = params.hoveredObjectId as string | undefined
-      if (hoveredId && hoveredId === store.selectedId) {
-        // Clicked on already-selected drawing → start drag
-        const point = getPoint()
-        if (point) store.startDrag(point)
-      } else {
-        store.selectDrawing(hoveredId ?? null)
-      }
+      store.selectDrawing(hoveredId ?? null)
       return
     }
 
@@ -515,7 +508,7 @@ export default function Charts() {
       chart.subscribeDblClick(onChartDblClick)
     }
 
-    // Crosshair move for live preview + cursor tracking + drag move
+    // Crosshair move for live preview + cursor tracking
     const handleCrosshairMove = (params: MouseEventParams<Time>) => {
       const store = useDrawingStore.getState()
       if (store.activeChartId !== 'main') return
@@ -526,32 +519,6 @@ export default function Charts() {
         if (price !== null) {
           cursorPointRef.current = { time: params.time as string, price: price as number }
         }
-      }
-
-      // During drag-move: live update the drawing position
-      if (store.moveMode && store.dragAnchor && store.selectedId && params.point && params.time && candleSeriesRef.current) {
-        const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
-        if (price !== null) {
-          const target = { time: params.time as string, price: price as number }
-          const drawing = store.drawings.find((d) => d.id === store.selectedId)
-          if (drawing) {
-            const dPrice = target.price - store.dragAnchor.price
-            const dTimeMs = new Date(target.time).getTime() - new Date(store.dragAnchor.time).getTime()
-            const newPoints = drawing.points.map((p) => {
-              const newPrice = p.price + dPrice
-              if (dTimeMs !== 0) {
-                const newMs = new Date(p.time).getTime() + dTimeMs
-                const d = new Date(newMs)
-                return { time: d.toISOString().split('T')[0], price: newPrice }
-              }
-              return { ...p, price: newPrice }
-            })
-            store.updateDrawing(store.selectedId, newPoints)
-            // Update anchor to current position for continuous tracking
-            useDrawingStore.setState({ dragAnchor: target })
-          }
-        }
-        return
       }
 
       if (!store.activeTool || !params.point) {
@@ -1081,6 +1048,17 @@ export default function Charts() {
           title="Escala logarítmica"
         >
           LOG
+        </button>
+        {/* Reset scale */}
+        <button
+          onClick={() => {
+            chartInstanceRef.current?.timeScale().fitContent()
+            savedRangeRef.current = null
+          }}
+          className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700"
+          title="Ajustar escala"
+        >
+          <Maximize2 size={14} /> Ajustar
         </button>
       </div>
 

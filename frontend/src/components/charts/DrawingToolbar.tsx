@@ -1,4 +1,4 @@
-import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Minus, Trash2, X, Square, Circle } from 'lucide-react'
+import { TrendingUp, ArrowUp, ArrowDown, Type, GitBranch, Activity, Minus, Trash2, X, Square, Circle, Move, Copy } from 'lucide-react'
 import { useDrawingStore } from '../../context/drawing-store'
 import type { DrawingToolType } from '../../types/drawings'
 
@@ -41,11 +41,11 @@ const COLOR_PALETTE = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#
 
 export default function DrawingToolbar() {
   const {
-    activeTool, selectTool, pendingPoints, selectedId,
+    activeTool, selectTool, pendingPoints, selectedId, moveMode,
     removeDrawing, clearAll, drawings, resetInteraction,
     elliottWaveType, setElliottWaveType,
     arrowDirection, setArrowDirection,
-    updateDrawingColor,
+    updateDrawingColor, startDrag, copySelected,
   } = useDrawingStore()
 
   return (
@@ -136,7 +136,31 @@ export default function DrawingToolbar() {
         </div>
       )}
 
-      {/* Delete selected — with confirmation */}
+      {/* Move selected drawing */}
+      {selectedId && (
+        <button
+          onClick={() => startDrag()}
+          title="Mover (click aquí, luego click en el gráfico)"
+          className={`p-2 rounded transition-colors ${
+            moveMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <Move size={18} />
+        </button>
+      )}
+
+      {/* Copy selected drawing */}
+      {selectedId && (
+        <button
+          onClick={() => copySelected()}
+          title="Copiar (Ctrl+C, luego Ctrl+V en el gráfico)"
+          className="p-2 rounded text-slate-400 hover:bg-slate-800 hover:text-white"
+        >
+          <Copy size={18} />
+        </button>
+      )}
+
+      {/* Delete selected */}
       {selectedId && (
         <button
           onClick={() => {

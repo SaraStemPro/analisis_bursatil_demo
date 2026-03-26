@@ -48,7 +48,7 @@ interface DrawingStore {
   setActiveChartId: (chartId: string) => void
   copySelected: () => void
   paste: (cursorPoint?: DrawingPoint) => void
-  startDrag: (anchor: DrawingPoint) => void
+  startDrag: () => void
   finishDrag: (target: DrawingPoint) => void
 }
 
@@ -175,10 +175,13 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
     set({ drawings: updated, selectedId: newDrawing.id })
   },
 
-  startDrag: (anchor) => {
-    const { selectedId } = get()
+  startDrag: () => {
+    const { selectedId, drawings } = get()
     if (!selectedId) return
-    set({ moveMode: true, dragAnchor: anchor })
+    const drawing = drawings.find((d) => d.id === selectedId)
+    if (!drawing || !drawing.points.length) return
+    // Use the first point of the drawing as anchor reference
+    set({ moveMode: true, dragAnchor: drawing.points[0] })
   },
 
   finishDrag: (target) => {
