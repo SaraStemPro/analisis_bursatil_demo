@@ -108,8 +108,46 @@ export default function DrawingToolbar() {
         </div>
       )}
 
-      {/* Divider */}
+      {/* Divider + action buttons (always visible) */}
       <div className="border-t border-slate-700 my-1" />
+
+      {/* Move */}
+      <button
+        onClick={() => selectedId && startDrag()}
+        disabled={!selectedId}
+        title={moveMode ? 'Click en el gráfico para colocar' : 'Mover seleccionado'}
+        className={`p-2 rounded transition-colors ${
+          moveMode ? 'bg-blue-600 text-white'
+          : selectedId ? 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          : 'text-slate-700 cursor-not-allowed'
+        }`}
+      >
+        <Move size={18} />
+      </button>
+
+      {/* Copy */}
+      <button
+        onClick={() => selectedId && copySelected()}
+        disabled={!selectedId}
+        title="Copiar (luego Ctrl+V en el gráfico)"
+        className={`p-2 rounded transition-colors ${
+          selectedId ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-700 cursor-not-allowed'
+        }`}
+      >
+        <Copy size={18} />
+      </button>
+
+      {/* Delete */}
+      <button
+        onClick={() => selectedId && removeDrawing(selectedId)}
+        disabled={!selectedId}
+        title="Borrar seleccionado"
+        className={`p-2 rounded transition-colors ${
+          selectedId ? 'text-red-400 hover:bg-red-900/30' : 'text-slate-700 cursor-not-allowed'
+        }`}
+      >
+        <Trash2 size={18} />
+      </button>
 
       {/* Color picker for selected drawing */}
       {selectedId && (
@@ -136,44 +174,7 @@ export default function DrawingToolbar() {
         </div>
       )}
 
-      {/* Move selected drawing */}
-      {selectedId && (
-        <button
-          onClick={() => startDrag()}
-          title="Mover (click aquí, luego click en el gráfico)"
-          className={`p-2 rounded transition-colors ${
-            moveMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          <Move size={18} />
-        </button>
-      )}
-
-      {/* Copy selected drawing */}
-      {selectedId && (
-        <button
-          onClick={() => copySelected()}
-          title="Copiar (Ctrl+C, luego Ctrl+V en el gráfico)"
-          className="p-2 rounded text-slate-400 hover:bg-slate-800 hover:text-white"
-        >
-          <Copy size={18} />
-        </button>
-      )}
-
-      {/* Delete selected */}
-      {selectedId && (
-        <button
-          onClick={() => {
-            removeDrawing(selectedId)
-          }}
-          title="Borrar seleccionado"
-          className="p-2 rounded text-red-400 hover:bg-red-900/30"
-        >
-          <Trash2 size={18} />
-        </button>
-      )}
-
-      {/* Clear all — with confirmation */}
+      {/* Clear all */}
       {drawings.length > 0 && (
         <button
           onClick={() => {
@@ -208,6 +209,15 @@ export default function DrawingToolbar() {
               {pendingPoints.length} pts
             </p>
           )}
+        </div>
+      )}
+
+      {/* Move mode guidance */}
+      {moveMode && (
+        <div className="mt-1 px-1">
+          <p className="text-[9px] text-blue-400 leading-tight text-center">
+            Click en el gráfico para colocar
+          </p>
         </div>
       )}
     </div>
