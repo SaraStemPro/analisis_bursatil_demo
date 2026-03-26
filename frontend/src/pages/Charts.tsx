@@ -131,7 +131,7 @@ export default function Charts() {
 
   // Drawing store
   const {
-    drawings, activeTool, selectedId, activeChartId, moveMode,
+    drawings, activeTool, activeChartId, moveMode,
     setTicker: setDrawingTicker,
     resetInteraction, setActiveChartId,
   } = useDrawingStore()
