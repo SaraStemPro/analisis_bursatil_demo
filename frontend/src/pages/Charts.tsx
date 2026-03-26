@@ -134,7 +134,7 @@ export default function Charts() {
     drawings, activeTool, selectedId, activeChartId, moveMode,
     setTicker: setDrawingTicker,
     resetInteraction, removeDrawing, setActiveChartId,
-    copySelected, paste, startDrag, finishDrag,
+    copySelected, paste,
   } = useDrawingStore()
 
   // Track last cursor position for paste-at-cursor
