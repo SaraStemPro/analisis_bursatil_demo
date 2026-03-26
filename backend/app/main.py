@@ -9,6 +9,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine
 from .routers import auth, market, indicators, demo, backtest, tutor
 from .services.market_service import start_cache_warmer
+from .services.demo_service import start_stop_loss_monitor
 from .utils.auth import hash_password
 
 Base.metadata.create_all(bind=engine)
@@ -161,6 +162,7 @@ app.include_router(tutor.router)
 @app.on_event("startup")
 def _on_startup():
     start_cache_warmer()
+    start_stop_loss_monitor()
 
 
 @app.get("/api/health")

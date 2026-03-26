@@ -1,4 +1,6 @@
+import logging
 import math
+import threading
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -6,6 +8,8 @@ from decimal import Decimal
 import yfinance as yf
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from ..models.order import Order
 from ..models.portfolio import Portfolio
@@ -1166,3 +1170,55 @@ def get_admin_positions(db: Session) -> list[dict]:
         })
     students.sort(key=lambda x: x["total_value"], reverse=True)
     return students
+
+
+# --- Background stop loss monitor ---
+_sl_monitor_running = False
+
+
+def _stop_loss_monitor_loop():
+    """Background thread: checks all open positions with SL/TP every 2 minutes."""
+    global _sl_monitor_running
+    _sl_monitor_running = True
+    logger.info("Stop loss monitor started")
+    # Wait 30s on startup to let caches warm up
+    time.sleep(30)
+
+    while _sl_monitor_running:
+        try:
+            from ..database import SessionLocal
+
+            db = SessionLocal()
+            try:
+                # Find all portfolios that have open orders with SL or TP
+                orders_with_stops = (
+                    db.query(Order)
+                    .filter(
+                        Order.status == "open",
+                        (Order.stop_loss.isnot(None)) | (Order.take_profit.isnot(None)),
+                    )
+                    .all()
+                )
+                if orders_with_stops:
+                    portfolio_ids = {o.portfolio_id for o in orders_with_stops}
+                    for pid in portfolio_ids:
+                        portfolio = db.query(Portfolio).filter(Portfolio.id == pid).first()
+                        if portfolio:
+                            try:
+                                _check_stop_losses(db, portfolio)
+                            except Exception as e:
+                                logger.warning(f"SL check failed for portfolio {pid}: {e}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"Stop loss monitor error: {e}")
+
+        time.sleep(120)  # 2 minutes
+
+
+def start_stop_loss_monitor():
+    """Start the background stop loss monitor thread."""
+    if _sl_monitor_running:
+        return
+    t = threading.Thread(target=_stop_loss_monitor_loop, daemon=True, name="sl-monitor")
+    t.start()
