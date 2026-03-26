@@ -28,6 +28,7 @@ interface DrawingStore {
   elliottWaveType: 'impulse' | 'corrective'
   arrowDirection: 'up' | 'down'
   moveMode: boolean
+  dragAnchor: DrawingPoint | null
   activeChartId: string
   clipboard: Drawing | null
 
@@ -46,7 +47,9 @@ interface DrawingStore {
   setMoveMode: (mode: boolean) => void
   setActiveChartId: (chartId: string) => void
   copySelected: () => void
-  paste: () => void
+  paste: (cursorPoint?: DrawingPoint) => void
+  startDrag: (anchor: DrawingPoint) => void
+  finishDrag: (target: DrawingPoint) => void
 }
 
 export const useDrawingStore = create<DrawingStore>((set, get) => ({
@@ -58,6 +61,7 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   elliottWaveType: 'impulse',
   arrowDirection: 'up',
   moveMode: false,
+  dragAnchor: null,
   activeChartId: 'main',
   clipboard: null,
 
@@ -108,11 +112,11 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   },
 
   resetInteraction: () => {
-    set({ activeTool: null, pendingPoints: [], selectedId: null, moveMode: false })
+    set({ activeTool: null, pendingPoints: [], selectedId: null, moveMode: false, dragAnchor: null })
   },
 
   selectDrawing: (id) => {
-    set({ selectedId: id, activeTool: null, moveMode: false })
+    set({ selectedId: id, activeTool: null, moveMode: false, dragAnchor: null })
   },
 
   setElliottWaveType: (type) => {
@@ -138,18 +142,69 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
     if (drawing) set({ clipboard: structuredClone(drawing) })
   },
 
-  paste: () => {
+  paste: (cursorPoint?: DrawingPoint) => {
     const { clipboard, ticker, drawings } = get()
     if (!clipboard) return
-    // Offset price slightly so the paste is visible next to the original
-    const offset = clipboard.points[0]?.price ? clipboard.points[0].price * 0.02 : 1
+    // If cursor position given, center the drawing on it; otherwise offset slightly
+    let offsetTime = 0
+    let offsetPrice = clipboard.points[0]?.price ? clipboard.points[0].price * 0.02 : 1
+    if (cursorPoint && clipboard.points.length > 0) {
+      const anchor = clipboard.points[0]
+      offsetPrice = cursorPoint.price - anchor.price
+      // Time offset: calculate difference in days between cursor and anchor
+      const anchorMs = new Date(anchor.time).getTime()
+      const cursorMs = new Date(cursorPoint.time).getTime()
+      offsetTime = cursorMs - anchorMs
+    }
     const newDrawing: Drawing = {
       ...structuredClone(clipboard),
       id: crypto.randomUUID(),
-      points: clipboard.points.map((p) => ({ ...p, price: p.price + offset })),
+      points: clipboard.points.map((p) => {
+        const newPrice = p.price + offsetPrice
+        if (offsetTime !== 0) {
+          const newMs = new Date(p.time).getTime() + offsetTime
+          const d = new Date(newMs)
+          const newTime = d.toISOString().split('T')[0]
+          return { time: newTime, price: newPrice }
+        }
+        return { ...p, price: newPrice }
+      }),
     } as Drawing
     const updated = [...drawings, newDrawing]
     save(ticker, updated)
     set({ drawings: updated, selectedId: newDrawing.id })
+  },
+
+  startDrag: (anchor) => {
+    const { selectedId } = get()
+    if (!selectedId) return
+    set({ moveMode: true, dragAnchor: anchor })
+  },
+
+  finishDrag: (target) => {
+    const { selectedId, dragAnchor, drawings, ticker } = get()
+    if (!selectedId || !dragAnchor) {
+      set({ moveMode: false, dragAnchor: null })
+      return
+    }
+    const drawing = drawings.find((d) => d.id === selectedId)
+    if (!drawing) {
+      set({ moveMode: false, dragAnchor: null })
+      return
+    }
+    const dPrice = target.price - dragAnchor.price
+    const dTimeMs = new Date(target.time).getTime() - new Date(dragAnchor.time).getTime()
+    const newPoints = drawing.points.map((p) => {
+      const newPrice = p.price + dPrice
+      if (dTimeMs !== 0) {
+        const newMs = new Date(p.time).getTime() + dTimeMs
+        const d = new Date(newMs)
+        return { time: d.toISOString().split('T')[0], price: newPrice }
+      }
+      return { ...p, price: newPrice }
+    })
+    const updated = drawings.map((d) => d.id === selectedId ? { ...d, points: newPoints } : d)
+    save(ticker, updated)
+    set({ drawings: updated, moveMode: false, dragAnchor: null })
   },
 }))

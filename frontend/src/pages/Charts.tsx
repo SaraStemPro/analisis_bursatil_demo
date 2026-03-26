@@ -131,11 +131,14 @@ export default function Charts() {
 
   // Drawing store
   const {
-    drawings, activeTool, selectedId, activeChartId,
+    drawings, activeTool, selectedId, activeChartId, moveMode,
     setTicker: setDrawingTicker,
     resetInteraction, removeDrawing, setActiveChartId,
-    copySelected, paste,
+    copySelected, paste, startDrag, finishDrag,
   } = useDrawingStore()
+
+  // Track last cursor position for paste-at-cursor
+  const cursorPointRef = useRef<DrawingPoint | null>(null)
 
   // Filter drawings for main chart
   const mainDrawings = drawings.filter((d) => !d.chartId || d.chartId === 'main')
@@ -164,7 +167,7 @@ export default function Charts() {
       if (e.key === 'Delete' && selectedId) removeDrawing(selectedId)
       // Copy/paste drawings
       if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedId) { copySelected(); e.preventDefault() }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') { paste(); e.preventDefault() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') { paste(cursorPointRef.current ?? undefined); e.preventDefault() }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
@@ -316,10 +319,23 @@ export default function Charts() {
     // Only handle clicks if main chart is active
     if (store.activeChartId !== 'main') return
 
-    // If no tool active, check for hit-test selection
+    // If in move mode, finalize the drag
+    if (store.moveMode && store.dragAnchor) {
+      const point = getPoint()
+      if (point) store.finishDrag(point)
+      return
+    }
+
+    // If no tool active, check for hit-test selection or start drag
     if (!store.activeTool) {
       const hoveredId = params.hoveredObjectId as string | undefined
-      store.selectDrawing(hoveredId ?? null)
+      if (hoveredId && hoveredId === store.selectedId) {
+        // Clicked on already-selected drawing → start drag
+        const point = getPoint()
+        if (point) store.startDrag(point)
+      } else {
+        store.selectDrawing(hoveredId ?? null)
+      }
       return
     }
 
@@ -499,10 +515,45 @@ export default function Charts() {
       chart.subscribeDblClick(onChartDblClick)
     }
 
-    // Crosshair move for live preview
+    // Crosshair move for live preview + cursor tracking + drag move
     const handleCrosshairMove = (params: MouseEventParams<Time>) => {
       const store = useDrawingStore.getState()
       if (store.activeChartId !== 'main') return
+
+      // Track cursor position for paste-at-cursor
+      if (params.point && params.time && candleSeriesRef.current) {
+        const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
+        if (price !== null) {
+          cursorPointRef.current = { time: params.time as string, price: price as number }
+        }
+      }
+
+      // During drag-move: live update the drawing position
+      if (store.moveMode && store.dragAnchor && store.selectedId && params.point && params.time && candleSeriesRef.current) {
+        const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
+        if (price !== null) {
+          const target = { time: params.time as string, price: price as number }
+          const drawing = store.drawings.find((d) => d.id === store.selectedId)
+          if (drawing) {
+            const dPrice = target.price - store.dragAnchor.price
+            const dTimeMs = new Date(target.time).getTime() - new Date(store.dragAnchor.time).getTime()
+            const newPoints = drawing.points.map((p) => {
+              const newPrice = p.price + dPrice
+              if (dTimeMs !== 0) {
+                const newMs = new Date(p.time).getTime() + dTimeMs
+                const d = new Date(newMs)
+                return { time: d.toISOString().split('T')[0], price: newPrice }
+              }
+              return { ...p, price: newPrice }
+            })
+            store.updateDrawing(store.selectedId, newPoints)
+            // Update anchor to current position for continuous tracking
+            useDrawingStore.setState({ dragAnchor: target })
+          }
+        }
+        return
+      }
+
       if (!store.activeTool || !params.point) {
         previewRef.current.clear()
         return
@@ -1168,7 +1219,7 @@ export default function Charts() {
             onClick={() => setActiveChartId('main')}
             className={`bg-slate-900 rounded-lg border transition-colors ${
               activeChartId === 'main' ? 'border-emerald-500' : 'border-slate-700'
-            } ${activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''} ${!history?.data?.length ? 'hidden' : ''}`}
+            } ${moveMode && activeChartId === 'main' ? 'cursor-grabbing' : activeTool && activeChartId === 'main' ? 'cursor-crosshair' : ''} ${!history?.data?.length ? 'hidden' : ''}`}
           />
           {/* Text input overlay */}
           {textInput.show && (
