@@ -16,7 +16,7 @@ import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/re
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
-import { Search, Settings2, X, CandlestickChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical } from 'lucide-react'
+import { Search, Settings2, X, CandlestickChart, LineChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical } from 'lucide-react'
 import { isCfd, askPrice, marginPerContract, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 
 const PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
@@ -100,6 +100,10 @@ export default function Charts() {
   const [strategySignals, setStrategySignals] = useState<StrategySignal[]>([])
   const strategySignalsRef = useRef<StrategySignal[]>([])
   strategySignalsRef.current = strategySignals
+
+  // Chart type: candlestick or line (close prices)
+  type ChartType = 'candle' | 'line'
+  const [chartType, setChartType] = useState<ChartType>('candle')
 
   // Feature 5: log scale
   const [logScale, setLogScale] = useState(false)
@@ -391,24 +395,46 @@ export default function Charts() {
     })
 
     const firstPrice = history.data[0]?.close ?? 100
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#16a34a', downColor: '#dc2626',
-      borderDownColor: '#dc2626', borderUpColor: '#16a34a',
-      wickDownColor: '#dc2626', wickUpColor: '#16a34a',
-      priceFormat: { type: 'price', ...getPriceFormat(firstPrice) },
-    })
+    const priceFormat = { type: 'price' as const, ...getPriceFormat(firstPrice) }
+
+    let mainSeries: ISeriesApi<SeriesType, Time>
+    if (chartType === 'line') {
+      const lineSeries = chart.addSeries(LineSeries, {
+        color: '#2563eb',
+        lineWidth: 2,
+        priceFormat,
+      })
+      mainSeries = lineSeries as ISeriesApi<SeriesType, Time>
+    } else {
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: '#16a34a', downColor: '#dc2626',
+        borderDownColor: '#dc2626', borderUpColor: '#16a34a',
+        wickDownColor: '#dc2626', wickUpColor: '#16a34a',
+        priceFormat,
+      })
+      mainSeries = candleSeries as ISeriesApi<SeriesType, Time>
+    }
 
     chartInstanceRef.current = chart
-    candleSeriesRef.current = candleSeries as ISeriesApi<SeriesType, Time>
+    candleSeriesRef.current = mainSeries
 
     const times = history.data.map((d) => toChartTime(d.date, interval))
 
-    candleSeries.setData(
-      history.data.map((d) => ({
-        time: toChartTime(d.date, interval),
-        open: d.open, high: d.high, low: d.low, close: d.close,
-      }))
-    )
+    if (chartType === 'line') {
+      mainSeries.setData(
+        history.data.map((d) => ({
+          time: toChartTime(d.date, interval),
+          value: d.close,
+        }))
+      )
+    } else {
+      mainSeries.setData(
+        history.data.map((d) => ({
+          time: toChartTime(d.date, interval),
+          open: d.open, high: d.high, low: d.low, close: d.close,
+        }))
+      )
+    }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
@@ -455,12 +481,11 @@ export default function Charts() {
     }
 
     // Attach drawing manager
-    const seriesRef = candleSeries as ISeriesApi<SeriesType, Time>
-    drawingManagerRef.current.attach(chart, seriesRef)
+    drawingManagerRef.current.attach(chart, mainSeries)
     drawingManagerRef.current.syncDrawings(useDrawingStore.getState().drawings.filter((d) => !d.chartId || d.chartId === 'main'))
 
     // Attach preview primitive
-    seriesRef.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
+    mainSeries.attachPrimitive(previewRef.current as unknown as import('lightweight-charts').ISeriesPrimitive<Time>)
 
     // Drawing click handlers — use refs for stable subscriptions
     const onChartClick = (params: MouseEventParams<Time>) => handleChartClickRef.current(params)
@@ -582,7 +607,7 @@ export default function Charts() {
     // Sort markers by time and attach
     allMarkers.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0))
     if (allMarkers.length > 0) {
-      markersPluginRef.current = createSeriesMarkers(seriesRef, allMarkers)
+      markersPluginRef.current = createSeriesMarkers(mainSeries, allMarkers)
     }
 
     // Feature 4: preserve scale
@@ -630,7 +655,7 @@ export default function Charts() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, indicatorData, interval, activePatterns, logScale, getIndicatorDef, getIndicatorColor])
+  }, [history, indicatorData, interval, activePatterns, logScale, chartType, getIndicatorDef, getIndicatorColor])
 
   // Update markers when strategy signals change (without recreating chart)
   useEffect(() => {
@@ -969,6 +994,27 @@ export default function Charts() {
         >
           Hoy
         </button>
+        {/* Chart type toggle */}
+        <div className="flex rounded overflow-hidden border border-slate-700">
+          <button
+            onClick={() => setChartType('candle')}
+            className={`flex items-center gap-1 px-2.5 py-1 text-sm transition-colors ${
+              chartType === 'candle' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+            title="Velas japonesas"
+          >
+            <CandlestickChart size={14} />
+          </button>
+          <button
+            onClick={() => setChartType('line')}
+            className={`flex items-center gap-1 px-2.5 py-1 text-sm transition-colors ${
+              chartType === 'line' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+            title="Línea de cierres"
+          >
+            <LineChart size={14} />
+          </button>
+        </div>
         {/* Feature 5: LOG toggle */}
         <button
           onClick={toggleLogScale}
