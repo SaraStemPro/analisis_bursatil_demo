@@ -131,6 +131,66 @@ def _seed():
 _seed()
 
 
+# Migration: mark old buy/sell orders as closed if they have been fully closed
+# In the old system, original orders stayed status="open" forever.
+# The new system uses status="open"/"closed" on the original order itself.
+def _migrate_close_order_status():
+    from .models.order import Order
+
+    db: Session = SessionLocal()
+    try:
+        # For each portfolio, process close orders and consume from oldest open orders (FIFO)
+        close_orders = (
+            db.query(Order)
+            .filter(Order.type == "close")
+            .order_by(Order.created_at)
+            .all()
+        )
+        if not close_orders:
+            db.close()
+            return
+
+        # Group closes by (portfolio_id, ticker, side)
+        from collections import defaultdict
+        closes_by_key: dict[tuple, int] = defaultdict(int)
+        for co in close_orders:
+            key = (co.portfolio_id, co.ticker, co.side)
+            closes_by_key[key] += co.quantity
+
+        for (pid, ticker, side), closed_qty in closes_by_key.items():
+            order_type = "buy" if side == "long" else "sell"
+            open_orders = (
+                db.query(Order)
+                .filter(
+                    Order.portfolio_id == pid,
+                    Order.ticker == ticker,
+                    Order.type == order_type,
+                    Order.status == "open",
+                )
+                .order_by(Order.created_at)
+                .all()
+            )
+            remaining = closed_qty
+            for o in open_orders:
+                if remaining <= 0:
+                    break
+                if remaining >= o.quantity:
+                    remaining -= o.quantity
+                    o.status = "closed"
+                    o.closed_at = o.closed_at or o.created_at
+                else:
+                    # Partial close: reduce quantity
+                    o.quantity -= remaining
+                    remaining = 0
+
+        db.commit()
+    finally:
+        db.close()
+
+
+_migrate_close_order_status()
+
+
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
