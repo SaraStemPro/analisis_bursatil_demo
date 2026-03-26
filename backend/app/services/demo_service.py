@@ -143,8 +143,128 @@ def get_or_create_portfolio(db: Session, user_id: str) -> Portfolio:
     return portfolio
 
 
+def _check_stop_losses(db: Session, portfolio: Portfolio) -> None:
+    """Check all open positions for stop loss / take profit triggers and auto-close."""
+    # Find all open orders that have SL or TP set
+    open_orders = (
+        db.query(Order)
+        .filter(
+            Order.portfolio_id == portfolio.id,
+            Order.status == "open",
+        )
+        .all()
+    )
+
+    # Collect tickers that have SL or TP
+    tickers_with_stops: dict[str, dict] = {}  # ticker -> {side -> stop_loss/take_profit}
+    for o in open_orders:
+        if o.stop_loss is None and o.take_profit is None:
+            continue
+        key = (o.ticker, "long" if o.type == "buy" else "short")
+        if key not in tickers_with_stops:
+            tickers_with_stops[key] = {"stop_loss": o.stop_loss, "take_profit": o.take_profit}
+
+    if not tickers_with_stops:
+        return
+
+    # Check each position
+    for (ticker, side), levels in tickers_with_stops.items():
+        sl = levels["stop_loss"]
+        tp = levels["take_profit"]
+        try:
+            current_price = Decimal(str(_get_current_price(ticker)))
+        except Exception:
+            continue
+
+        triggered = False
+        trigger_reason = ""
+
+        if side == "long":
+            # Long: SL triggers when price drops to/below SL
+            if sl is not None and current_price <= sl:
+                triggered = True
+                trigger_reason = f"Stop loss ({sl})"
+            # Long: TP triggers when price rises to/above TP
+            elif tp is not None and current_price >= tp:
+                triggered = True
+                trigger_reason = f"Take profit ({tp})"
+        else:  # short
+            # Short: SL triggers when price rises to/above SL
+            if sl is not None and current_price >= sl:
+                triggered = True
+                trigger_reason = f"Stop loss ({sl})"
+            # Short: TP triggers when price drops to/below TP
+            elif tp is not None and current_price <= tp:
+                triggered = True
+                trigger_reason = f"Take profit ({tp})"
+
+        if not triggered:
+            continue
+
+        # Auto-close the full position (skip market state check)
+        qty = _long_quantity(db, portfolio.id, ticker) if side == "long" else _short_quantity(db, portfolio.id, ticker)
+        if qty <= 0:
+            continue
+
+        is_cfd = _is_cfd(ticker)
+        entry_fx = _get_entry_fx_rate(db, portfolio.id, ticker, side)
+        current_fx = _get_daily_fx_rate() if entry_fx is not None else None
+
+        if side == "long":
+            exec_price = current_price  # bid, no spread
+            avg_price = _avg_buy_price(db, portfolio.id, ticker)
+            if is_cfd:
+                notional_entry = _notional_value(ticker, avg_price) * qty
+                notional_exit = _notional_value(ticker, exec_price) * qty
+                pnl_usd = notional_exit - notional_entry
+                margin_paid = notional_entry * _CFD_MARGIN_PCT
+                balance_return_usd = margin_paid + pnl_usd
+            else:
+                pnl_usd = (exec_price - avg_price) * qty
+                balance_return_usd = exec_price * qty
+        else:
+            exec_price = _apply_spread(current_price, is_buy=True)  # ask, with spread
+            avg_price = _avg_sell_price(db, portfolio.id, ticker)
+            if is_cfd:
+                notional_entry = _notional_value(ticker, avg_price) * qty
+                notional_exit = _notional_value(ticker, exec_price) * qty
+                pnl_usd = notional_entry - notional_exit
+                margin_paid = notional_entry * _CFD_MARGIN_PCT
+                balance_return_usd = margin_paid + pnl_usd
+            else:
+                pnl_usd = (avg_price - exec_price) * qty
+                balance_return_usd = avg_price * qty + pnl_usd
+
+        if entry_fx is not None and current_fx is not None:
+            pnl = _usd_to_eur(pnl_usd, current_fx)
+            portfolio.balance += _usd_to_eur(balance_return_usd, current_fx)
+        else:
+            pnl = pnl_usd
+            portfolio.balance += balance_return_usd
+
+        close_order = Order(
+            portfolio_id=portfolio.id,
+            ticker=ticker,
+            type="close",
+            quantity=qty,
+            price=exec_price,
+            status="closed",
+            side=side,
+            pnl=pnl,
+            cost=None,
+            closed_at=datetime.now(timezone.utc),
+            fx_rate=current_fx,
+            notes=f"[Auto] {trigger_reason}",
+        )
+        db.add(close_order)
+
+    db.commit()
+    db.refresh(portfolio)
+
+
 def get_portfolio(db: Session, user_id: str) -> PortfolioResponse:
     portfolio = get_or_create_portfolio(db, user_id)
+    _check_stop_losses(db, portfolio)
     positions = _calculate_positions(db, portfolio)
     total_positions_value = Decimal(str(sum(_position_value(p) for p in positions)))
     total_value = portfolio.balance + total_positions_value
