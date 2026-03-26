@@ -21,9 +21,8 @@ class OrderCreateRequest(BaseModel):
 
 
 class ClosePositionRequest(BaseModel):
-    ticker: str = Field(min_length=1, max_length=20)
+    order_id: str = Field(min_length=1, max_length=36)
     quantity: int = Field(gt=0, le=100_000)
-    side: str = Field(pattern=r"^(long|short)$")
 
 
 class PortfolioResetRequest(BaseModel):
@@ -38,9 +37,10 @@ class PortfolioResetRequest(BaseModel):
 # --- Responses ---
 
 class PositionResponse(BaseModel):
+    order_id: str
     ticker: str
     quantity: int
-    avg_price: Decimal
+    entry_price: Decimal
     current_price: Decimal
     pnl: Decimal
     pnl_pct: Decimal
@@ -51,7 +51,10 @@ class PositionResponse(BaseModel):
     fx_rate_current: Decimal | None = None
     fx_pnl: Decimal | None = None
     stop_loss: Decimal | None = None
+    take_profit: Decimal | None = None
     invested_value: Decimal | None = None
+    notes: str | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

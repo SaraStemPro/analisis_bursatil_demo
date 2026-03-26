@@ -147,9 +147,75 @@ def get_or_create_portfolio(db: Session, user_id: str) -> Portfolio:
     return portfolio
 
 
+def _close_order_internal(
+    db: Session, portfolio: Portfolio, order: Order,
+    qty: int, exec_price: Decimal, reason: str | None = None,
+) -> Order:
+    """Close an order (or partial qty) and update portfolio balance. No market state check."""
+    ticker = order.ticker
+    is_cfd = _is_cfd(ticker)
+    entry_price = order.price
+    side = order.side  # "long" | "short"
+
+    entry_fx = order.fx_rate
+    current_fx = _get_daily_fx_rate() if entry_fx is not None else None
+
+    if side == "long":
+        if is_cfd:
+            notional_entry = _notional_value(ticker, entry_price) * qty
+            notional_exit = _notional_value(ticker, exec_price) * qty
+            pnl_usd = notional_exit - notional_entry
+            margin_paid = notional_entry * _CFD_MARGIN_PCT
+            balance_return_usd = margin_paid + pnl_usd
+        else:
+            pnl_usd = (exec_price - entry_price) * qty
+            balance_return_usd = exec_price * qty
+    else:  # short
+        if is_cfd:
+            notional_entry = _notional_value(ticker, entry_price) * qty
+            notional_exit = _notional_value(ticker, exec_price) * qty
+            pnl_usd = notional_entry - notional_exit
+            margin_paid = notional_entry * _CFD_MARGIN_PCT
+            balance_return_usd = margin_paid + pnl_usd
+        else:
+            pnl_usd = (entry_price - exec_price) * qty
+            balance_return_usd = entry_price * qty + pnl_usd
+
+    if entry_fx is not None and current_fx is not None:
+        pnl = _usd_to_eur(pnl_usd, current_fx)
+        portfolio.balance += _usd_to_eur(balance_return_usd, current_fx)
+    else:
+        pnl = pnl_usd
+        portfolio.balance += balance_return_usd
+
+    # Update original order: reduce quantity or mark closed
+    if qty >= order.quantity:
+        order.status = "closed"
+        order.closed_at = datetime.now(timezone.utc)
+        order.pnl = pnl
+    else:
+        order.quantity -= qty
+
+    close_order = Order(
+        portfolio_id=portfolio.id,
+        ticker=ticker,
+        type="close",
+        quantity=qty,
+        price=exec_price,
+        status="closed",
+        side=side,
+        pnl=pnl,
+        cost=None,
+        closed_at=datetime.now(timezone.utc),
+        fx_rate=current_fx,
+        notes=f"[Auto] {reason}" if reason else None,
+    )
+    db.add(close_order)
+    return close_order
+
+
 def _check_stop_losses(db: Session, portfolio: Portfolio) -> None:
-    """Check all open positions for stop loss / take profit triggers and auto-close."""
-    # Find all open orders that have SL or TP set
+    """Check all open orders for stop loss / take profit triggers and auto-close."""
     open_orders = (
         db.query(Order)
         .filter(
@@ -159,45 +225,39 @@ def _check_stop_losses(db: Session, portfolio: Portfolio) -> None:
         .all()
     )
 
-    # Collect tickers that have SL or TP
-    tickers_with_stops: dict[str, dict] = {}  # ticker -> {side -> stop_loss/take_profit}
+    # Cache prices per ticker
+    price_cache: dict[str, Decimal] = {}
+
     for o in open_orders:
         if o.stop_loss is None and o.take_profit is None:
             continue
-        key = (o.ticker, "long" if o.type == "buy" else "short")
-        if key not in tickers_with_stops:
-            tickers_with_stops[key] = {"stop_loss": o.stop_loss, "take_profit": o.take_profit}
 
-    if not tickers_with_stops:
-        return
+        ticker = o.ticker
+        if ticker not in price_cache:
+            try:
+                price_cache[ticker] = Decimal(str(_get_current_price(ticker)))
+            except Exception:
+                continue
 
-    # Check each position
-    for (ticker, side), levels in tickers_with_stops.items():
-        sl = levels["stop_loss"]
-        tp = levels["take_profit"]
-        try:
-            current_price = Decimal(str(_get_current_price(ticker)))
-        except Exception:
-            continue
+        current_price = price_cache[ticker]
+        side = o.side  # "long" | "short"
+        sl = o.stop_loss
+        tp = o.take_profit
 
         triggered = False
         trigger_reason = ""
 
         if side == "long":
-            # Long: SL triggers when price drops to/below SL
             if sl is not None and current_price <= sl:
                 triggered = True
                 trigger_reason = f"Stop loss ({sl})"
-            # Long: TP triggers when price rises to/above TP
             elif tp is not None and current_price >= tp:
                 triggered = True
                 trigger_reason = f"Take profit ({tp})"
-        else:  # short
-            # Short: SL triggers when price rises to/above SL
+        else:
             if sl is not None and current_price >= sl:
                 triggered = True
                 trigger_reason = f"Stop loss ({sl})"
-            # Short: TP triggers when price drops to/below TP
             elif tp is not None and current_price <= tp:
                 triggered = True
                 trigger_reason = f"Take profit ({tp})"
@@ -205,62 +265,9 @@ def _check_stop_losses(db: Session, portfolio: Portfolio) -> None:
         if not triggered:
             continue
 
-        # Auto-close the full position (skip market state check)
-        qty = _long_quantity(db, portfolio.id, ticker) if side == "long" else _short_quantity(db, portfolio.id, ticker)
-        if qty <= 0:
-            continue
-
-        is_cfd = _is_cfd(ticker)
-        entry_fx = _get_entry_fx_rate(db, portfolio.id, ticker, side)
-        current_fx = _get_daily_fx_rate() if entry_fx is not None else None
-
-        if side == "long":
-            exec_price = current_price  # bid, no spread
-            avg_price = _avg_buy_price(db, portfolio.id, ticker)
-            if is_cfd:
-                notional_entry = _notional_value(ticker, avg_price) * qty
-                notional_exit = _notional_value(ticker, exec_price) * qty
-                pnl_usd = notional_exit - notional_entry
-                margin_paid = notional_entry * _CFD_MARGIN_PCT
-                balance_return_usd = margin_paid + pnl_usd
-            else:
-                pnl_usd = (exec_price - avg_price) * qty
-                balance_return_usd = exec_price * qty
-        else:
-            exec_price = _apply_spread(current_price, is_buy=True)  # ask, with spread
-            avg_price = _avg_sell_price(db, portfolio.id, ticker)
-            if is_cfd:
-                notional_entry = _notional_value(ticker, avg_price) * qty
-                notional_exit = _notional_value(ticker, exec_price) * qty
-                pnl_usd = notional_entry - notional_exit
-                margin_paid = notional_entry * _CFD_MARGIN_PCT
-                balance_return_usd = margin_paid + pnl_usd
-            else:
-                pnl_usd = (avg_price - exec_price) * qty
-                balance_return_usd = avg_price * qty + pnl_usd
-
-        if entry_fx is not None and current_fx is not None:
-            pnl = _usd_to_eur(pnl_usd, current_fx)
-            portfolio.balance += _usd_to_eur(balance_return_usd, current_fx)
-        else:
-            pnl = pnl_usd
-            portfolio.balance += balance_return_usd
-
-        close_order = Order(
-            portfolio_id=portfolio.id,
-            ticker=ticker,
-            type="close",
-            quantity=qty,
-            price=exec_price,
-            status="closed",
-            side=side,
-            pnl=pnl,
-            cost=None,
-            closed_at=datetime.now(timezone.utc),
-            fx_rate=current_fx,
-            notes=f"[Auto] {trigger_reason}",
-        )
-        db.add(close_order)
+        # Execution price: long closes at bid (no spread), short closes at ask (spread)
+        exec_price = _apply_spread(current_price, is_buy=True) if side == "short" else current_price
+        _close_order_internal(db, portfolio, o, o.quantity, exec_price, trigger_reason)
 
     db.commit()
     db.refresh(portfolio)
@@ -391,9 +398,19 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
     return _order_to_response(order)
 
 
-def update_stop_loss(db: Session, user_id: str, ticker: str, side: str, stop_loss: float | None) -> dict:
-    """Update stop loss for all open orders of a position."""
+def update_stop_loss(db: Session, user_id: str, ticker: str, side: str, stop_loss: float | None, order_id: str | None = None) -> dict:
+    """Update stop loss for a specific order or all open orders of a ticker+side."""
     portfolio = get_or_create_portfolio(db, user_id)
+    if order_id:
+        order = db.query(Order).filter(
+            Order.id == order_id, Order.portfolio_id == portfolio.id, Order.status == "open"
+        ).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Orden no encontrada")
+        order.stop_loss = Decimal(str(stop_loss)) if stop_loss else None
+        db.commit()
+        return {"ok": True, "updated": 1}
+    # Fallback: update all matching orders (backwards compat)
     order_type = "buy" if side == "long" else "sell"
     orders = (
         db.query(Order)
@@ -411,7 +428,22 @@ def update_stop_loss(db: Session, user_id: str, ticker: str, side: str, stop_los
 
 def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
-    ticker = body.ticker.upper()
+
+    # Find the specific order
+    order = db.query(Order).filter(
+        Order.id == body.order_id,
+        Order.portfolio_id == portfolio.id,
+        Order.status == "open",
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada o ya cerrada")
+
+    ticker = order.ticker
+    if body.quantity > order.quantity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Solo tienes {order.quantity} unidades en esta orden",
+        )
 
     # Check market state
     try:
@@ -428,111 +460,45 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
     except Exception:
         pass
 
-    is_cfd = _is_cfd(ticker)
-    current_price = _get_current_price(ticker)
-    base_price = Decimal(str(current_price))
+    current_price = Decimal(str(_get_current_price(ticker)))
+    exec_price = _apply_spread(current_price, is_buy=True) if order.side == "short" else current_price
 
-    # Check if this position was opened with FX conversion
-    entry_fx_rate = _get_entry_fx_rate(db, portfolio.id, ticker, body.side)
-    needs_fx = entry_fx_rate is not None
-    current_fx_rate = _get_daily_fx_rate() if needs_fx else None
-
-    if body.side == "long":
-        # Closing long = selling at bid → NO spread
-        exec_price = base_price
-        held = _long_quantity(db, portfolio.id, ticker)
-        if body.quantity > held:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Solo tienes {held} acciones LONG de {ticker}",
-            )
-        avg_price = _avg_buy_price(db, portfolio.id, ticker)
-
-        if is_cfd:
-            # CFD: P&L on notional, return margin + P&L
-            notional_entry = _notional_value(ticker, avg_price) * body.quantity
-            notional_exit = _notional_value(ticker, exec_price) * body.quantity
-            pnl_usd = notional_exit - notional_entry
-            margin_paid = notional_entry * _CFD_MARGIN_PCT
-            balance_return_usd = margin_paid + pnl_usd
-        else:
-            pnl_usd = (exec_price - avg_price) * body.quantity
-            balance_return_usd = exec_price * body.quantity
-
-        if needs_fx:
-            pnl = _usd_to_eur(pnl_usd, current_fx_rate)
-            portfolio.balance += _usd_to_eur(balance_return_usd, current_fx_rate)
-        else:
-            pnl = pnl_usd
-            portfolio.balance += balance_return_usd
-
-    else:  # short
-        # Closing short = buying at ask → apply spread
-        exec_price = _apply_spread(base_price, is_buy=True)
-        held = _short_quantity(db, portfolio.id, ticker)
-        if body.quantity > held:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Solo tienes {held} acciones SHORT de {ticker}",
-            )
-        avg_price = _avg_sell_price(db, portfolio.id, ticker)
-
-        if is_cfd:
-            notional_entry = _notional_value(ticker, avg_price) * body.quantity
-            notional_exit = _notional_value(ticker, exec_price) * body.quantity
-            pnl_usd = notional_entry - notional_exit
-            margin_paid = notional_entry * _CFD_MARGIN_PCT
-            balance_return_usd = margin_paid + pnl_usd
-        else:
-            pnl_usd = (avg_price - exec_price) * body.quantity
-            balance_return_usd = avg_price * body.quantity + pnl_usd
-
-        if needs_fx:
-            pnl = _usd_to_eur(pnl_usd, current_fx_rate)
-            portfolio.balance += _usd_to_eur(balance_return_usd, current_fx_rate)
-        else:
-            pnl = pnl_usd
-            portfolio.balance += balance_return_usd
-
-    order = Order(
-        portfolio_id=portfolio.id,
-        ticker=ticker,
-        type="close",
-        quantity=body.quantity,
-        price=exec_price,
-        status="closed",
-        side=body.side,
-        pnl=pnl,
-        cost=None,
-        closed_at=datetime.now(timezone.utc),
-        fx_rate=current_fx_rate,
-    )
-
-    db.add(order)
+    close_order = _close_order_internal(db, portfolio, order, body.quantity, exec_price)
     db.commit()
-    db.refresh(order)
+    db.refresh(close_order)
     db.refresh(portfolio)
 
-    return _order_to_response(order)
+    return _order_to_response(close_order)
 
 
 def close_all_positions(db: Session, user_id: str) -> list[OrderResponse]:
     """Close all open positions at market price."""
     portfolio = get_or_create_portfolio(db, user_id)
-    positions = _calculate_positions(db, portfolio)
+    open_orders = (
+        db.query(Order)
+        .filter(Order.portfolio_id == portfolio.id, Order.status == "open")
+        .all()
+    )
 
-    if not positions:
+    if not open_orders:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No hay posiciones abiertas",
         )
 
+    # Cache prices per ticker
+    price_cache: dict[str, Decimal] = {}
     results = []
-    for p in positions:
-        body = ClosePositionRequest(ticker=p.ticker, quantity=p.quantity, side=p.side)
-        result = close_position(db, user_id, body)
-        results.append(result)
+    for o in open_orders:
+        if o.ticker not in price_cache:
+            price_cache[o.ticker] = Decimal(str(_get_current_price(o.ticker)))
+        current_price = price_cache[o.ticker]
+        exec_price = _apply_spread(current_price, is_buy=True) if o.side == "short" else current_price
+        close_order = _close_order_internal(db, portfolio, o, o.quantity, exec_price)
+        results.append(_order_to_response(close_order))
 
+    db.commit()
+    db.refresh(portfolio)
     return results
 
 
@@ -720,15 +686,21 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
             "name": name,
             "positions": [
                 {
+                    "order_id": p.order_id,
                     "ticker": p.ticker,
                     "quantity": p.quantity,
-                    "avg_price": float(p.avg_price),
+                    "entry_price": float(p.entry_price),
                     "current_price": float(p.current_price),
                     "pnl": float(p.pnl),
                     "pnl_pct": float(p.pnl_pct),
                     "side": p.side,
                     "currency": p.currency,
                     "fx_pnl": float(p.fx_pnl) if p.fx_pnl is not None else None,
+                    "stop_loss": float(p.stop_loss) if p.stop_loss else None,
+                    "take_profit": float(p.take_profit) if p.take_profit else None,
+                    "invested_value": float(p.invested_value) if p.invested_value else None,
+                    "notes": p.notes,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
                 }
                 for p in group_positions
             ],
@@ -757,7 +729,7 @@ def close_cartera(db: Session, user_id: str, cartera_name: str) -> list[OrderRes
 
     results = []
     for p in cartera_positions:
-        body = ClosePositionRequest(ticker=p.ticker, quantity=p.quantity, side=p.side)
+        body = ClosePositionRequest(order_id=p.order_id, quantity=p.quantity)
         result = close_position(db, user_id, body)
         results.append(result)
 
@@ -947,17 +919,20 @@ def _avg_sell_price(db: Session, portfolio_id: str, ticker: str) -> Decimal:
 
 
 def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResponse]:
-    """Calcula posiciones abiertas con P&L actual (long y short)."""
-    all_orders = (
+    """Each open order = one independent position."""
+    open_orders = (
         db.query(Order)
-        .filter(Order.portfolio_id == portfolio.id)
+        .filter(Order.portfolio_id == portfolio.id, Order.status == "open")
+        .order_by(Order.created_at)
         .all()
     )
 
-    tickers = {o.ticker for o in all_orders}
-    positions = []
+    if not open_orders:
+        return []
 
-    # Get current FX rate once for all USD positions
+    positions = []
+    # Cache current prices per ticker and FX rate
+    price_cache: dict[str, Decimal] = {}
     _current_fx_rate: Decimal | None = None
 
     def current_fx_rate() -> Decimal:
@@ -966,156 +941,105 @@ def _calculate_positions(db: Session, portfolio: Portfolio) -> list[PositionResp
             _current_fx_rate = _get_daily_fx_rate()
         return _current_fx_rate
 
-    for ticker in tickers:
+    for o in open_orders:
+        ticker = o.ticker
         is_cfd = _is_cfd(ticker)
+        entry_price = o.price
+        qty = o.quantity
+        side = o.side  # "long" | "short"
 
-        # Check LONG position
-        long_held = _long_quantity(db, portfolio.id, ticker)
-        if long_held > 0:
-            avg_price = _avg_buy_price(db, portfolio.id, ticker)
+        # Get current price (cached per ticker)
+        if ticker not in price_cache:
             try:
-                current_price = Decimal(str(_get_current_price(ticker)))
+                price_cache[ticker] = Decimal(str(_get_current_price(ticker)))
             except HTTPException:
-                current_price = avg_price
+                price_cache[ticker] = entry_price
 
+        raw_price = price_cache[ticker]
+        # Short positions show ask price (with spread) as current/close price
+        current_price = _apply_spread(raw_price, is_buy=True) if side == "short" else raw_price
+
+        # P&L calculation
+        if side == "long":
             if is_cfd:
-                notional_entry = _notional_value(ticker, avg_price) * long_held
-                notional_current = _notional_value(ticker, current_price) * long_held
+                notional_entry = _notional_value(ticker, entry_price) * qty
+                notional_current = _notional_value(ticker, current_price) * qty
                 pnl_usd = notional_current - notional_entry
                 margin_invested = notional_entry * _CFD_MARGIN_PCT
                 pnl_pct = (pnl_usd / margin_invested * 100) if margin_invested else Decimal(0)
             else:
-                pnl_usd = (current_price - avg_price) * long_held
-                pnl_pct = (pnl_usd / (avg_price * long_held) * 100) if avg_price else Decimal(0)
-
-            first_buy = next(
-                (o for o in all_orders if o.ticker == ticker and o.type == "buy"),
-                None,
-            )
-
-            # FX conversion: only for positions opened with fx_rate
-            entry_fx = _get_entry_fx_rate(db, portfolio.id, ticker, "long")
-            if entry_fx is not None:
-                fx_now = current_fx_rate()
-                pnl = _usd_to_eur(pnl_usd, fx_now)
-                # FX P&L: how much the currency movement alone affected the position
-                # If asset price hadn't moved, FX change would still cause P&L
-                invested_usd = margin_invested if is_cfd else avg_price * long_held
-                fx_pnl = invested_usd * (Decimal(1) / fx_now - Decimal(1) / entry_fx)
-                currency = "USD"
-            else:
-                pnl = pnl_usd
-                fx_pnl = None
-                fx_now = None
-                currency = "EUR"
-
-            # Invested value (margin for CFD, full for spot)
-            inv_val = margin_invested if is_cfd else avg_price * long_held
-            if entry_fx is not None:
-                inv_val = _usd_to_eur(inv_val, entry_fx)
-            # Stop loss from latest open buy order
-            sl = first_buy.stop_loss if first_buy and first_buy.stop_loss else None
-
-            positions.append(
-                PositionResponse(
-                    ticker=ticker,
-                    quantity=long_held,
-                    avg_price=round(avg_price, 5),
-                    current_price=round(current_price, 5),
-                    pnl=round(pnl, 5),
-                    pnl_pct=round(pnl_pct, 2),
-                    side="long",
-                    portfolio_group=first_buy.portfolio_group if first_buy else None,
-                    currency=currency,
-                    fx_rate_entry=entry_fx,
-                    fx_rate_current=round(fx_now, 6) if fx_now else None,
-                    fx_pnl=round(fx_pnl, 2) if fx_pnl is not None else None,
-                    stop_loss=round(sl, 5) if sl else None,
-                    invested_value=round(inv_val, 2),
-                )
-            )
-
-        # Check SHORT position
-        short_held = _short_quantity(db, portfolio.id, ticker)
-        if short_held > 0:
-            avg_price = _avg_sell_price(db, portfolio.id, ticker)
-            try:
-                raw_price = Decimal(str(_get_current_price(ticker)))
-            except HTTPException:
-                raw_price = avg_price
-            current_price = _apply_spread(raw_price, is_buy=True)
-
+                pnl_usd = (current_price - entry_price) * qty
+                pnl_pct = (pnl_usd / (entry_price * qty) * 100) if entry_price else Decimal(0)
+        else:  # short
             if is_cfd:
-                notional_entry = _notional_value(ticker, avg_price) * short_held
-                notional_current = _notional_value(ticker, current_price) * short_held
+                notional_entry = _notional_value(ticker, entry_price) * qty
+                notional_current = _notional_value(ticker, current_price) * qty
                 pnl_usd = notional_entry - notional_current
                 margin_invested = notional_entry * _CFD_MARGIN_PCT
                 pnl_pct = (pnl_usd / margin_invested * 100) if margin_invested else Decimal(0)
             else:
-                pnl_usd = (avg_price - current_price) * short_held
-                pnl_pct = (pnl_usd / (avg_price * short_held) * 100) if avg_price else Decimal(0)
+                pnl_usd = (entry_price - current_price) * qty
+                pnl_pct = (pnl_usd / (entry_price * qty) * 100) if entry_price else Decimal(0)
 
-            first_sell = next(
-                (o for o in all_orders if o.ticker == ticker and o.type == "sell"),
-                None,
+        # FX conversion
+        entry_fx = o.fx_rate
+        if entry_fx is not None:
+            fx_now = current_fx_rate()
+            pnl = _usd_to_eur(pnl_usd, fx_now)
+            invested_usd = margin_invested if is_cfd else entry_price * qty
+            fx_pnl = invested_usd * (Decimal(1) / fx_now - Decimal(1) / entry_fx)
+            if side == "short":
+                fx_pnl = -fx_pnl
+            currency = "USD"
+        else:
+            pnl = pnl_usd
+            fx_pnl = None
+            fx_now = None
+            currency = "EUR"
+
+        # Invested value
+        if is_cfd:
+            inv_val = _notional_value(ticker, entry_price) * qty * _CFD_MARGIN_PCT
+        else:
+            inv_val = entry_price * qty
+        if entry_fx is not None:
+            inv_val = _usd_to_eur(inv_val, entry_fx)
+
+        positions.append(
+            PositionResponse(
+                order_id=o.id,
+                ticker=ticker,
+                quantity=qty,
+                entry_price=round(entry_price, 5),
+                current_price=round(current_price, 5),
+                pnl=round(pnl, 5),
+                pnl_pct=round(pnl_pct, 2),
+                side=side,
+                portfolio_group=o.portfolio_group,
+                currency=currency,
+                fx_rate_entry=entry_fx,
+                fx_rate_current=round(fx_now, 6) if fx_now else None,
+                fx_pnl=round(fx_pnl, 2) if fx_pnl is not None else None,
+                stop_loss=round(o.stop_loss, 5) if o.stop_loss else None,
+                take_profit=round(o.take_profit, 5) if o.take_profit else None,
+                invested_value=round(inv_val, 2),
+                notes=o.notes,
+                created_at=o.created_at,
             )
-
-            # FX conversion: only for positions opened with fx_rate
-            entry_fx = _get_entry_fx_rate(db, portfolio.id, ticker, "short")
-            if entry_fx is not None:
-                fx_now = current_fx_rate()
-                pnl = _usd_to_eur(pnl_usd, fx_now)
-                invested_usd = margin_invested if is_cfd else avg_price * short_held
-                # Short: FX risk is inverted (you benefit if EUR strengthens)
-                fx_pnl = -invested_usd * (Decimal(1) / fx_now - Decimal(1) / entry_fx)
-                currency = "USD"
-            else:
-                pnl = pnl_usd
-                fx_pnl = None
-                fx_now = None
-                currency = "EUR"
-
-            inv_val_s = margin_invested if is_cfd else avg_price * short_held
-            if entry_fx is not None:
-                inv_val_s = _usd_to_eur(inv_val_s, entry_fx)
-            sl_s = first_sell.stop_loss if first_sell and first_sell.stop_loss else None
-
-            positions.append(
-                PositionResponse(
-                    ticker=ticker,
-                    quantity=short_held,
-                    avg_price=round(avg_price, 5),
-                    current_price=round(current_price, 5),
-                    pnl=round(pnl, 5),
-                    pnl_pct=round(pnl_pct, 2),
-                    side="short",
-                    portfolio_group=first_sell.portfolio_group if first_sell else None,
-                    currency=currency,
-                    fx_rate_entry=entry_fx,
-                    fx_rate_current=round(fx_now, 6) if fx_now else None,
-                    fx_pnl=round(fx_pnl, 2) if fx_pnl is not None else None,
-                    stop_loss=round(sl_s, 5) if sl_s else None,
-                    invested_value=round(inv_val_s, 2),
-                )
-            )
+        )
 
     return positions
 
 
 def _invested_value(p: PositionResponse) -> float:
-    """What left the balance when position was opened (FIXED, does not change).
-    CFDs: margin = notional_entry × 5%.
-    Stocks: avg_price × quantity.
-    For USD positions (with fx_rate_entry): converts to EUR using entry FX rate.
-    """
+    """What left the balance when position was opened (FIXED, does not change)."""
     if _is_cfd(p.ticker):
-        avg = Decimal(str(p.avg_price))
-        notional_entry = _notional_value(p.ticker, avg) * p.quantity
+        entry = Decimal(str(p.entry_price))
+        notional_entry = _notional_value(p.ticker, entry) * p.quantity
         value_usd = float(notional_entry * _CFD_MARGIN_PCT)
     else:
-        value_usd = float(p.avg_price) * p.quantity
+        value_usd = float(p.entry_price) * p.quantity
 
-    # Convert to EUR if position was opened with FX conversion
     if p.fx_rate_entry is not None:
         return value_usd / float(p.fx_rate_entry)
     return value_usd
@@ -1200,7 +1124,7 @@ def get_admin_positions(db: Session) -> list[dict]:
                     "ticker": pos.ticker,
                     "side": pos.side,
                     "quantity": pos.quantity,
-                    "avg_price": float(pos.avg_price),
+                    "avg_price": float(pos.entry_price),
                     "current_price": float(pos.current_price),
                     "pnl": float(pos.pnl),
                     "pnl_pct": float(pos.pnl_pct),

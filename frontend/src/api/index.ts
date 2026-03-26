@@ -46,7 +46,7 @@ export const demo = {
     api.post<Order>('/demo/order', data),
   updateStopLoss: (data: { ticker: string; side: string; stop_loss: number | null }) =>
     api.patch<{ ok: boolean }>('/demo/stop-loss', data),
-  closePosition: (data: { ticker: string; quantity: number; side: string }) =>
+  closePosition: (data: { order_id: string; quantity: number }) =>
     api.post<Order>('/demo/close-position', data),
   closeAll: () => api.post<Order[]>('/demo/close-all', {}),
   orders: () => api.get<Order[]>('/demo/orders'),

@@ -15,7 +15,7 @@ export default function ClosePositionDialog({ position, onClose }: Props) {
   const [error, setError] = useState('')
 
   const closeMut = useMutation({
-    mutationFn: () => demo.closePosition({ ticker: position.ticker, quantity, side: position.side }),
+    mutationFn: () => demo.closePosition({ order_id: position.order_id, quantity }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['orders'] })
@@ -27,8 +27,8 @@ export default function ClosePositionDialog({ position, onClose }: Props) {
   })
 
   const estimatedPnl = position.side === 'long'
-    ? (position.current_price - position.avg_price) * quantity
-    : (position.avg_price - position.current_price) * quantity
+    ? (position.current_price - position.entry_price) * quantity
+    : (position.entry_price - position.current_price) * quantity
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -45,7 +45,7 @@ export default function ClosePositionDialog({ position, onClose }: Props) {
               {position.side.toUpperCase()}
             </span>
           </p>
-          <p className="text-slate-400 mt-1">Posicion: {position.quantity} acciones a {Number(position.avg_price).toFixed(2)}</p>
+          <p className="text-slate-400 mt-1">Posicion: {position.quantity} unidades a {Number(position.entry_price).toFixed(2)}</p>
         </div>
 
         <div className="mb-4">

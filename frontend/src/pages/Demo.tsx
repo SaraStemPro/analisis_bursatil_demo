@@ -172,7 +172,7 @@ export default function Demo() {
                             </span>
                           </td>
                           <td className="px-3 py-2 text-right text-white">{p.quantity}</td>
-                          <td className="px-3 py-2 text-right text-slate-300" title={isLong ? 'Ask (con spread)' : 'Bid (sin spread)'}>{fmtPrice(p.avg_price)}</td>
+                          <td className="px-3 py-2 text-right text-slate-300" title={isLong ? 'Ask (con spread)' : 'Bid (sin spread)'}>{fmtPrice(p.entry_price)}</td>
                           <td className="px-3 py-2 text-right text-white" title={isLong ? 'Bid (sin spread)' : 'Ask (con spread)'}>{fmtPrice(p.current_price)} <span className="text-[10px] text-slate-500">{isLong ? 'bid' : 'ask'}</span></td>
                           <td className={`px-3 py-2 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
@@ -214,7 +214,7 @@ export default function Demo() {
                           <td className="px-3 py-2 text-right">
                             {p.stop_loss && p.invested_value ? (() => {
                               const sl = Number(p.stop_loss)
-                              const entry = Number(p.avg_price)
+                              const entry = Number(p.entry_price)
                               const qty = p.quantity
                               const riskEur = isLong ? (entry - sl) * qty : (sl - entry) * qty
                               const riskPct = Number(p.invested_value) > 0 ? (riskEur / Number(portfolio?.total_value || 1) * 100) : 0
@@ -315,7 +315,7 @@ export default function Demo() {
                         </button>
                       </td>
                       <td className="px-3 py-1.5 text-right text-white">{p.quantity}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-300">{fmtPrice(p.avg_price)}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-300">{fmtPrice(p.entry_price)}</td>
                       <td className="px-3 py-1.5 text-right text-white">{fmtPrice(p.current_price)} <span className="text-[10px] text-slate-500">{p.side === 'long' ? 'bid' : 'ask'}</span></td>
                       <td className={`px-3 py-1.5 text-right font-medium ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isProfit ? '+' : ''}{fmtPnl(p.pnl)}€
@@ -334,7 +334,7 @@ export default function Demo() {
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <button
-                          onClick={() => setClosingPosition({ ticker: p.ticker, quantity: p.quantity, avg_price: p.avg_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name, currency: (p.currency || 'EUR') as 'EUR' | 'USD', fx_rate_entry: null, fx_rate_current: null, fx_pnl: p.fx_pnl, stop_loss: p.stop_loss ?? null, invested_value: p.invested_value ?? null })}
+                          onClick={() => setClosingPosition({ order_id: p.order_id, ticker: p.ticker, quantity: p.quantity, entry_price: p.entry_price, current_price: p.current_price, pnl: p.pnl, pnl_pct: p.pnl_pct, side: p.side as 'long' | 'short', portfolio_group: c.name, currency: (p.currency || 'EUR') as 'EUR' | 'USD', fx_rate_entry: null, fx_rate_current: null, fx_pnl: p.fx_pnl, stop_loss: p.stop_loss ?? null, take_profit: p.take_profit ?? null, invested_value: p.invested_value ?? null, notes: p.notes ?? null, created_at: p.created_at ?? null })}
                           className="text-slate-500 hover:text-red-400 transition-colors"
                           title="Cerrar posicion (total o parcial)"
                         >
