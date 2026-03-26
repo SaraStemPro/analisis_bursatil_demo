@@ -7,9 +7,12 @@ import { isCfd, askPrice, totalCost, cfdLabel, marginPerContract, SPREAD_PCT } f
 
 interface Props {
   initialTicker?: string
+  portfolioGroup?: string
+  compact?: boolean
+  onOrderSuccess?: () => void
 }
 
-export default function OrderForm({ initialTicker }: Props) {
+export default function OrderForm({ initialTicker, portfolioGroup, compact, onOrderSuccess }: Props) {
   const qc = useQueryClient()
   const [ticker, setTicker] = useState(initialTicker || '')
 
@@ -39,12 +42,14 @@ export default function OrderForm({ initialTicker }: Props) {
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['performance'] })
       qc.invalidateQueries({ queryKey: ['portfolioSummary'] })
+      qc.invalidateQueries({ queryKey: ['carteras'] })
       setTicker('')
       setTickerName('')
       setQuantity(1)
       setStopLossValue('')
       setNotes('')
       setError('')
+      onOrderSuccess?.()
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Error'),
   })
@@ -71,12 +76,14 @@ export default function OrderForm({ initialTicker }: Props) {
           : quote.price * (1 + pct)
       }
     }
-    orderMut.mutate({ ticker, type, quantity, stop_loss: stopLossPrice, notes: notes.trim() })
+    orderMut.mutate({ ticker, type, quantity, stop_loss: stopLossPrice, notes: notes.trim(), ...(portfolioGroup ? { portfolio_group: portfolioGroup } : {}) })
   }
 
   return (
-    <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
-      <h2 className="font-semibold mb-3">Nueva orden</h2>
+    <div className={compact ? 'mt-3 pt-3 border-t border-slate-700' : 'bg-slate-900 rounded-lg p-5 border border-slate-700'}>
+      <h2 className={compact ? 'font-medium text-sm mb-2' : 'font-semibold mb-3'}>
+        {portfolioGroup ? `Añadir posición a "${portfolioGroup}"` : 'Nueva orden'}
+      </h2>
       <div className="flex flex-wrap gap-3 items-end">
         <TickerSearchInput
           value={ticker}

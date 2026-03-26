@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { demo } from '../api'
 import type { Position } from '../types'
-import { RotateCcw, X, ExternalLink, XCircle, Briefcase, Pencil } from 'lucide-react'
+import { RotateCcw, X, ExternalLink, XCircle, Briefcase, Pencil, Plus } from 'lucide-react'
 import type { Cartera } from '../types'
 import OrderForm from '../components/demo/OrderForm'
 import ClosePositionDialog from '../components/demo/ClosePositionDialog'
@@ -31,6 +31,7 @@ export default function Demo() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [closingPosition, setClosingPosition] = useState<Position | null>(null)
   const [initialTicker, setInitialTicker] = useState('')
+  const [addingToCartera, setAddingToCartera] = useState<string | null>(null)
 
   useEffect(() => {
     const buy = searchParams.get('buy')
@@ -347,6 +348,21 @@ export default function Demo() {
               </tbody>
             </table>
           </div>
+          {/* Add position to cartera */}
+          {addingToCartera === c.name ? (
+            <OrderForm
+              compact
+              portfolioGroup={c.name}
+              onOrderSuccess={() => setAddingToCartera(null)}
+            />
+          ) : (
+            <button
+              onClick={() => setAddingToCartera(c.name)}
+              className="mt-3 flex items-center gap-1.5 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              <Plus size={14} /> Añadir posición a esta cartera
+            </button>
+          )}
         </div>
       ))}
 
