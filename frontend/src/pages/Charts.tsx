@@ -128,8 +128,10 @@ export default function Charts() {
   // Stable refs for chart event handlers — prevents chart recreation on state changes
   const handleChartClickRef = useRef<(params: MouseEventParams<Time>) => void>(() => {})
   const handleChartDblClickRef = useRef<() => void>(() => {})
-  // Ref to store bar interval in ms for time extrapolation in the right margin
+  // Refs for time extrapolation when drawing in the right margin
   const barIntervalMsRef = useRef<number>(86400000) // default 1 day
+  const lastBarDateRef = useRef<string>('')
+  const dataLengthRef = useRef<number>(0)
 
   // Drawing store
   const {
@@ -314,14 +316,13 @@ export default function Charts() {
       if (price === null) return null
       let time = params.time as string | undefined
       // If no time (clicked in the right margin), extrapolate from last bar
-      if (!time && chartInstanceRef.current && history?.data.length) {
+      if (!time && chartInstanceRef.current && dataLengthRef.current > 0) {
         const ts = chartInstanceRef.current.timeScale()
         const logical = ts.coordinateToLogical(params.point.x)
         if (logical !== null) {
-          const lastLogical = history.data.length - 1
-          const barsAhead = Math.round(logical - lastLogical)
+          const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
           if (barsAhead > 0) {
-            const lastDate = new Date(history.data[history.data.length - 1].date)
+            const lastDate = new Date(lastBarDateRef.current)
             const projected = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current)
             time = projected.toISOString().split('T')[0]
           }
@@ -460,6 +461,8 @@ export default function Charts() {
     const times = history.data.map((d) => toChartTime(d.date, interval))
 
     // Compute bar interval for time extrapolation (drawing in right margin)
+    dataLengthRef.current = history.data.length
+    lastBarDateRef.current = history.data[history.data.length - 1].date
     if (history.data.length >= 2) {
       const last = new Date(history.data[history.data.length - 1].date).getTime()
       const prev = new Date(history.data[history.data.length - 2].date).getTime()
@@ -551,12 +554,12 @@ export default function Charts() {
         const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
         if (price !== null) {
           let time = params.time as string | undefined
-          if (!time && chartInstanceRef.current && history?.data.length) {
+          if (!time && chartInstanceRef.current && dataLengthRef.current > 0) {
             const logical = chartInstanceRef.current.timeScale().coordinateToLogical(params.point.x)
             if (logical !== null) {
-              const barsAhead = Math.round(logical - (history.data.length - 1))
+              const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
               if (barsAhead > 0) {
-                const lastDate = new Date(history.data[history.data.length - 1].date)
+                const lastDate = new Date(lastBarDateRef.current)
                 time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
               }
             }
