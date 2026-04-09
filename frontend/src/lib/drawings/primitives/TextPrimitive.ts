@@ -4,7 +4,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import type { TextDrawing } from '../../../types/drawings'
-import { drawText } from './renderers'
+import { drawText, pointToPixel } from './renderers'
 
 class TextRenderer implements IPrimitivePaneRenderer {
   x: number; y: number; text: string; fontSize: number; color: string
@@ -60,9 +60,6 @@ export class TextPrimitive implements ISeriesPrimitive<Time> {
 
   _toPixel(point: { time: string; price: number }) {
     if (!this._chart || !this._series) return null
-    const x = this._chart.timeScale().timeToCoordinate(point.time as unknown as Time)
-    const y = this._series.priceToCoordinate(point.price)
-    if (x === null || y === null) return null
-    return { x, y }
+    return pointToPixel(this._chart, this._series, point)
   }
 }

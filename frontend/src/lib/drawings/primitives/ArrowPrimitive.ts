@@ -4,7 +4,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import type { ArrowDrawing } from '../../../types/drawings'
-import { drawArrow } from './renderers'
+import { drawArrow, pointToPixel } from './renderers'
 
 class ArrowRenderer implements IPrimitivePaneRenderer {
   x: number; y: number; direction: 'up' | 'down'; color: string
@@ -60,9 +60,6 @@ export class ArrowPrimitive implements ISeriesPrimitive<Time> {
 
   _toPixel(point: { time: string; price: number }) {
     if (!this._chart || !this._series) return null
-    const x = this._chart.timeScale().timeToCoordinate(point.time as unknown as Time)
-    const y = this._series.priceToCoordinate(point.price)
-    if (x === null || y === null) return null
-    return { x, y }
+    return pointToPixel(this._chart, this._series, point)
   }
 }

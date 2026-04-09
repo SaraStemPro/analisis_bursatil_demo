@@ -4,7 +4,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import type { TrendlineDrawing } from '../../../types/drawings'
-import { drawLine, pointToSegmentDist } from './renderers'
+import { drawLine, pointToSegmentDist, pointToPixel } from './renderers'
 
 class TrendlineRenderer implements IPrimitivePaneRenderer {
   x1: number; y1: number; x2: number; y2: number; color: string; lineWidth: number
@@ -63,9 +63,6 @@ export class TrendlinePrimitive implements ISeriesPrimitive<Time> {
 
   _toPixel(point: { time: string; price: number }) {
     if (!this._chart || !this._series) return null
-    const x = this._chart.timeScale().timeToCoordinate(point.time as unknown as Time)
-    const y = this._series.priceToCoordinate(point.price)
-    if (x === null || y === null) return null
-    return { x, y }
+    return pointToPixel(this._chart, this._series, point)
   }
 }

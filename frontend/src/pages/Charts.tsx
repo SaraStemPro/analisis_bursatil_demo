@@ -14,6 +14,7 @@ import { detectPatterns, PATTERN_CATALOG } from '../lib/patterns'
 import type { PatternType } from '../lib/patterns'
 import { getRecentTickers, addRecentTicker, removeRecentTicker } from '../lib/recentTickers'
 import { toChartTime, INTRADAY_INTERVALS, INDICATOR_COLORS } from '../lib/chartUtils'
+import { chartMeta } from '../lib/drawings/primitives/renderers'
 import DrawingToolbar from '../components/charts/DrawingToolbar'
 import OscillatorChart from '../components/charts/OscillatorChart'
 import { Search, Settings2, X, CandlestickChart, LineChart, ExternalLink, ChevronDown, ChevronUp, ShoppingCart, RefreshCw, FlaskConical, Maximize2 } from 'lucide-react'
@@ -461,12 +462,15 @@ export default function Charts() {
     const times = history.data.map((d) => toChartTime(d.date, interval))
 
     // Compute bar interval for time extrapolation (drawing in right margin)
+    const lastDateMs = new Date(history.data[history.data.length - 1].date).getTime()
     dataLengthRef.current = history.data.length
     lastBarDateRef.current = history.data[history.data.length - 1].date
+    chartMeta.lastDateMs = lastDateMs
+    chartMeta.dataLength = history.data.length
     if (history.data.length >= 2) {
-      const last = new Date(history.data[history.data.length - 1].date).getTime()
       const prev = new Date(history.data[history.data.length - 2].date).getTime()
-      barIntervalMsRef.current = last - prev
+      barIntervalMsRef.current = lastDateMs - prev
+      chartMeta.barIntervalMs = lastDateMs - prev
     }
 
     if (chartType === 'line') {

@@ -1,4 +1,45 @@
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
+import type { IChartApi, ISeriesApi, SeriesType, Time } from 'lightweight-charts'
+
+// --- Shared chart data for right-margin extrapolation ---
+// Updated by Charts.tsx when chart is created; read by all primitives.
+export const chartMeta = {
+  lastDateMs: 0,      // ms timestamp of the last data bar
+  dataLength: 0,      // total number of bars
+  barIntervalMs: 86400000, // ms between bars
+}
+
+/**
+ * Convert a drawing point to pixel coordinates.
+ * Handles future dates (right margin) by extrapolating via logical index.
+ */
+export function pointToPixel(
+  chart: IChartApi,
+  series: ISeriesApi<SeriesType, Time>,
+  point: { time: string; price: number },
+): { x: number; y: number } | null {
+  const y = series.priceToCoordinate(point.price)
+  if (y === null) return null
+
+  const ts = chart.timeScale()
+  // Try direct conversion (works for dates within data range)
+  let x = ts.timeToCoordinate(point.time as unknown as Time)
+  if (x !== null) return { x, y }
+
+  // Future date: compute logical index and convert to coordinate
+  if (chartMeta.lastDateMs > 0 && chartMeta.barIntervalMs > 0) {
+    const pointMs = new Date(point.time).getTime()
+    const barsAhead = Math.round((pointMs - chartMeta.lastDateMs) / chartMeta.barIntervalMs)
+    if (barsAhead > 0) {
+      const logicalIdx = chartMeta.dataLength - 1 + barsAhead
+      x = ts.logicalToCoordinate(logicalIdx as unknown as import('lightweight-charts').Logical)
+      if (x !== null) return { x, y }
+    }
+  }
+  return null
+}
+
+// --- Drawing helpers ---
 
 export function drawLine(
   target: CanvasRenderingTarget2D,

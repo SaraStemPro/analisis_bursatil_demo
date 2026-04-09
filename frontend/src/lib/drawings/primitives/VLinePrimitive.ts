@@ -4,7 +4,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import type { VLineDrawing } from '../../../types/drawings'
-import { drawLine } from './renderers'
+import { drawLine, chartMeta } from './renderers'
 
 class VLineRenderer implements IPrimitivePaneRenderer {
   x: number; color: string; chartHeight: number
@@ -41,7 +41,7 @@ export class VLinePrimitive implements ISeriesPrimitive<Time> {
 
   hitTest(x: number): PrimitiveHoveredItem | null {
     if (!this._chart || this.drawing.points.length < 1) return null
-    const lineX = this._chart.timeScale().timeToCoordinate(this.drawing.points[0].time as unknown as Time)
+    const lineX = this._timeToX(this.drawing.points[0].time)
     if (lineX === null) return null
     if (Math.abs(x - lineX) < 5) {
       return { cursorStyle: 'pointer', externalId: this.drawing.id, zOrder: 'normal' }
@@ -53,9 +53,26 @@ export class VLinePrimitive implements ISeriesPrimitive<Time> {
     if (!this._chart || !this._series || this.drawing.points.length < 1) {
       this._paneView._renderer = null; return
     }
-    const x = this._chart.timeScale().timeToCoordinate(this.drawing.points[0].time as unknown as Time)
+    const x = this._timeToX(this.drawing.points[0].time)
     if (x === null) { this._paneView._renderer = null; return }
     // Use a large height; the renderer clips automatically
     this._paneView._renderer = new VLineRenderer(x, this.drawing.color, 2000)
+  }
+
+  _timeToX(time: string): number | null {
+    if (!this._chart) return null
+    const ts = this._chart.timeScale()
+    const x = ts.timeToCoordinate(time as unknown as Time)
+    if (x !== null) return x
+    // Fallback: extrapolate via logical index for future dates
+    if (chartMeta.lastDateMs > 0 && chartMeta.barIntervalMs > 0) {
+      const pointMs = new Date(time).getTime()
+      const barsAhead = Math.round((pointMs - chartMeta.lastDateMs) / chartMeta.barIntervalMs)
+      if (barsAhead > 0) {
+        const logicalIdx = chartMeta.dataLength - 1 + barsAhead
+        return ts.logicalToCoordinate(logicalIdx as unknown as import('lightweight-charts').Logical)
+      }
+    }
+    return null
   }
 }
