@@ -128,6 +128,8 @@ export default function Charts() {
   // Stable refs for chart event handlers — prevents chart recreation on state changes
   const handleChartClickRef = useRef<(params: MouseEventParams<Time>) => void>(() => {})
   const handleChartDblClickRef = useRef<() => void>(() => {})
+  // Ref to store bar interval in ms for time extrapolation in the right margin
+  const barIntervalMsRef = useRef<number>(86400000) // default 1 day
 
   // Drawing store
   const {
@@ -305,13 +307,27 @@ export default function Charts() {
   const handleChartClick = useCallback((params: MouseEventParams<Time>) => {
     const store = useDrawingStore.getState()
 
-    // Get coordinates helper
+    // Get coordinates helper — supports clicks in the right margin (future projection)
     const getPoint = (): DrawingPoint | null => {
       if (!params.point || !candleSeriesRef.current) return null
-      const time = params.time as string | undefined
-      if (!time) return null
       const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
       if (price === null) return null
+      let time = params.time as string | undefined
+      // If no time (clicked in the right margin), extrapolate from last bar
+      if (!time && chartInstanceRef.current && history?.data.length) {
+        const ts = chartInstanceRef.current.timeScale()
+        const logical = ts.coordinateToLogical(params.point.x)
+        if (logical !== null) {
+          const lastLogical = history.data.length - 1
+          const barsAhead = Math.round(logical - lastLogical)
+          if (barsAhead > 0) {
+            const lastDate = new Date(history.data[history.data.length - 1].date)
+            const projected = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current)
+            time = projected.toISOString().split('T')[0]
+          }
+        }
+      }
+      if (!time) return null
       return { time, price: price as number }
     }
 
@@ -413,7 +429,7 @@ export default function Charts() {
       crosshair: { mode: CrosshairMode.Normal },
       autoSize: true,
       height: 450,
-      timeScale: { borderColor: '#d1d5db', timeVisible: isIntraday, secondsVisible: false },
+      timeScale: { borderColor: '#d1d5db', timeVisible: isIntraday, secondsVisible: false, rightOffset: 30 },
       rightPriceScale: { borderColor: '#d1d5db', mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
     })
 
@@ -442,6 +458,13 @@ export default function Charts() {
     candleSeriesRef.current = mainSeries
 
     const times = history.data.map((d) => toChartTime(d.date, interval))
+
+    // Compute bar interval for time extrapolation (drawing in right margin)
+    if (history.data.length >= 2) {
+      const last = new Date(history.data[history.data.length - 1].date).getTime()
+      const prev = new Date(history.data[history.data.length - 2].date).getTime()
+      barIntervalMsRef.current = last - prev
+    }
 
     if (chartType === 'line') {
       mainSeries.setData(
@@ -523,11 +546,24 @@ export default function Charts() {
       const store = useDrawingStore.getState()
       if (store.activeChartId !== 'main') return
 
-      // Track cursor position for paste-at-cursor
-      if (params.point && params.time && candleSeriesRef.current) {
+      // Track cursor position for paste-at-cursor (including right margin)
+      if (params.point && candleSeriesRef.current) {
         const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
         if (price !== null) {
-          cursorPointRef.current = { time: params.time as string, price: price as number }
+          let time = params.time as string | undefined
+          if (!time && chartInstanceRef.current && history?.data.length) {
+            const logical = chartInstanceRef.current.timeScale().coordinateToLogical(params.point.x)
+            if (logical !== null) {
+              const barsAhead = Math.round(logical - (history.data.length - 1))
+              if (barsAhead > 0) {
+                const lastDate = new Date(history.data[history.data.length - 1].date)
+                time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
+              }
+            }
+          }
+          if (time) {
+            cursorPointRef.current = { time, price: price as number }
+          }
         }
       }
 
