@@ -59,7 +59,7 @@ export interface CircleDrawing extends BaseDrawing {
 
 export type Drawing = TrendlineDrawing | ArrowDrawing | TextDrawing | FibonacciDrawing | ElliottWaveDrawing | HLineDrawing | VLineDrawing | RectDrawing | CircleDrawing
 
-export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
+export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618, 2.618, 4.236]
 
 export const IMPULSE_LABELS = ['1', '2', '3', '4', '5']
 export const CORRECTIVE_LABELS = ['A', 'B', 'C']

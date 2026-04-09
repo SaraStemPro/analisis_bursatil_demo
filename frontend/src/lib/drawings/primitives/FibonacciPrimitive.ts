@@ -8,6 +8,7 @@ import { drawLine, drawFilledRect } from './renderers'
 
 const LEVEL_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22d3ee', '#8b5cf6', '#ec4899',
+  '#6366f1', '#14b8a6', '#f43f5e',
 ]
 
 interface FibLevel {
