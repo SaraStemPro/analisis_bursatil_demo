@@ -314,30 +314,29 @@ export default function Charts() {
 
     // Get coordinates helper — supports clicks in the right margin (future projection)
     const getPoint = (): DrawingPoint | null => {
-      if (!params.point || !candleSeriesRef.current) return null
+      if (!params.point || !candleSeriesRef.current || !chartInstanceRef.current) return null
       const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
       if (price === null) return null
-      // params.time is a number for intraday (unix sec), string for daily
-      let time: string | undefined = params.time != null ? String(params.time) : undefined
-      // If no time (clicked in the right margin), extrapolate from last bar
-      if (!time && chartInstanceRef.current && dataLengthRef.current > 0) {
-        const ts = chartInstanceRef.current.timeScale()
-        const logical = ts.coordinateToLogical(params.point.x)
-        if (logical !== null) {
-          const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
-          if (barsAhead > 0) {
-            if (chartMeta.isIntraday) {
-              // Intraday: extrapolate as unix seconds
-              const projected = chartMeta.lastChartTime + barsAhead * chartMeta.barIntervalSec
-              time = String(projected)
-            } else {
-              // Daily: extrapolate as YYYY-MM-DD
-              const lastDate = new Date(lastBarDateRef.current)
-              const projected = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current)
-              time = projected.toISOString().split('T')[0]
-            }
-          }
+
+      // Check if click is beyond last data bar using logical index
+      const ts = chartInstanceRef.current.timeScale()
+      const logical = ts.coordinateToLogical(params.point.x)
+      const beyondData = logical !== null && dataLengthRef.current > 0
+        && Number(logical) > dataLengthRef.current - 1
+
+      let time: string | undefined
+      if (beyondData && logical !== null) {
+        // Right margin: extrapolate time
+        const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
+        if (chartMeta.isIntraday) {
+          time = String(chartMeta.lastChartTime + barsAhead * chartMeta.barIntervalSec)
+        } else {
+          const lastDate = new Date(lastBarDateRef.current)
+          time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
         }
+      } else {
+        // Normal area: use params.time
+        time = params.time != null ? String(params.time) : undefined
       }
       if (!time) return null
       return { time, price: price as number }
@@ -575,23 +574,24 @@ export default function Charts() {
       if (store.activeChartId !== 'main') return
 
       // Track cursor position for paste-at-cursor (including right margin)
-      if (params.point && candleSeriesRef.current) {
+      if (params.point && candleSeriesRef.current && chartInstanceRef.current) {
         const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
         if (price !== null) {
-          let time: string | undefined = params.time != null ? String(params.time) : undefined
-          if (!time && chartInstanceRef.current && dataLengthRef.current > 0) {
-            const logical = chartInstanceRef.current.timeScale().coordinateToLogical(params.point.x)
-            if (logical !== null) {
-              const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
-              if (barsAhead > 0) {
-                if (chartMeta.isIntraday) {
-                  time = String(chartMeta.lastChartTime + barsAhead * chartMeta.barIntervalSec)
-                } else {
-                  const lastDate = new Date(lastBarDateRef.current)
-                  time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
-                }
-              }
+          const ts = chartInstanceRef.current.timeScale()
+          const logical = ts.coordinateToLogical(params.point.x)
+          const beyondData = logical !== null && dataLengthRef.current > 0
+            && Number(logical) > dataLengthRef.current - 1
+          let time: string | undefined
+          if (beyondData && logical !== null) {
+            const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
+            if (chartMeta.isIntraday) {
+              time = String(chartMeta.lastChartTime + barsAhead * chartMeta.barIntervalSec)
+            } else {
+              const lastDate = new Date(lastBarDateRef.current)
+              time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
             }
+          } else {
+            time = params.time != null ? String(params.time) : undefined
           }
           if (time) {
             cursorPointRef.current = { time, price: price as number }
