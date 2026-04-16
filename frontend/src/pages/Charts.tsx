@@ -206,13 +206,15 @@ export default function Charts() {
     queryFn: indicators.catalog,
   })
 
-  const { data: indicatorData } = useQuery({
+  const { data: indicatorDataRaw } = useQuery({
     queryKey: ['indicators', ticker, period, interval, indicatorRequests],
     queryFn: () => indicators.calculate({ ticker, period, interval, indicators: indicatorRequests }),
     enabled: indicatorRequests.length > 0,
     placeholderData: (prev) => prev,  // keep previous data while fetching new interval
     staleTime: 60_000,
   })
+  // When no indicators are active, ignore stale placeholder data
+  const indicatorData = indicatorRequests.length > 0 ? indicatorDataRaw : undefined
 
   // Strategy signals — only fetch strategies when selector is open
   const { data: btTemplates } = useQuery({ queryKey: ['templates'], queryFn: backtest.templates, enabled: showSignalSelector })
