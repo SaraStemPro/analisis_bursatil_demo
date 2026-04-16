@@ -4,7 +4,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import type { DrawingToolType, DrawingPoint } from '../../../types/drawings'
-import { drawLine, drawFilledRect } from './renderers'
+import { drawLine, drawFilledRect, timeToX } from './renderers'
 import { FIB_LEVELS } from '../../../types/drawings'
 
 const FIB_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22d3ee', '#8b5cf6', '#ec4899']
@@ -144,7 +144,7 @@ export class PreviewPrimitive implements ISeriesPrimitive<Time> {
       return
     }
 
-    const ax = this._chart.timeScale().timeToCoordinate(this.anchorPoint.time as unknown as Time)
+    const ax = timeToX(this._chart, this.anchorPoint.time)
     const ay = this._series.priceToCoordinate(this.anchorPoint.price)
     if (ax === null || ay === null) { this._paneView._renderer = null; return }
 
