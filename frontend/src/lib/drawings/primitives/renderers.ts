@@ -4,14 +4,16 @@ import type { IChartApi, ISeriesApi, SeriesType, Time } from 'lightweight-charts
 // --- Shared chart data for right-margin extrapolation ---
 // Updated by Charts.tsx when chart is created; read by all primitives.
 export const chartMeta = {
-  lastDateMs: 0,      // ms timestamp of the last data bar
-  dataLength: 0,      // total number of bars
-  barIntervalMs: 86400000, // ms between bars
+  dataLength: 0,        // total number of bars
+  barIntervalSec: 86400, // seconds between bars (86400 = 1 day)
+  lastChartTime: 0,     // the Time value of the last bar (unix sec for intraday, 0 for daily)
+  isIntraday: false,     // true for 1m, 5m, 15m, 1h
 }
 
 /**
  * Convert a drawing point to pixel coordinates.
  * Handles future dates (right margin) by extrapolating via logical index.
+ * `point.time` is a YYYY-MM-DD string for daily, or a unix-seconds string for intraday.
  */
 export function pointToPixel(
   chart: IChartApi,
@@ -22,14 +24,28 @@ export function pointToPixel(
   if (y === null) return null
 
   const ts = chart.timeScale()
-  // Try direct conversion (works for dates within data range)
-  let x = ts.timeToCoordinate(point.time as unknown as Time)
+  // For intraday, time is stored as a numeric string (unix seconds)
+  const timeValue = chartMeta.isIntraday ? Number(point.time) as unknown as Time : point.time as unknown as Time
+  let x = ts.timeToCoordinate(timeValue)
   if (x !== null) return { x, y }
 
-  // Future date: compute logical index and convert to coordinate
-  if (chartMeta.lastDateMs > 0 && chartMeta.barIntervalMs > 0) {
-    const pointMs = new Date(point.time).getTime()
-    const barsAhead = Math.round((pointMs - chartMeta.lastDateMs) / chartMeta.barIntervalMs)
+  // Future: compute logical index and convert to coordinate
+  if (chartMeta.dataLength > 0 && chartMeta.barIntervalSec > 0) {
+    const pointSec = chartMeta.isIntraday
+      ? Number(point.time)
+      : Math.floor(new Date(point.time).getTime() / 1000)
+    const lastSec = chartMeta.isIntraday
+      ? chartMeta.lastChartTime
+      : Math.floor(new Date(0).getTime() / 1000) // won't be used, daily uses date parse
+    // For daily, parse both as dates
+    let barsAhead: number
+    if (chartMeta.isIntraday) {
+      barsAhead = Math.round((pointSec - lastSec) / chartMeta.barIntervalSec)
+    } else {
+      const pointMs = new Date(point.time).getTime()
+      const lastMs = chartMeta.lastChartTime * 1000 // stored as sec for uniformity
+      barsAhead = Math.round((pointMs - lastMs) / (chartMeta.barIntervalSec * 1000))
+    }
     if (barsAhead > 0) {
       const logicalIdx = chartMeta.dataLength - 1 + barsAhead
       x = ts.logicalToCoordinate(logicalIdx as unknown as import('lightweight-charts').Logical)

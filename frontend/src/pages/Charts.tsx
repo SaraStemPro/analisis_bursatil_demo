@@ -317,7 +317,8 @@ export default function Charts() {
       if (!params.point || !candleSeriesRef.current) return null
       const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
       if (price === null) return null
-      let time = params.time as string | undefined
+      // params.time is a number for intraday (unix sec), string for daily
+      let time: string | undefined = params.time != null ? String(params.time) : undefined
       // If no time (clicked in the right margin), extrapolate from last bar
       if (!time && chartInstanceRef.current && dataLengthRef.current > 0) {
         const ts = chartInstanceRef.current.timeScale()
@@ -325,9 +326,16 @@ export default function Charts() {
         if (logical !== null) {
           const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
           if (barsAhead > 0) {
-            const lastDate = new Date(lastBarDateRef.current)
-            const projected = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current)
-            time = projected.toISOString().split('T')[0]
+            if (chartMeta.isIntraday) {
+              // Intraday: extrapolate as unix seconds
+              const projected = chartMeta.lastChartTime + barsAhead * chartMeta.barIntervalSec
+              time = String(projected)
+            } else {
+              // Daily: extrapolate as YYYY-MM-DD
+              const lastDate = new Date(lastBarDateRef.current)
+              const projected = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current)
+              time = projected.toISOString().split('T')[0]
+            }
           }
         }
       }
@@ -464,15 +472,26 @@ export default function Charts() {
     const times = history.data.map((d) => toChartTime(d.date, interval))
 
     // Compute bar interval for time extrapolation (drawing in right margin)
-    const lastDateMs = new Date(history.data[history.data.length - 1].date).getTime()
     dataLengthRef.current = history.data.length
     lastBarDateRef.current = history.data[history.data.length - 1].date
-    chartMeta.lastDateMs = lastDateMs
     chartMeta.dataLength = history.data.length
+    chartMeta.isIntraday = isIntraday
+    // Store the last chart time value (same format as what the chart uses)
+    const lastTime = times[times.length - 1]
+    chartMeta.lastChartTime = isIntraday
+      ? Number(lastTime)
+      : Math.floor(new Date(history.data[history.data.length - 1].date).getTime() / 1000)
     if (history.data.length >= 2) {
-      const prev = new Date(history.data[history.data.length - 2].date).getTime()
-      barIntervalMsRef.current = lastDateMs - prev
-      chartMeta.barIntervalMs = lastDateMs - prev
+      if (isIntraday) {
+        const sec = Number(times[times.length - 1]) - Number(times[times.length - 2])
+        barIntervalMsRef.current = sec * 1000
+        chartMeta.barIntervalSec = sec
+      } else {
+        const lastMs = new Date(history.data[history.data.length - 1].date).getTime()
+        const prevMs = new Date(history.data[history.data.length - 2].date).getTime()
+        barIntervalMsRef.current = lastMs - prevMs
+        chartMeta.barIntervalSec = (lastMs - prevMs) / 1000
+      }
     }
 
     if (chartType === 'line') {
@@ -559,14 +578,18 @@ export default function Charts() {
       if (params.point && candleSeriesRef.current) {
         const price = candleSeriesRef.current.coordinateToPrice(params.point.y)
         if (price !== null) {
-          let time = params.time as string | undefined
+          let time: string | undefined = params.time != null ? String(params.time) : undefined
           if (!time && chartInstanceRef.current && dataLengthRef.current > 0) {
             const logical = chartInstanceRef.current.timeScale().coordinateToLogical(params.point.x)
             if (logical !== null) {
               const barsAhead = Math.round(Number(logical) - (dataLengthRef.current - 1))
               if (barsAhead > 0) {
-                const lastDate = new Date(lastBarDateRef.current)
-                time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
+                if (chartMeta.isIntraday) {
+                  time = String(chartMeta.lastChartTime + barsAhead * chartMeta.barIntervalSec)
+                } else {
+                  const lastDate = new Date(lastBarDateRef.current)
+                  time = new Date(lastDate.getTime() + barsAhead * barIntervalMsRef.current).toISOString().split('T')[0]
+                }
               }
             }
           }
