@@ -4,7 +4,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import type { VLineDrawing } from '../../../types/drawings'
-import { drawLine, chartMeta } from './renderers'
+import { drawLine, timeToX } from './renderers'
 
 class VLineRenderer implements IPrimitivePaneRenderer {
   x: number; color: string; chartHeight: number
@@ -61,18 +61,6 @@ export class VLinePrimitive implements ISeriesPrimitive<Time> {
 
   _timeToX(time: string): number | null {
     if (!this._chart) return null
-    const ts = this._chart.timeScale()
-    const x = ts.timeToCoordinate(time as unknown as Time)
-    if (x !== null) return x
-    // Fallback: extrapolate via logical index for future dates
-    if (chartMeta.lastDateMs > 0 && chartMeta.barIntervalMs > 0) {
-      const pointMs = new Date(time).getTime()
-      const barsAhead = Math.round((pointMs - chartMeta.lastDateMs) / chartMeta.barIntervalMs)
-      if (barsAhead > 0) {
-        const logicalIdx = chartMeta.dataLength - 1 + barsAhead
-        return ts.logicalToCoordinate(logicalIdx as unknown as import('lightweight-charts').Logical)
-      }
-    }
-    return null
+    return timeToX(this._chart, time)
   }
 }

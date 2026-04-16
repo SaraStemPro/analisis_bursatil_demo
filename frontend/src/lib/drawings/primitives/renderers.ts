@@ -4,16 +4,48 @@ import type { IChartApi, ISeriesApi, SeriesType, Time } from 'lightweight-charts
 // --- Shared chart data for right-margin extrapolation ---
 // Updated by Charts.tsx when chart is created; read by all primitives.
 export const chartMeta = {
-  dataLength: 0,        // total number of bars
-  barIntervalSec: 86400, // seconds between bars (86400 = 1 day)
-  lastChartTime: 0,     // the Time value of the last bar (unix sec for intraday, 0 for daily)
-  isIntraday: false,     // true for 1m, 5m, 15m, 1h
+  dataLength: 0,           // total number of bars
+  barIntervalSec: 86400,   // seconds between bars
+  lastChartTime: 0,        // Time value of the last bar (unix sec for intraday, epoch sec for daily)
+  isIntraday: false,       // true for 1m, 5m, 15m, 1h
+}
+
+/** Parse a point's time string to seconds since epoch. */
+function parseTimeSec(timeStr: string): number {
+  // If it looks like a number (unix seconds), parse directly
+  if (/^\d+$/.test(timeStr)) return Number(timeStr)
+  // Otherwise it's a YYYY-MM-DD date string
+  return Math.floor(new Date(timeStr).getTime() / 1000)
+}
+
+/** Convert a time string to a chart Time value for timeToCoordinate(). */
+function toTimeValue(timeStr: string): Time {
+  if (chartMeta.isIntraday) return Number(timeStr) as unknown as Time
+  return timeStr as unknown as Time
+}
+
+/**
+ * Convert time to X coordinate, with fallback for future dates (right margin).
+ */
+export function timeToX(chart: IChartApi, timeStr: string): number | null {
+  const ts = chart.timeScale()
+  const x = ts.timeToCoordinate(toTimeValue(timeStr))
+  if (x !== null) return x
+  // Extrapolate: compute how many bars ahead and use logicalToCoordinate
+  if (chartMeta.dataLength > 0 && chartMeta.barIntervalSec > 0) {
+    const pointSec = parseTimeSec(timeStr)
+    const barsAhead = Math.round((pointSec - chartMeta.lastChartTime) / chartMeta.barIntervalSec)
+    if (barsAhead > 0) {
+      const logicalIdx = chartMeta.dataLength - 1 + barsAhead
+      return ts.logicalToCoordinate(logicalIdx as unknown as import('lightweight-charts').Logical)
+    }
+  }
+  return null
 }
 
 /**
  * Convert a drawing point to pixel coordinates.
- * Handles future dates (right margin) by extrapolating via logical index.
- * `point.time` is a YYYY-MM-DD string for daily, or a unix-seconds string for intraday.
+ * Handles future dates (right margin) via timeToX fallback.
  */
 export function pointToPixel(
   chart: IChartApi,
@@ -22,37 +54,9 @@ export function pointToPixel(
 ): { x: number; y: number } | null {
   const y = series.priceToCoordinate(point.price)
   if (y === null) return null
-
-  const ts = chart.timeScale()
-  // For intraday, time is stored as a numeric string (unix seconds)
-  const timeValue = chartMeta.isIntraday ? Number(point.time) as unknown as Time : point.time as unknown as Time
-  let x = ts.timeToCoordinate(timeValue)
-  if (x !== null) return { x, y }
-
-  // Future: compute logical index and convert to coordinate
-  if (chartMeta.dataLength > 0 && chartMeta.barIntervalSec > 0) {
-    const pointSec = chartMeta.isIntraday
-      ? Number(point.time)
-      : Math.floor(new Date(point.time).getTime() / 1000)
-    const lastSec = chartMeta.isIntraday
-      ? chartMeta.lastChartTime
-      : Math.floor(new Date(0).getTime() / 1000) // won't be used, daily uses date parse
-    // For daily, parse both as dates
-    let barsAhead: number
-    if (chartMeta.isIntraday) {
-      barsAhead = Math.round((pointSec - lastSec) / chartMeta.barIntervalSec)
-    } else {
-      const pointMs = new Date(point.time).getTime()
-      const lastMs = chartMeta.lastChartTime * 1000 // stored as sec for uniformity
-      barsAhead = Math.round((pointMs - lastMs) / (chartMeta.barIntervalSec * 1000))
-    }
-    if (barsAhead > 0) {
-      const logicalIdx = chartMeta.dataLength - 1 + barsAhead
-      x = ts.logicalToCoordinate(logicalIdx as unknown as import('lightweight-charts').Logical)
-      if (x !== null) return { x, y }
-    }
-  }
-  return null
+  const x = timeToX(chart, point.time)
+  if (x === null) return null
+  return { x, y }
 }
 
 // --- Drawing helpers ---
