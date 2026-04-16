@@ -20,7 +20,8 @@ function parseTimeSec(timeStr: string): number {
 
 /** Convert a time string to a chart Time value for timeToCoordinate(). */
 function toTimeValue(timeStr: string): Time {
-  if (chartMeta.isIntraday) return Number(timeStr) as unknown as Time
+  // Detect format from content: numeric = unix seconds, otherwise YYYY-MM-DD
+  if (/^\d+$/.test(timeStr)) return Number(timeStr) as unknown as Time
   return timeStr as unknown as Time
 }
 
