@@ -214,11 +214,11 @@ Alumna:     sara@demo.com / Demo1234
 Código de invitación: AB_2026
 ```
 
-## API — 44 rutas implementadas
+## API — 45 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
 Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
-            POST screener | GET screener/sectors/{universe}
+            POST screener, correlation | GET screener/sectors/{universe}
 Indicators: GET catalog | POST calculate | GET/POST presets
 Demo:       GET portfolio, orders, performance, portfolio/summary, carteras, ranking
             GET admin/positions (solo profesor)
@@ -316,12 +316,26 @@ components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde
 
 ### Frontend
 ```
-pages/Screener.tsx  ← Página completa: filtros + tabla sorteable + simulador de portfolio
+pages/Screener.tsx                              ← Página completa: filtros + tabla sorteable + simulador + correlación
+components/screener/CorrelationPanel.tsx         ← Panel principal: KPIs, diagnósticos, pares, heatmap, sugerencias
+components/screener/CorrelationHeatmap.tsx       ← Heatmap NxN interactivo con click-to-detail
+hooks/useCorrelation.ts                         ← Mutation hook para POST /api/market/correlation
+lib/correlationInterpretation.ts                ← Diagnósticos pedagógicos, colores, sugerencias
 ```
 - Columnas adaptativas: `isEquity` oculta Market Cap, Sector, P/E, Div%, ROE para índices/divisas/materias primas
 - Scroll horizontal con barra arriba (CSS `rotateX(180deg)` trick)
 - Simulador con cantidades por activo, precios en tiempo real, diversity score penalizado, tips
 - Compra secuencial → navega a Paper Trading automáticamente
+- **Análisis de correlación** (aparece con 2+ activos en simulador):
+  - `POST /api/market/correlation` con cache 1h por (tickers_sorted, period)
+  - Matriz NxN de correlación + volatilidades anualizadas + diversification ratio
+  - 4 KPIs: correlación media, diversification ratio, vol. cartera, riesgo evitado
+  - Diagnóstico semafórico (excelente/buena/atención/peligro) con texto pedagógico
+  - Par más y menos correlacionado destacados
+  - Heatmap interactivo: click en celda → detalle del par con interpretación
+  - Selector de período (3mo-5y) para demostrar inestabilidad de correlaciones
+  - Sugerencias accionables según diagnóstico
+  - Mutation manual (botón "Calcular"), no auto-fetch
 
 ## Arquitectura de Backtesting
 
