@@ -1,237 +1,142 @@
 # Plataforma de Análisis Bursátil Educativa
 
-## Descripción
-Plataforma web educativa para estudiantes de Máster (~23 años) que permite practicar análisis técnico bursátil. Combina gráficos interactivos con datos reales, paper trading, backtesting de estrategias y un tutor IA basado en PDFs del profesor.
+Plataforma web educativa para estudiantes de Máster (~23 años): gráficos interactivos con datos reales, paper trading con CFD, backtesting, screener con correlaciones, tutor IA (RAG sobre PDFs del profesor) y una lección interactiva con auto-save.
 
-## Especificación
-Toda la especificación funcional está en `SPEC.md`. Consultarla siempre antes de implementar cualquier módulo.
+## Documentación
+
+- **`CLAUDE.md`** (este fichero): fuente de verdad operativa. Léelo antes de tocar nada.
+- **`SPEC.md`**: especificación funcional original. **Parcialmente desactualizada** (no recoge `/clase`, `lesson_responses`, `/admin/clase`, screener de correlación, ni el monitor de stop-loss; menciona `ta-lib` que no se usa). Útil como contexto histórico, no como referencia técnica.
+- **`MEMORY.md`** (en memoria del proyecto): notas operativas mías entre sesiones.
 
 ## Stack
 
 ### Backend (`backend/`)
 - **Python 3.12+**, FastAPI 0.115+
-- **ORM**: SQLAlchemy 2.0+ con SQLite (dev) / PostgreSQL (prod)
+- **ORM**: SQLAlchemy 2.0+ con SQLite (dev) / PostgreSQL Supabase (prod)
 - **Validación**: Pydantic 2.0+ (schemas en `backend/app/schemas/`)
-- **Auth**: JWT con python-jose, passwords con bcrypt (directo, sin passlib)
+- **Auth**: JWT con python-jose, passwords con bcrypt directo (sin passlib)
 - **Datos bursátiles**: yfinance
-- **Indicadores técnicos**: pandas + numpy (cálculos nativos, sin pandas-ta)
+- **Indicadores técnicos**: pandas + numpy nativo (sin pandas-ta ni TA-Lib)
 - **RAG (Tutor IA)**: LangChain + FAISS + sentence-transformers + pdfplumber
-- **Tests**: pytest + httpx
+- **Tests**: pytest + httpx (suite mínima en `backend/tests/`, ver sección Testing)
 
 ### Frontend (`frontend/`)
-- **React 18+** con TypeScript strict, Vite 5+
-- **Estilos**: TailwindCSS 3+
-- **Gráficos**: Lightweight Charts (TradingView) 5+ (Primitives API para dibujos)
+- **React 18+**, **Vite 7+**
+- **TypeScript strict** — *excepción*: `pages/Clase.jsx` es JSX puro (lección autocontenida)
+- **Estilos**: TailwindCSS **v4** (`@tailwindcss/vite`)
+- **Gráficos**: Lightweight Charts (TradingView) v5 (Primitives API para dibujos) + Recharts (lección)
 - **Data fetching**: TanStack Query 5+
 - **Routing**: React Router 6+
-- **Formularios**: React Hook Form
 - **Estado global**: Zustand
+- **Formularios**: React Hook Form
 
-## Estructura de Schemas (ya implementados)
+## Cosas que NO debes asumir
+
+Lecciones aprendidas a base de bugs. Antes de "limpiar" cualquiera de estas cosas, lee el motivo.
+
+- **No promediar precios** en posiciones del mismo ticker. Cada orden es una posición independiente. Cerrar es por `order_id`, nunca por `(ticker, side)`.
+- **El cache de yfinance no debe envenenarse con vacíos**: si el screener falla, NO cachear `[]`. Si lo cacheas, te quedas 5 min con resultados rotos.
+- **1 solo worker de uvicorn**, no 4. 4 workers crean 4 caches independientes y multiplican x4 las llamadas a Yahoo (rate limit).
+- **Compra de cartera secuencial** (`for...of await`), no paralela: si paralela, se pisan al deducir del balance.
+- **Spread asimétrico**: 0.01% solo al ask (`buy` y `close short`). NUNCA al bid.
+- **Forex se multiplica ×10000 cuando precio < 10** (para que EURUSD a 1.16 se opere como 11600). Si lo "corriges" rompes el cálculo de margen.
+- **Clase.jsx es JSX, no TS** — no añadas `<Tipo>`, no esperes intellisense.
+- **No hay CI ni pre-commit hooks**: los tests sólo corren si los lanzas tú.
+- **`SPEC.md` está obsoleto** (ver sección Documentación arriba). No es fuente de verdad.
+- **Auto-creación de tablas en producción**: el `Base.metadata.create_all()` de `main.py` crea tablas nuevas la primera vez que arranca el backend. Para alterar columnas existentes hay migraciones manuales en el mismo `main.py` (ALTER TABLE if not exists).
+
+## Desarrollo local
+
+```bash
+# Backend
+cd backend && pip install -e ".[dev]"
+uvicorn app.main:app --reload   # arranca en :8000
+pytest                          # corre tests (ver Testing)
+
+# Frontend
+cd frontend && npm install
+npm run dev                     # :5173, proxy /api → :8000
+npm run build                   # vite + tsc, debe quedar verde
 ```
-backend/app/schemas/
-├── __init__.py      ← re-exports todo
-├── common.py        ← enums compartidos (UserRole, OrderType[buy/sell/close], Comparator, etc.)
-├── auth.py          ← Register, Login, Token, User, Invite
-├── course.py        ← Course CRUD
-├── market.py        ← Search, Quote, OHLCV, HistoryQuery, DetailedQuote, ScreenerFilters, ScreenerResponse
-├── indicators.py    ← Catalog, Calculate, Presets (max 5 indicadores)
-├── demo.py          ← Portfolio, Orders, Performance, ClosePosition, PortfolioSummary, Carteras
-├── tutor.py         ← Chat, Conversations, Documents, FAQ
-└── backtest.py      ← Strategy rules, BacktestRun, Trades, Compare
+
+**Si el `.env` local no autentica contra Supabase** (`password authentication failed for user "postgres"`), exporta `DATABASE_URL=sqlite:///./dev.db` y arranca: `Base.metadata.create_all` crea las tablas la primera vez. El seed (`profesor@demo.com`, `sara@demo.com`, ambos con `Demo1234`) se hace solo.
+
+## Testing
+
+Suite mínima en `backend/tests/`. Filosofía: cubrir lo no-obvio (lógica financiera, motor de backtest, contratos de API), no buscar 100% de cobertura.
+
 ```
+backend/tests/
+├── conftest.py              ← TestClient + DB en memoria + JWT helpers
+├── test_routes.py           ← smoke / contract test de cada endpoint
+├── test_demo_service.py     ← CFD, spread, SL/TP, cierre por order_id
+└── test_backtest_service.py ← motor con dataset sintético determinista
+```
+
+`pytest.ini` fuerza `DATABASE_URL=sqlite:///:memory:` para que la suite no toque Supabase.
+
+**Frontend**: no tiene tests unitarios. La verificación es `npm run build` + smoke manual. Si en el futuro hace falta E2E, Playwright sobre los flujos críticos (login → comprar → ver portfolio · /clase auto-save · /admin/clase visualización) tiene más ROI que unit tests sobre 4400 líneas de JSX.
 
 ## Convenciones
 
-### Código
-- **Commits convencionales**: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`
+- **Commits convencionales**: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
 - **Backend**: type hints en todo, docstrings solo donde la lógica no es obvia
-- **Frontend**: TypeScript strict, sin `any`
-- **Sin datos falsos**: siempre datos reales de Yahoo Finance
-- **Variables sensibles**: todo en `.env`, nunca en código
-
-### Arquitectura
-- Backend primero: cada módulo se implementa backend → tests → frontend
-- Cada endpoint tiene mínimo un test
-- Los schemas Pydantic son la fuente de verdad para validaciones
-- Los modelos SQLAlchemy llevan `model_config = {"from_attributes": True}` en sus schemas
+- **Frontend** (excepto `Clase.jsx`): TypeScript strict, sin `any`
+- **Sin datos falsos**: siempre Yahoo Finance real
+- **Variables sensibles**: `.env`, nunca en código
 
 ### Patrones clave
-- Schemas Pydantic usan `model_validator(mode="after")` para validaciones cruzadas
+
+- Schemas Pydantic son fuente de verdad para validación; usan `model_validator(mode="after")` para validaciones cruzadas
 - Enums en `schemas/common.py`, nunca strings sueltos
-- Imports centralizados via `schemas/__init__.py`
-- Responses siempre llevan `model_config = {"from_attributes": True}`
+- Imports centralizados vía `schemas/__init__.py`
+- Responses con `model_config = {"from_attributes": True}`
 
-## Base de Datos
-- **Supabase** (PostgreSQL gestionado) — BD + Storage para PDFs del tutor
-- Connection string en `.env` como `DATABASE_URL` (Session Pooler, IPv4 compatible)
-- SQLAlchemy apunta a Supabase PostgreSQL
+## Estructura de Schemas
+
+```
+backend/app/schemas/
+├── __init__.py      ← re-exports
+├── common.py        ← enums (UserRole, OrderType, Comparator, etc.)
+├── auth.py          ← Register, Login, Token, User, Invite
+├── course.py        ← Course CRUD
+├── market.py        ← Search, Quote, OHLCV, History, DetailedQuote, Screener, Correlation
+├── indicators.py    ← Catalog, Calculate, Presets (max 5 indicadores)
+├── demo.py          ← Portfolio, Orders, Performance, ClosePosition, Carteras
+├── tutor.py         ← Chat, Conversations, Documents, FAQ
+├── backtest.py      ← Strategy rules, BacktestRun, Trades, Compare
+└── lesson.py        ← LessonResponse upsert/read + StudentLessonResponse (admin)
+```
+
+## Base de Datos (Supabase)
+
+- **Supabase** (PostgreSQL gestionado) + Storage para PDFs del tutor
+- Connection string en `.env` como `DATABASE_URL` (Session Pooler, IPv4)
 - Para desarrollo local se puede usar SQLite cambiando `DATABASE_URL`
-- Precisión numérica: `Numeric(14, 5)` para precios (forex necesita 5 decimales)
-- **7 vistas SQL** para el profesor: `v_orders`, `v_backtest_runs`, `v_conversations`, `v_messages`, `v_documents`, `v_strategies`, `v_portfolios` — todas incluyen `username` y `user_email`
+- Precisión: `Numeric(14, 5)` para precios (forex necesita 5 decimales)
+- **12 tablas**: users, courses, portfolios, orders, documents, conversations, messages, indicator_presets, strategies, backtest_runs, backtest_trades, lesson_responses
+- **7 vistas SQL** creadas a mano en Supabase para que el profesor consulte con SELECTs: `v_orders`, `v_backtest_runs`, `v_conversations`, `v_messages`, `v_documents`, `v_strategies`, `v_portfolios` — todas con `username`/`user_email`. (`lesson_responses` no tiene vista, se consulta vía `/api/lesson/{id}/responses/all`.)
 
-## Fases de implementación
-1. ✅ Schemas Pydantic
-2. ✅ Estructura + Auth (FastAPI, config, database, JWT, modelos SQLAlchemy)
-3. ✅ Gráficos (yfinance: search, quote, history OHLCV)
-4. ✅ Indicadores (catálogo 10 indicadores, cálculo, presets)
-5. ✅ Modo Demo (paper trading: portfolio, órdenes, rendimiento, reset, short selling, close-all, carteras)
-6. ✅ Backtesting (motor completo, 6 templates, constructor visual, long/short, timeframes, offset, patrones de velas, fractales, Bollinger bands seleccionables)
-7. ✅ Tutor IA (RAG: PDF upload, chunking, FAISS/keyword search, chat con LLM, FAQ)
-8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
-   - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott, hline, vline, rect, circle) con Primitives API
-   - Edición de dibujos: seleccionar + mover (botón Move) + copiar/pegar (botón Copy + click destino, o Ctrl+C/V) + cambiar color (color picker en toolbar)
-   - Dibujo en margen derecho: 30 barras de espacio vacío para proyecciones futuras (rightOffset + timeToX extrapolation)
-   - Preview en vivo mientras se dibuja (PreviewPrimitive + subscribeCrosshairMove)
-   - Detección de patrones de velas: envolvente, vela 20/20, martillo (EA/EB, V20A/V20B, MaA/MaB)
-   - Selector de patrones por checkbox (activar/desactivar individualmente)
-   - Indicadores overlay + oscilador con editor de parámetros y colores personalizables
-   - Osciladores en ventanas separadas (OscillatorChart) con scroll sincronizado al main chart
-   - Fractales de Williams renderizados como marcadores sobre las velas
-   - Historial de 5 tickers recientes con botón X para eliminar
-   - Toggle tipo gráfico: velas japonesas / línea de cierres (CandlestickChart/LineChart icons)
-   - Etiquetas "Horizonte temporal" y "Timeframe" sobre los selectores de período/intervalo
-   - Botón "Hoy" (scroll to realtime), escala logarítmica (toggle LOG), botón "Ajustar" (reset escala horizontal + vertical)
-   - Fibonacci con extensiones: 0%, 23.6%, 38.2%, 50%, 61.8%, 78.6%, 100%, 161.8%, 261.8%, 423.6%
-   - Enlace a Yahoo Finance por ticker, info de exchange y market state
-   - Precio ask con spread y margen CFD visibles junto al precio
-   - Botón refrescar precio + gráfico (invalida cache backend, fuerza dato fresco de Yahoo)
-   - Líneas de tendencia, horizontal y vertical: color naranja por defecto
-   - Confirmación al eliminar dibujos (botón X, Delete key, borrar todo)
-   - Soporte intradiario (1m, 5m, 15m, 1h) con timestamps Unix + validación período/intervalo
-   - Preservación de escala al añadir/quitar indicadores
-   - Dibujo en gráficos de osciladores (cada chart tiene DrawingManager propio, activeChartId en store)
-   - VWAP oculto del catálogo (aún disponible en backend)
-   - Botón "Comprar" en Charts → navega a Paper Trading con ticker pre-rellenado
-   - Formato inteligente de precios: 5 decimales para <10 (forex), 4 para <100, 2 para >=100
-   - Eje X intradiario en hora de Madrid (CET/CEST automático)
-   - Paper Trading mejorado:
-     - **Posiciones independientes**: cada orden = una posición separada (NO se promedian precios)
-     - Cerrar por `order_id`, no por ticker+side (evita bugs de precio medio)
-     - Buy = abrir LONG, Sell = abrir SHORT (posiciones simultáneas long/short permitidas)
-     - Cerrar posición (total o parcial) con modal de confirmación
-     - Botón "Cerrar todo" para liquidar todas las posiciones
-     - Posiciones en formato tabla/lista (no tarjetas)
-     - Resumen portfolio con diversificación (Shannon entropy penalizada) y distribución sectorial
-     - Buscador de tickers con autocompletado en formulario de orden
-     - Diario de operaciones obligatorio: campo `notes` (500 chars) para justificar cada orden
-     - Formulario se resetea tras ejecutar orden (ticker, cantidad, notas)
-     - Spread 0.01% en todas las compras (ask side: buy long + close short)
-     - CFD/Futures: indices, materias primas, divisas operan con margen 5%. Forex (<10) ×10000
-     - Columnas "P. entrada" / "P. cierre" con etiquetas bid/ask
-     - **Stop loss / Take profit automático**: hilo background cada 2 min comprueba todas las posiciones
-     - Sistema de carteras nombradas (portfolio_group):
-       - Compra desde el simulador del Screener → crea cartera con nombre
-       - Ejecución secuencial (evita race conditions en balance)
-       - Carteras se muestran en recuadro independiente con borde cyan
-       - Diversity score penalizado (min 5 posiciones, min 3 sectores, concentración >40%)
-       - Cerrar cartera completa o posiciones individuales para rebalanceo
-       - Botón "Añadir posición" dentro de cada cartera (OrderForm inline con portfolio_group)
-       - Auto-navegación a Paper Trading tras compra de cartera
-   - Stock Screener (página independiente `/screener`):
-     - 11 universos: S&P 500 (~130), IBEX 35 (35), Tech (42), Healthcare (28), Finance (28), Energy (20), Industrials (23), Consumer (22), Indices (12), Divisas (10), Materias Primas (12), All
-     - 9 filtros: Precio, Cambio%, Sector, Market Cap, P/E, Dividendo%, Beta, ROE, Volatilidad
-     - Tabla sorteable con scroll horizontal (barra arriba) + búsqueda por texto
-     - Columnas adaptativas: oculta Market Cap, Sector, P/E, Div%, ROE para universos no-equity
-     - Simulador de portfolio: cantidades por activo, costes con margen CFD, diversity score penalizado
-     - Info de spread y margen CFD visible en simulador
-     - Comprar cartera → ejecución secuencial → navega a Paper Trading
-     - Diario de trading obligatorio en compra de carteras
-     - Navegación: ticker → Charts, carrito → Paper Trading con ticker pre-rellenado
-   - Dashboard:
-     - 4 tarjetas principales (Gráficos, Paper Trading, Backtesting, Screener)
-     - Tutor IA como bloque grande independiente debajo
-     - Stats del portfolio si hay posiciones abiertas
-     - Ranking de usuarios por valor de portfolio (excluye demo users, debajo del Tutor IA)
-   - Backtesting:
-     - Buscador de tickers con autocompletado (reutiliza TickerSearchInput)
-     - Ejecución de plantillas sin crear estrategias temporales (rules inline)
-     - Tabla de operaciones muestra columna "Lado" (Long/Short) y "Cierre" (Señal/Stop/TP)
-     - Modo "Long + Short" (both): señal entrada → Long, señal salida → Short, independientes
-   - Clase interactiva (`/clase`):
-     - Lección de diversificación y gestión de carteras (Bloque 3)
-     - 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas (botón "Probar en el Screener" → `/screener?tickers=...`)
-     - Laboratorio de correlación con narrativa en vivo (lectura verbal del estado según ρ y volatilidades)
-     - 3 bloques: Diversificación, Gestión monetaria, Gestión de carteras
-     - Simuladores interactivos con recharts (tamaño posición, esperanza matemática, drawdown, martingala, asset allocation, beta)
-     - Persistencia híbrida: **localStorage** (prefijo `leccion3:`) + **Supabase** (tabla `lesson_responses`, JSON blob)
-     - Auto-save con debounce 1.5 s + coalescing (in-flight + pending) en `useStudentLessonSync`
-     - Hidratación en mount: GET → vuelca remoto a localStorage → render (loader breve)
-     - Badge fijo arriba-derecha: cargando · guardando · guardado · error · sin sesión
-     - Componente JSX autocontenido con estilo propio (tema cálido/académico, fuentes Fraunces+Manrope)
-     - Icono GraduationCap en navbar
-   - Panel profesor `/admin/clase`:
-     - Lista alumnos con contadores (retos hechos / quizzes contestados / checkpoints marcados)
-     - Filas expandibles con cuaderno, retos (texto + estado hecho), quizzes (opción), checkpoints
-     - Botón "Exportar CSV" + auto-refresh 30 s
-     - Solo accesible para `role=professor` (require_role)
-9. 🔄 Pulido (UI/UX, deploy)
+## Páginas frontend (11)
 
-## Indicadores — 10 en catálogo backend
-```
-SMA, EMA          — tendencia, overlay
-MACD              — tendencia, oscilador
-RSI               — momentum, oscilador
-STOCH             — momentum, oscilador
-BBANDS            — volatilidad, overlay
-ATR               — volatilidad, oscilador
-OBV               — volumen, oscilador
-VWAP              — volumen, overlay (oculto en frontend)
-FRACTALS          — tendencia, overlay (renderizado como marcadores)
-```
+| Ruta | Quién | Qué |
+|------|-------|-----|
+| `/` | todos | Dashboard con tarjetas + ranking |
+| `/charts` | todos | Gráficos + indicadores + dibujos |
+| `/screener` | todos | Filtros + simulador + correlación |
+| `/demo` | todos | Paper Trading (posiciones + carteras) |
+| `/backtest` | todos | Motor de backtesting |
+| `/tutor` | todos | Chat con tutor IA (RAG) |
+| `/clase` | todos | Lección interactiva con auto-save |
+| `/profile` | todos | Perfil de usuario |
+| `/login` | sin auth | Login + registro con invite code |
+| `/admin` | profesor | Posiciones de todos los alumnos en vivo |
+| `/admin/clase` | profesor | Respuestas de la lección por alumno |
 
-## Arquitectura de Charts (frontend)
+## API
 
-### Archivos clave
-```
-pages/Charts.tsx                          ← Página principal, chart de velas + lógica global
-components/charts/OscillatorChart.tsx      ← Un chart independiente por oscilador
-components/charts/DrawingToolbar.tsx       ← Toolbar lateral de herramientas de dibujo
-context/drawing-store.ts                  ← Zustand store: dibujos, herramientas, selección
-lib/drawings/DrawingManager.ts            ← Gestiona primitivas de dibujo en un chart
-lib/drawings/primitives/*.ts              ← 9 primitivas + PreviewPrimitive + renderers (pointToPixel, timeToX, chartMeta)
-lib/patterns.ts                           ← Detección de patrones de velas (client-side)
-lib/recentTickers.ts                      ← localStorage para tickers recientes
-lib/chartUtils.ts                         ← CHART_THEME, toChartTime() (Madrid TZ), INDICATOR_COLORS
-```
+48+ rutas. Para conteo exacto: `grep -c '@router\.' backend/app/routers/*.py`.
 
-### Formato inteligente de precios
-- `fmtPrice(val)`: 5 decimales si <10 (forex), 4 si <100, 2 si >=100
-- `fmtChange(val, refPrice)`: misma lógica, basada en precio de referencia
-- `getPriceFormat(price)`: devuelve `{precision, minMove}` para configurar ejes del chart
-- Se aplica en: eje Y del candlestick, cabecera de quote, valores de indicadores, tablas de posiciones
-
-### Zona horaria
-- Eje X intradiario (1m, 5m, 15m, 1h) ajustado a hora de Madrid (Europe/Madrid)
-- `getMadridOffsetSec(date)` calcula offset CET/CEST automáticamente via `toLocaleString`
-- Charts diarios y superiores no se ven afectados (solo muestran fecha YYYY-MM-DD)
-
-### Patrones de sincronización (osciladores)
-- Cada OscillatorChart tiene una **serie spacer invisible** con todos los timestamps del main chart
-- Esto alinea los LogicalRange (índices de barra) entre charts con distinto número de datos
-- Sync usa `setVisibleLogicalRange` bidireccional con un **shared `isSyncingRef`** para evitar loops
-- Los charts de osciladores se registran en un `Map<string, IChartApi>` del padre vía callbacks
-- No se usa React state para el sync (evita re-render loops); todo por refs + API directa
-
-### Patrones de dibujo
-- Primitivas implementan `ISeriesPrimitive<Time>` (lightweight-charts Primitives API)
-- DrawingManager.syncDrawings: compara por referencia → si cambió, destruye y recrea primitiva (actualización inmediata de color/posición)
-- PreviewPrimitive: dibuja preview en vivo durante crosshair move
-- `activeChartId` en store determina qué chart recibe clics de dibujo ('main' | 'osc-RSI' | etc.)
-- **`pointToPixel()` y `timeToX()`** en `renderers.ts`: conversión tiempo→píxel con fallback para margen derecho (fechas futuras)
-- `chartMeta` (objeto compartido en renderers.ts): `dataLength`, `barIntervalSec`, `lastChartTime`, `isIntraday` — actualizado por Charts.tsx, leído por todas las primitivas
-- Tiempo de dibujos: YYYY-MM-DD para daily, Unix seconds (string) para intraday — `parseTimeSec()` y `toTimeValue()` detectan formato automáticamente
-- Copy/paste: `clipboard` + `pasteMode` en store, click para colocar copia
-- Move: `moveMode` + `dragAnchor` + `finishDrag()` en store, botón Move en toolbar
-
-## Usuarios demo (auto-seed al arrancar)
-```
-Profesor:   profesor@demo.com / Demo1234
-Alumna:     sara@demo.com / Demo1234
-Código de invitación: AB_2026
-```
-
-## API — 48 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
 Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
@@ -240,139 +145,192 @@ Indicators: GET catalog | POST calculate | GET/POST presets
 Demo:       GET portfolio, orders, performance, portfolio/summary, carteras, ranking
             GET admin/positions (solo profesor)
             POST order, close-position, close-all, close-cartera/{name}, reset
-Backtest:   GET templates, strategies, strategies/{id} | POST strategies
+            PATCH stop-loss
+Backtest:   GET templates, strategies, strategies/{id}, universes
+            POST strategies, run, run-portfolio, signals, compare
             PUT/DELETE strategies/{id}
-            POST run | GET runs, runs/{id}, runs/{id}/trades | DELETE runs/{id}
-            POST compare
-Tutor:      POST chat | GET conversations, conversations/{id}/messages
+            GET runs, runs/{id}, runs/{id}/trades, portfolio-runs, portfolio-runs/{id}
+            DELETE runs/{id}, runs (all), portfolio-runs/{id}
+Tutor:      POST chat | GET conversations, conversations/{id}/messages, faq
             DELETE conversations/{id}
             POST/GET documents | GET documents/{id}/download | DELETE documents/{id}
-            GET faq
 Lesson:     GET lesson/{id}/responses (alumno)
             PUT lesson/{id}/responses (alumno upsert con debounce)
             GET lesson/{id}/responses/all (solo profesor)
 Health:     GET /api/health
 ```
 
-## Arquitectura de Paper Trading (Demo)
+## Usuarios demo (auto-seed al arrancar)
 
-### Semántica de órdenes
-- `buy` → abre posición LONG (deduce coste del balance)
-- `sell` → abre posición SHORT (deduce margen 100% del balance)
-- `close` → cierra posición por `order_id` (total o parcial)
-- **Posiciones independientes**: cada orden es su propia posición, sin promediar precios
-- Un mismo ticker puede tener múltiples posiciones LONG y SHORT independientes
-- `_close_order_internal()`: lógica compartida para cerrar (manual, stop loss, take profit, close-all)
-
-### Stop Loss / Take Profit automático
-- **Background monitor**: hilo daemon `_stop_loss_monitor_loop()` cada 2 minutos
-- Comprueba TODAS las órdenes con SL/TP, esté o no conectado el alumno
-- Long: SL si precio ≤ stop_loss, TP si precio ≥ take_profit
-- Short: SL si precio ≥ stop_loss, TP si precio ≤ take_profit
-- Cierra la orden automáticamente con nota `[Auto] Stop loss (precio)` o `[Auto] Take profit (precio)`
-- Se registra en `main.py` vía `start_stop_loss_monitor()` en el evento startup
-
-### Sistema de carteras (portfolio_group)
-- Las órdenes pueden llevar `portfolio_group` (string) para agruparse en una cartera nombrada
-- `GET /demo/carteras` devuelve las carteras con posiciones, P&L, diversity score
-- `POST /demo/close-cartera/{name}` cierra todas las posiciones de una cartera
-- Botón "Añadir posición" dentro de cada cartera (OrderForm con `portfolioGroup` prop)
-- Diversity score penalizado: Shannon entropy + penalizaciones (min 5 posiciones, min 3 sectores, concentración >40%)
-- Compra secuencial (`for...of await`) para evitar race conditions en el balance
-- Precio explícito: se pasa `price` del screener para evitar discrepancias con yfinance
-
-### Panel del profesor (Admin)
-- `GET /api/demo/admin/positions` — requiere rol `professor` o `admin`
-- Devuelve todos los estudiantes con posiciones abiertas, P&L en tiempo real, balance, invertido
-- Frontend: `/admin` — tabla expandible por alumno con detalle de posiciones
-- Solo visible en navbar para profesores (icono Shield, color amber)
-- Auto-refresh cada 60s + botón manual
-- Tarjetas resumen: P&L total clase, P&L medio, total invertido, posiciones abiertas
-
-### Archivos clave
 ```
-pages/Demo.tsx                             ← Página principal, tabla posiciones individuales + carteras, botón cerrar-todo
-pages/Admin.tsx                            ← Panel profesor: posiciones de todos los alumnos con P&L real
-components/demo/OrderForm.tsx              ← Formulario con buscador de tickers, botones Long/Short
-components/demo/TickerSearchInput.tsx       ← Autocompletado con market.search() + debounce
-components/demo/ClosePositionDialog.tsx     ← Modal cierre parcial/total con slider
-components/demo/PortfolioSummaryPanel.tsx   ← Sectores + diversity score (Shannon entropy penalizada)
-components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde, sell rojo, close amber)
+Profesor:   profesor@demo.com / Demo1234
+Alumna:     sara@demo.com    / Demo1234
+Código de invitación: AB_2026
 ```
 
-### Spread y CFD/Futures
-- Spread 0.01% aplicado solo al ask: `buy` (abrir long) y `close short` (cerrar short)
-- No se aplica spread al bid: `sell` (abrir short) y `close long` (cerrar long)
-- CFD: indices (^), materias primas (=F), divisas (=X) operan con margen 5%
-- Forex: precios <10 se multiplican ×10000 (EURUSD 1.16 → 11600, margen 580€)
-- `_is_cfd()`, `_notional_value()`, `_apply_spread()` en demo_service.py
-- `_close_order_internal()`: cierra una orden (completa o parcial) y actualiza balance. Usado por close_position, close_all, stop_loss_monitor
-- `_invested_value()`: margen fijo pagado (no cambia con precio). Para "Invertido"
-- `_position_value()`: margen + PnL no realizado (cambia con precio). Para "Valor total"
-- Frontend: `lib/cfdUtils.ts` replica la lógica CFD del backend
-- Posiciones SHORT muestran precio ask (con spread) como "P. cierre"
+---
 
-### Modelo de datos (Order)
-- Columna `side` (String(10), nullable): "long" | "short"
-- Columna `portfolio_group` (String(100), nullable): nombre de cartera
-- Columna `notes` (String(500), mandatory): diario de operaciones obligatorio
-- Columna `stop_loss` y `take_profit` (Numeric(14,5), nullable)
-- Columna `status`: "open" | "closed" (se marca closed al cerrar la orden)
-- Precisión: `Numeric(14, 5)` en todos los campos de precio
-- Migration automática en `main.py` (ALTER TABLE si columna no existe)
-- Migration de estados: `_migrate_close_order_status()` marca órdenes antiguas como cerradas (FIFO)
+## Arquitectura por dominio
 
-### Schemas actualizados
-- `ClosePositionRequest`: usa `order_id` (no ticker+side)
-- `PositionResponse`: incluye `order_id`, `entry_price` (no avg_price), `take_profit`, `notes`, `created_at`
+### Charts (`pages/Charts.tsx`)
 
-## Arquitectura de Screener
-
-### Backend
-- 11 universos en `market_service.py`: SP500, IBEX35, Tech, Healthcare, Finance, Energy, Industrials, Consumer, Indices, Currencies, Commodities
-- Cache multinivel: `_info_cache` (30min TTL) para yf.Ticker().info, `_screener_cache` (5min TTL) por universo
-- **IMPORTANTE**: resultados vacíos NO se cachean (evita envenenamiento de cache por fallos de yfinance)
-- Filtrado server-side: `_apply_filters()` aplica sector, market_cap, P/E, dividend, price, change%, beta, ROE
-
-### Frontend
+**Archivos**:
 ```
-pages/Screener.tsx                              ← Página completa: filtros + tabla sorteable + simulador + correlación
-components/screener/CorrelationPanel.tsx         ← Panel principal: KPIs, diagnósticos, pares, heatmap, sugerencias
-components/screener/CorrelationHeatmap.tsx       ← Heatmap NxN interactivo con click-to-detail
-hooks/useCorrelation.ts                         ← Mutation hook para POST /api/market/correlation
-lib/correlationInterpretation.ts                ← Diagnósticos pedagógicos, colores, sugerencias
+pages/Charts.tsx                          ← chart de velas + lógica global
+components/charts/OscillatorChart.tsx      ← un chart independiente por oscilador
+components/charts/DrawingToolbar.tsx       ← toolbar lateral de dibujos
+context/drawing-store.ts                  ← Zustand: dibujos, herramientas, selección
+lib/drawings/DrawingManager.ts            ← gestiona primitivas en un chart
+lib/drawings/primitives/*.ts              ← 9 primitivas + PreviewPrimitive + renderers
+lib/patterns.ts                           ← detección de patrones de velas (client-side)
+lib/recentTickers.ts                      ← localStorage de tickers recientes
+lib/chartUtils.ts                         ← CHART_THEME, toChartTime() Madrid TZ, INDICATOR_COLORS
 ```
-- Columnas adaptativas: `isEquity` oculta Market Cap, Sector, P/E, Div%, ROE para índices/divisas/materias primas
-- Scroll horizontal con barra arriba (CSS `rotateX(180deg)` trick)
-- Simulador con cantidades por activo, precios en tiempo real, diversity score penalizado, tips
-- Compra secuencial → navega a Paper Trading automáticamente
-- Precarga del simulador vía `?tickers=A,B,C` (usado por las plantillas de `/clase`): hace `detailedQuote` de cada ticker y los añade al simulador con qty=1, abre el panel y limpia el query param
-- **Análisis de correlación** (aparece con 2+ activos en simulador):
-  - `POST /api/market/correlation` con cache 1h por (tickers_sorted, period)
-  - Matriz NxN de correlación + volatilidades anualizadas + diversification ratio
-  - 4 KPIs: correlación media, diversification ratio, vol. cartera, riesgo evitado
-  - Diagnóstico semafórico (excelente/buena/atención/peligro) con texto pedagógico
-  - Par más y menos correlacionado destacados
-  - Heatmap interactivo: click en celda → detalle del par con interpretación
-  - Selector de período (3mo-5y) para demostrar inestabilidad de correlaciones
-  - Sugerencias accionables según diagnóstico
-  - Tooltips explicativos en cada KPI (icono ℹ con hover)
-  - Intro que diferencia distribución sectorial (variedad de etiquetas) vs correlación (comportamiento real)
-  - Mutation manual (botón "Calcular"), no auto-fetch
 
-## Arquitectura de Backtesting
+**Indicadores (10 en backend)**: SMA, EMA, MACD, RSI, STOCH, BBANDS, ATR, OBV, VWAP, FRACTALS. VWAP oculto en frontend.
 
-### Enums y tipos (schemas/common.py)
+**Patrones de velas (6)**: bullish/bearish engulfing, bullish/bearish hammer, bullish/bearish 2020.
+
+**Herramientas de dibujo (9)**: trendline, arrow, text, Fibonacci (con extensiones 0–423.6%), Elliott, hline, vline, rect, circle. Tienen edición (mover, copiar/pegar Ctrl+C/V, color picker), preview en vivo, dibujo en margen derecho (30 barras vacías para proyecciones futuras), dibujo en gráficos de osciladores.
+
+**Sincronización de osciladores** (no obvio):
+- Cada `OscillatorChart` tiene una **serie spacer invisible** con todos los timestamps del main chart, para alinear `LogicalRange` entre charts con distinto número de datos.
+- Sync usa `setVisibleLogicalRange` bidireccional con un **`isSyncingRef` compartido** para evitar loops.
+- Charts de osciladores se registran en un `Map<string, IChartApi>` del padre vía callbacks.
+- No se usa React state para el sync (evita re-render loops); todo por refs + API directa.
+
+**Patrón de dibujo**:
+- Primitivas implementan `ISeriesPrimitive<Time>` (Primitives API).
+- `DrawingManager.syncDrawings`: compara por referencia → si cambió, destruye y recrea (actualización inmediata de color/posición).
+- `PreviewPrimitive`: dibuja preview durante `subscribeCrosshairMove`.
+- `activeChartId` en store: qué chart recibe clics (`'main' | 'osc-RSI' | ...`).
+- `pointToPixel()` y `timeToX()` en `renderers.ts`: conversión tiempo→píxel con fallback para margen derecho (fechas futuras).
+- `chartMeta` (objeto compartido en `renderers.ts`): `dataLength`, `barIntervalSec`, `lastChartTime`, `isIntraday`. Lo actualiza `Charts.tsx`, lo leen las primitivas.
+- Tiempo de dibujos: `YYYY-MM-DD` para daily, Unix segundos (string) para intraday — `parseTimeSec()` y `toTimeValue()` detectan formato automáticamente.
+
+**Formato inteligente de precios** (`lib/chartUtils.ts`):
+- `fmtPrice(val)`: 5 decimales <10, 4 <100, 2 ≥100.
+- `fmtChange(val, refPrice)`: misma lógica vs precio de referencia.
+- `getPriceFormat(price)` → `{precision, minMove}` para configurar ejes.
+- Aplica en: eje Y, cabecera, valores de indicadores, tablas de posiciones.
+
+**Zona horaria intradiaria**: eje X 1m/5m/15m/1h en Europa/Madrid. `getMadridOffsetSec(date)` con `toLocaleString` (CET/CEST automático). Daily y superiores no se ven afectados.
+
+### Paper Trading (`pages/Demo.tsx`)
+
+**Semántica de órdenes**:
+- `buy` → abre LONG (deduce coste del balance)
+- `sell` → abre SHORT (deduce margen)
+- `close` → cierra por `order_id` (total o parcial)
+- Posiciones independientes: cada orden es su propia posición, sin promediar.
+- Long y short del mismo ticker pueden coexistir.
+- `_close_order_internal()`: lógica única para cerrar (manual, SL, TP, close-all, close-cartera).
+
+**Stop Loss / Take Profit automático**:
+- Hilo daemon `_stop_loss_monitor_loop()` cada 2 minutos. Comprueba TODAS las órdenes abiertas con SL/TP, esté o no conectado el alumno.
+- Long: SL si precio ≤ stop_loss, TP si precio ≥ take_profit.
+- Short: SL si precio ≥ stop_loss, TP si precio ≤ take_profit.
+- Cierra automáticamente con nota `[Auto] Stop loss (precio)` o `[Auto] Take profit (precio)`.
+- Se arranca en `main.py` vía `start_stop_loss_monitor()`.
+
+**Spread y CFD/Futures**:
+- Spread 0.01% solo al ask: `buy` (abrir long) y `close short` (cerrar short). NO al bid.
+- CFD con margen 5%: indices (`^`), materias primas (`=F`), divisas (`=X`).
+- Forex (precio < 10) ×10000 (EURUSD 1.16 → 11600 → margen 580€).
+- Helpers en `demo_service.py`: `_is_cfd()`, `_notional_value()`, `_apply_spread()`.
+- `_invested_value()`: margen fijo pagado (no varía con precio). Para columna "Invertido".
+- `_position_value()`: margen + PnL no realizado (varía con precio). Para "Valor total".
+- Frontend: `lib/cfdUtils.ts` replica la lógica del backend.
+
+**Sistema de carteras (`portfolio_group`)**:
+- `portfolio_group` (string nullable) agrupa órdenes en una cartera nombrada.
+- `GET /demo/carteras`: posiciones, P&L, diversity score por cartera.
+- `POST /demo/close-cartera/{name}`: cierra todas las posiciones de la cartera.
+- Botón "Añadir posición" inline (OrderForm con prop `portfolioGroup`).
+- Diversity score penalizado: Shannon entropy + penalizaciones (mínimo 5 posiciones, mínimo 3 sectores, ninguna >40%).
+- Compra secuencial (`for...of await`): evita race conditions en balance.
+- Precio explícito desde el screener: evita discrepancia con yfinance entre que ves el precio y compras.
+
+**Panel del profesor `/admin`**:
+- `GET /api/demo/admin/positions` — `require_role("professor", "admin")`.
+- Devuelve todos los estudiantes con posiciones abiertas, P&L en vivo, balance, invertido.
+- Auto-refresh cada 60s + botón manual.
+- Tarjetas: P&L total clase, P&L medio, total invertido, posiciones abiertas.
+
+**Modelo `Order`**:
+- `side` (String(10), nullable): `"long" | "short"`
+- `portfolio_group` (String(100), nullable)
+- `notes` (String(500), obligatorio): diario de operaciones
+- `stop_loss`, `take_profit` (Numeric(14,5), nullable)
+- `status`: `"open" | "closed"`
+- Migración automática en `main.py` (ALTER TABLE if not exists).
+- `_migrate_close_order_status()`: marca FIFO como `closed` las órdenes antiguas que ya estaban cerradas vía `type="close"`.
+
+**Schemas relevantes**:
+- `ClosePositionRequest`: usa `order_id` (no `ticker+side`).
+- `PositionResponse`: incluye `order_id`, `entry_price`, `take_profit`, `notes`, `created_at`.
+
+**Archivos**:
+```
+pages/Demo.tsx                              ← tabla de posiciones + carteras + cerrar-todo
+pages/Admin.tsx                             ← panel profesor con P&L en vivo
+components/demo/OrderForm.tsx               ← buscador tickers + botones Long/Short + diario
+components/demo/TickerSearchInput.tsx        ← autocompletado con debounce
+components/demo/ClosePositionDialog.tsx      ← modal cierre parcial/total con slider
+components/demo/PortfolioSummaryPanel.tsx    ← sectores + diversity score
+components/demo/OrderHistory.tsx             ← historial color-coded (buy verde, sell rojo, close amber)
+```
+
+### Screener (`pages/Screener.tsx`)
+
+**Backend** (`market_service.py`):
+- 11 universos: SP500, IBEX35, Tech, Healthcare, Finance, Energy, Industrials, Consumer, Indices, Currencies, Commodities, All.
+- Cache multinivel: `_info_cache` (30 min) para `yf.Ticker().info`, `_screener_cache` (5 min) por universo.
+- **Resultados vacíos NO se cachean** (envenenamiento).
+- Filtrado server-side: `_apply_filters()` con sector, market_cap, P/E, dividend, price, change%, beta, ROE.
+
+**Frontend**:
+```
+pages/Screener.tsx                              ← filtros + tabla sorteable + simulador + correlación
+components/screener/CorrelationPanel.tsx         ← KPIs, diagnósticos, pares, heatmap, sugerencias
+components/screener/CorrelationHeatmap.tsx       ← heatmap NxN interactivo
+hooks/useCorrelation.ts                         ← mutation POST /api/market/correlation
+lib/correlationInterpretation.ts                ← diagnósticos pedagógicos, colores, sugerencias
+```
+
+- Columnas adaptativas: `isEquity` oculta Market Cap/Sector/P/E/Div%/ROE para índices/divisas/materias primas.
+- Scroll horizontal con barra arriba (truco CSS `rotateX(180deg)`).
+- Simulador con cantidades por activo, costes con margen CFD, diversity score penalizado, tips.
+- Compra secuencial → navega a Paper Trading automáticamente.
+- **Precarga vía `?tickers=A,B,C`** (usado por las plantillas de `/clase`): `useEffect` lee el query param, `detailedQuote` de cada ticker, los añade al simulador con `qty=1`, abre el panel y limpia el query param. Banner azul mientras carga, ámbar si fallan algunos. **Auto-dispara el cálculo de correlación** al terminar (vía `autoCalcKey` en `CorrelationPanel`).
+
+**Análisis de correlación** (aparece con ≥2 activos):
+- `POST /api/market/correlation` con cache 1h por `(tickers_sorted, period)`.
+- Matriz NxN + volatilidades anualizadas + diversification ratio.
+- 4 KPIs: correlación media, diversification ratio, vol. cartera, riesgo evitado.
+- Diagnóstico semafórico (excelente/buena/atención/peligro).
+- Par más y menos correlacionado destacados.
+- Heatmap interactivo: click en celda → detalle del par.
+- Selector de período (3mo–5y) para demostrar inestabilidad.
+- Sugerencias accionables según diagnóstico.
+- Tooltips explicativos en cada KPI.
+- Mutation manual (botón "Calcular") por defecto; auto-disparada vía `autoCalcKey` cuando se llega desde `?tickers=`.
+
+### Backtesting
+
+**Enums (`schemas/common.py`)**:
 ```
 ConditionOperandType: indicator, price, volume, value, candle_pattern
-CandlePattern: bullish_engulfing, bearish_engulfing, bullish_hammer, bearish_hammer,
-               bullish_2020, bearish_2020
-StopLossType: fixed (%), fractal (soporte/resistencia dinámico)
-StrategySide: long, short, both
-Comparator: greater_than, less_than, crosses_above, crosses_below, between, outside
+CandlePattern:        bullish_engulfing, bearish_engulfing,
+                      bullish_hammer, bearish_hammer,
+                      bullish_2020, bearish_2020
+StopLossType:         fixed (%), fractal (soporte/resistencia dinámico)
+StrategySide:         long, short, both
+Comparator:           greater_than, less_than, crosses_above,
+                      crosses_below, between, outside
 ```
 
-### Estructura de una estrategia (StrategyRules)
+**Estructura de una estrategia (`StrategyRules`)**:
 ```json
 {
   "entry": { "operator": "AND", "conditions": [...] },
@@ -385,7 +343,7 @@ Comparator: greater_than, less_than, crosses_above, crosses_below, between, outs
 }
 ```
 
-### Condition con offset
+**Condition con offset**:
 ```json
 {
   "left": {"type": "candle_pattern", "pattern": "bullish_hammer"},
@@ -394,64 +352,97 @@ Comparator: greater_than, less_than, crosses_above, crosses_below, between, outs
   "offset": 4
 }
 ```
-`offset: 4` → evalúa la condición 4 velas atrás
+`offset: 4` → evalúa la condición 4 velas atrás.
 
-### BBANDS con selector de banda
+**BBANDS con selector de banda**:
 ```json
 {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "lower|mid|upper"}}
 ```
 
-### Motor de simulación (backtest_service.py)
-- **Warmup**: descarga datos extra antes del start_date según el máximo período de indicador
-- **Long/Short**: `side` en StrategyRules determina la dirección
-  - Long: PnL = (exit - entry) × qty; stop si precio BAJA
-  - Short: PnL = (entry - exit) × qty; stop si precio SUBE
-- **Fractal stop**: Long usa fractal_down (soporte), Short usa fractal_up (resistencia)
-- **Risk-based sizing**: `max_risk_pct` limita pérdida por trade como % del capital
-- **Timeframes**: interval configurable (1m, 5m, 15m, 1h, 4h, 1d, 1wk)
-- **Patrones de velas**: 6 patrones detectados con OHLC math nativo (sin pandas-ta)
-- **Modo both**: señal entrada → Long, señal salida → Short, cada uno se cierra independientemente
-- **Inline rules**: `BacktestRunRequest` acepta `rules` directamente (sin crear estrategia temporal)
-- **Buscador de tickers**: autocompletado con `TickerSearchInput` reutilizado de Demo
+**Motor (`backtest_service.py`)**:
+- **Warmup**: descarga datos extra antes de `start_date` según el máximo período de indicador.
+- **Long/Short** (`side`):
+  - Long: `PnL = (exit - entry) × qty`; stop si BAJA.
+  - Short: `PnL = (entry - exit) × qty`; stop si SUBE.
+- **Fractal stop**: long usa fractal_down (soporte); short usa fractal_up (resistencia).
+- **Risk-based sizing**: `max_risk_pct` limita pérdida por trade.
+- **Timeframes**: 1m, 5m, 15m, 1h, 4h, 1d, 1wk.
+- **Patrones de velas**: 6 patrones detectados con OHLC math nativo.
+- **Modo `both`**: señal entrada → Long, señal salida → Short, independientes.
+- **Inline rules**: `BacktestRunRequest` acepta `rules` directamente (sin crear estrategia temporal).
 
-### Archivos clave
+**Frontend**:
 ```
-components/backtest/StrategyBuilder.tsx  ← Constructor visual completo
-pages/Backtest.tsx                       ← Página principal, inline editor, resultados
-backend/app/services/backtest_service.py ← Motor: templates, simulación, métricas
-backend/app/schemas/backtest.py          ← Schemas Pydantic para reglas y resultados
-backend/app/schemas/common.py           ← Enums: CandlePattern, StopLossType, StrategySide
+components/backtest/StrategyBuilder.tsx  ← constructor visual completo
+pages/Backtest.tsx                       ← inline editor + resultados
+backend/app/services/backtest_service.py ← motor + métricas
+backend/app/schemas/backtest.py          ← schemas Pydantic
+backend/app/schemas/common.py            ← enums
 ```
 
-## Concurrencia y Rate Limiting (Yahoo Finance)
-- Yahoo Finance API gratuita: ~15 minutos de retraso vs mercado real
-- **Request coalescing** (single-flight): `_coalesced_call()` con `concurrent.futures.Future` deduplica requests
-- **Cache backend**: quotes 5min (`_QUOTE_TTL`), history 10min (`_HISTORY_TTL`), screener 5min
-- **Stale cache fallback**: si Yahoo falla, devuelve datos expirados en vez de error
-- **Background cache warmer**: thread que pre-calienta tickers activos con `yf.download()` batch
-- **1 worker** (no 4): evita 4 caches separados que multiplican llamadas a Yahoo
-- **Botón refrescar**: `?force=true` invalida cache backend y pide dato fresco
-- **Frontend**: auto-refresh cada 2min (quote), gráfico solo bajo demanda
+### Lección interactiva (`pages/Clase.jsx` + `pages/AdminClase.tsx`)
 
-## Supabase Storage (PDFs del Tutor)
-- Bucket: `uploads` (privado)
-- `backend/app/services/storage.py`: upload/download/delete via REST API (httpx)
-- Upload: guarda en Supabase + copia local (necesaria para extracción de texto)
-- Download: busca local primero, si no existe baja de Supabase y cachea
-- `file_path` en BD: solo nombre de archivo (ej: `uuid.pdf`), no ruta absoluta
-- Compatibilidad: resuelve rutas absolutas legacy extrayendo `p.name`
-- Config: `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` en `.env`
-- Sin estas keys: funciona solo con filesystem local (fallback)
+**Contenido**: lección de diversificación y gestión de carteras (Bloque 3, master). 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas. 3 secciones: Diversificación, Gestión monetaria, Gestión de carteras. Simuladores con Recharts (tamaño posición, esperanza matemática, drawdown, martingala, asset allocation, beta).
 
-## Comandos útiles
+**Persistencia híbrida**:
+- **localStorage** (prefijo `leccion3:`) para latencia cero en cada cambio.
+- **Supabase** (tabla `lesson_responses`, JSON blob): único registro por `(user_id, lesson_id)`.
+- 5 tipos de claves bajo `leccion3:`:
+  - `reto:{id}` → string (respuesta de texto)
+  - `reto-hecho:{id}` → bool
+  - `quiz:{id}` → number | null (índice opción)
+  - `check:{id}` → bool
+  - `cuaderno:sesion3` → string libre
+
+**Hook `useStudentLessonSync(lessonId)`**:
+- Hidratación en mount: `GET /api/lesson/{id}/responses` → vuelca remoto a localStorage → render (loader breve). Si no hay token, modo offline (solo localStorage).
+- Auto-save: cada `useStoredValue.save()` notifica un bus interno; PUT con **debounce 1500 ms** + **coalescing** (in-flight + pending) para evitar pisar requests.
+- Badge fijo arriba-derecha con estado: `idle | loading | saving | saved | error | offline`.
+
+**Plantillas → Screener**: cada plantilla tiene un botón "Probar en el Screener" que navega a `/screener?tickers=AAPL,MSFT,...`. El Screener precarga el simulador y dispara el cálculo de correlación automáticamente.
+
+**Laboratorio de correlación**: bajo el gráfico, narrativa en vivo que cambia según ρ (concentrada / parcial / razonable / bien diversificada / cobertura) + acción condicional ("si bajaras a 0, ahorrarías X puntos"). Al lado de los sliders hay tabla de referencia de volatilidades reales (TLT 12%, SPY 16%, acción típica 22-28%, Tesla/Nvidia 40-50%, cripto 70%+).
+
+**Estilo**: JSX autocontenido, fuentes Fraunces+Manrope, tema cálido académico. NO usa Tailwind.
+
+**Panel profesor `/admin/clase`**:
+- Lista alumnos con contadores (retos hechos / quizzes contestados / checkpoints).
+- Filas expandibles: cuaderno, retos (texto + estado hecho), quizzes (opción), checkpoints.
+- Botón "Exportar CSV" (todas las claves de todos los alumnos).
+- Auto-refresh 30s.
+- Solo `role=professor` (`require_role`).
+- Auto-creación de la tabla en Supabase la primera vez que arranca el backend.
+
+### Tutor IA (RAG)
+
+**Almacenamiento de PDFs** (Supabase Storage):
+- Bucket privado `uploads`.
+- `backend/app/services/storage.py`: upload/download/delete vía REST API (httpx).
+- Upload: guarda en Supabase + copia local (necesaria para extracción de texto).
+- Download: busca local primero; si no existe, baja de Supabase y cachea.
+- `file_path` en BD: solo nombre de archivo (`uuid.pdf`), no ruta absoluta.
+- Compatibilidad: rutas absolutas legacy se resuelven extrayendo `p.name`.
+- Config: `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` en `.env`. Sin estas keys: filesystem local como fallback.
+
+## Concurrencia y rate limiting (Yahoo Finance)
+
+- Yahoo Finance API gratuita: ~15 minutos de retraso vs mercado.
+- **Request coalescing single-flight**: `_coalesced_call()` con `concurrent.futures.Future` deduplica requests concurrentes al mismo recurso.
+- **Caches**: quotes 5 min (`_QUOTE_TTL`), history 10 min (`_HISTORY_TTL`), screener 5 min, info 30 min.
+- **Stale cache fallback**: si Yahoo falla, devuelve datos expirados antes que error.
+- **Cache warmer en background**: thread que pre-calienta tickers activos con `yf.download()` batch.
+- **1 worker uvicorn** (no 4): comparten cache.
+- **Botón "refrescar" en Charts**: `?force=true` invalida cache y pide dato fresco.
+- **Frontend**: auto-refresh cada 2 min (quote), gráfico solo bajo demanda.
+
+## Despliegue (VPS IONOS)
+
 ```bash
-# Backend
-cd backend && pip install -e ".[dev]"
-uvicorn app.main:app --reload
-pytest tests/
-
-# Frontend
-cd frontend && npm install
-npm run dev
-npm run build
+ssh root@212.227.134.30 "cd /opt/analisis-bursatil && git pull origin main && cd frontend && npm run build && systemctl restart analisis-bursatil"
 ```
+
+- Ubuntu 24.04, IP `212.227.134.30`, dominio `plataforma-trading.sarastem.com`.
+- Servicio systemd: `analisis-bursatil` (1 worker uvicorn).
+- Nginx: `/api/` → uvicorn :8000, SPA fallback para frontend.
+- HTTPS: Let's Encrypt con certbot.
+- Logs: `journalctl -u analisis-bursatil -f`.
