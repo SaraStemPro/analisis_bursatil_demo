@@ -4251,7 +4251,7 @@ const IndiceStickyCompacto = () => {
     <div
       style={{
         position: "fixed",
-        top: 0,
+        top: 56,
         left: 0,
         right: 0,
         zIndex: 40,
@@ -5543,9 +5543,9 @@ export default function Clase() {
       <div
         style={{
           position: "fixed",
-          top: 14,
-          right: 18,
-          zIndex: 50,
+          bottom: 24,
+          left: 24,
+          zIndex: 30,
           background: C.card,
           border: `1px solid ${C.rule}`,
           padding: "6px 12px",
