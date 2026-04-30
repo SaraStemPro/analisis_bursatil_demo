@@ -1717,6 +1717,49 @@ const CorrelationLab = () => {
           </Label>
           <Slider value={volB} onChange={setVolB} min={5} max={50} />
 
+          <div
+            style={{
+              margin: "10px 0 18px",
+              padding: "12px 14px",
+              background: C.paperDark,
+              border: `1px solid ${C.rule}`,
+              fontFamily: fontMono,
+              fontSize: 11,
+              color: C.inkSoft,
+              lineHeight: 1.6,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: C.muted,
+                marginBottom: 6,
+              }}
+            >
+              Referencias del mundo real
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 2, columnGap: 12 }}>
+              <span>Bonos del Tesoro USA (TLT)</span><span style={{ fontWeight: 700, color: C.green }}>~12%</span>
+              <span>S&amp;P 500 (SPY)</span><span style={{ fontWeight: 700, color: C.green }}>~16%</span>
+              <span>Acción típica (IBE, MSFT)</span><span style={{ fontWeight: 700, color: C.blue }}>22–28%</span>
+              <span>Tesla, Nvidia</span><span style={{ fontWeight: 700, color: C.gold }}>40–50%</span>
+              <span>Criptomonedas</span><span style={{ fontWeight: 700, color: C.red }}>70%+</span>
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                fontStyle: "italic",
+                color: C.muted,
+                marginTop: 8,
+                lineHeight: 1.4,
+              }}
+            >
+              El slider llega hasta 50% a propósito: lo que está más allá no se diversifica con dos activos, se gestiona con tamaño de posición.
+            </div>
+          </div>
+
           <Label value={`${wA}% / ${wB}%`} hint="Peso de A vs B">
             Pesos
           </Label>
