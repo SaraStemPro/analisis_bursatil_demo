@@ -10,11 +10,11 @@ export interface Diagnosis {
   bgColor: string
 }
 
-const VERDICT_STYLES: Record<Verdict, { color: string; bgColor: string; label: string }> = {
-  excellent: { color: 'text-emerald-400', bgColor: 'bg-emerald-900/30 border-emerald-700', label: 'Excelente' },
-  good:      { color: 'text-blue-400',    bgColor: 'bg-blue-900/30 border-blue-700',       label: 'Buena' },
-  warning:   { color: 'text-amber-400',   bgColor: 'bg-amber-900/30 border-amber-700',     label: 'Atención' },
-  danger:    { color: 'text-red-400',     bgColor: 'bg-red-900/30 border-red-700',         label: 'Peligro' },
+const VERDICT_STYLES: Record<Verdict, { verdict: Verdict; color: string; bgColor: string; label: string }> = {
+  excellent: { verdict: 'excellent', color: 'text-emerald-400', bgColor: 'bg-emerald-900/30 border-emerald-700', label: 'Excelente' },
+  good:      { verdict: 'good',      color: 'text-blue-400',    bgColor: 'bg-blue-900/30 border-blue-700',       label: 'Buena' },
+  warning:   { verdict: 'warning',   color: 'text-amber-400',   bgColor: 'bg-amber-900/30 border-amber-700',     label: 'Atención' },
+  danger:    { verdict: 'danger',    color: 'text-red-400',     bgColor: 'bg-red-900/30 border-red-700',         label: 'Peligro' },
 }
 
 export function diagnoseAvgCorrelation(avg: number): Diagnosis {
