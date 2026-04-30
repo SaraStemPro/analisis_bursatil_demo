@@ -452,11 +452,12 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
     universe_name = filters.universe
     tickers = UNIVERSES.get(universe_name, SP500_TICKERS)
 
-    # Check cache for the universe
+    # Check cache for the universe (fresh)
     now = time.time()
     cache_key = universe_name
-    if cache_key in _screener_cache:
-        cached_time, cached_data = _screener_cache[cache_key]
+    cached_entry = _screener_cache.get(cache_key)
+    if cached_entry:
+        cached_time, cached_data = cached_entry
         if now - cached_time < _SCREENER_TTL:
             filtered = _apply_filters(cached_data, filters)
             return ScreenerResponse(
@@ -488,6 +489,19 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
                 stock.return_1y = r.get("ret_1y")
                 stock.return_3y = r.get("ret_3y")
                 stock.max_drawdown = r.get("mdd_3y")
+
+    # Stale fallback: si Yahoo falló y no hemos podido construir nada,
+    # devolver el último cache aunque haya caducado (mejor datos viejos
+    # que pantalla vacía durante una clase).
+    if not stocks and cached_entry:
+        cached_data = cached_entry[1]
+        filtered = _apply_filters(cached_data, filters)
+        return ScreenerResponse(
+            universe=universe_name,
+            total=len(cached_data),
+            filtered=len(filtered),
+            stocks=filtered,
+        )
 
     # Only cache if we got results — avoid poisoning cache with empty data
     if stocks:
@@ -615,8 +629,9 @@ def _apply_filters(
 def _get_cached_info(ticker: str) -> dict:
     """Get yfinance .info with caching. Empty results are NOT cached."""
     now = time.time()
-    if ticker in _info_cache:
-        cached_time, cached_info = _info_cache[ticker]
+    cached_entry = _info_cache.get(ticker)
+    if cached_entry:
+        cached_time, cached_info = cached_entry
         if now - cached_time < _INFO_TTL:
             return cached_info
 
@@ -628,6 +643,11 @@ def _get_cached_info(ticker: str) -> dict:
     # Only cache non-empty results to avoid poisoning cache with failures
     if info and info.get("regularMarketPrice"):
         _info_cache[ticker] = (now, info)
+        return info
+
+    # Fallback stale: si Yahoo falla pero teníamos info caducada, mejor eso que vacío
+    if cached_entry:
+        return cached_entry[1]
     return info
 
 

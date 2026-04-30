@@ -36,6 +36,7 @@ Lecciones aprendidas a base de bugs. Antes de "limpiar" cualquiera de estas cosa
 
 - **No promediar precios** en posiciones del mismo ticker. Cada orden es una posición independiente. Cerrar es por `order_id`, nunca por `(ticker, side)`.
 - **El cache de yfinance no debe envenenarse con vacíos**: si el screener falla, NO cachear `[]`. Si lo cacheas, te quedas 5 min con resultados rotos.
+- **Stale fallback en info/screener**: si Yahoo rate-limita y `.info` falla para todos los tickers, devolver cache expirada antes que pantalla vacía. Aplicado en `_get_cached_info` y `get_screener`. Mejor datos de hace 30 min que un "0 de 0" en clase.
 - **1 solo worker de uvicorn**, no 4. 4 workers crean 4 caches independientes y multiplican x4 las llamadas a Yahoo (rate limit).
 - **Compra de cartera secuencial** (`for...of await`), no paralela: si paralela, se pisan al deducir del balance.
 - **Spread asimétrico**: 0.01% solo al ask (`buy` y `close short`). NUNCA al bid.
