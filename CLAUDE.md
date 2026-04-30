@@ -148,6 +148,14 @@ backend/app/schemas/
      - Ejecución de plantillas sin crear estrategias temporales (rules inline)
      - Tabla de operaciones muestra columna "Lado" (Long/Short) y "Cierre" (Señal/Stop/TP)
      - Modo "Long + Short" (both): señal entrada → Long, señal salida → Short, independientes
+   - Clase interactiva (`/clase`):
+     - Lección de diversificación y gestión de carteras (Bloque 3)
+     - 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas copiables
+     - 3 bloques: Diversificación, Gestión monetaria, Gestión de carteras
+     - Simuladores interactivos con recharts (tamaño posición, esperanza matemática, drawdown, martingala, asset allocation, beta)
+     - Persistencia en localStorage (prefijo `leccion3:`)
+     - Componente JSX autocontenido con estilo propio (tema cálido/académico, fuentes Fraunces+Manrope)
+     - Icono GraduationCap en navbar
 9. 🔄 Pulido (UI/UX, deploy)
 
 ## Indicadores — 10 en catálogo backend

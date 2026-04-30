@@ -12,6 +12,7 @@ import Backtest from './pages/Backtest'
 import Tutor from './pages/Tutor'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
+import Clase from './pages/Clase'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/tutor" element={<Tutor />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/clase" element={<Clase />} />
         </Route>
       </Routes>
     </BrowserRouter>

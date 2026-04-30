@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../context/auth-store'
-import { BarChart3, BookOpen, FlaskConical, LineChart, LogOut, MessageCircle, Search, Shield, User } from 'lucide-react'
+import { BarChart3, BookOpen, FlaskConical, GraduationCap, LineChart, LogOut, MessageCircle, Search, Shield, User } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/demo', label: 'Paper Trading', icon: BookOpen },
   { to: '/backtest', label: 'Backtesting', icon: FlaskConical },
   { to: '/tutor', label: 'Tutor IA', icon: MessageCircle },
+  { to: '/clase', label: 'Clase', icon: GraduationCap },
 ]
 
 export default function Navbar() {
