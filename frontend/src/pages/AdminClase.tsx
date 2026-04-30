@@ -9,13 +9,21 @@ type Bucket = {
   retos: { id: string; hecho: boolean; respuesta: string }[]
   quizzes: { id: string; opcion: number | null }[]
   checks: { id: string; marcado: boolean }[]
+  riesgos: { id: string; expuesto: boolean }[]
+  planEventos: { id: string; respuesta: string }[]
+  abiertas: { id: string; respuesta: string }[]
   cuaderno: string
+  otros: { key: string; valor: string }[]
 }
 
 function bucketize(data: Record<string, unknown>): Bucket {
   const retosMap: Record<string, { hecho: boolean; respuesta: string }> = {}
   const quizzes: { id: string; opcion: number | null }[] = []
   const checks: { id: string; marcado: boolean }[] = []
+  const riesgos: { id: string; expuesto: boolean }[] = []
+  const planEventos: { id: string; respuesta: string }[] = []
+  const abiertas: { id: string; respuesta: string }[] = []
+  const otros: { key: string; valor: string }[] = []
   let cuaderno = ''
 
   for (const [k, v] of Object.entries(data || {})) {
@@ -32,8 +40,16 @@ function bucketize(data: Record<string, unknown>): Bucket {
       quizzes.push({ id: k.slice(5), opcion })
     } else if (k.startsWith('check:')) {
       checks.push({ id: k.slice(6), marcado: Boolean(v) })
+    } else if (k.startsWith('riesgo-expuesto:')) {
+      riesgos.push({ id: k.slice(16), expuesto: Boolean(v) })
+    } else if (k.startsWith('plan-evento:')) {
+      planEventos.push({ id: k.slice(12), respuesta: String(v ?? '') })
+    } else if (k.startsWith('abierta:')) {
+      abiertas.push({ id: k.slice(8), respuesta: String(v ?? '') })
     } else if (k === 'cuaderno:sesion3' || k.startsWith('cuaderno:')) {
       cuaderno = String(v ?? '')
+    } else {
+      otros.push({ key: k, valor: typeof v === 'string' ? v : JSON.stringify(v) })
     }
   }
 
@@ -45,7 +61,11 @@ function bucketize(data: Record<string, unknown>): Bucket {
     retos,
     quizzes: quizzes.sort((a, b) => a.id.localeCompare(b.id)),
     checks: checks.sort((a, b) => a.id.localeCompare(b.id)),
+    riesgos: riesgos.sort((a, b) => a.id.localeCompare(b.id)),
+    planEventos: planEventos.sort((a, b) => a.id.localeCompare(b.id)),
+    abiertas: abiertas.sort((a, b) => a.id.localeCompare(b.id)),
     cuaderno,
+    otros: otros.sort((a, b) => a.key.localeCompare(b.key)),
   }
 }
 
@@ -54,7 +74,14 @@ function progress(b: Bucket) {
   const retosConRespuesta = b.retos.filter(r => r.respuesta.trim().length > 0).length
   const quizzesContestados = b.quizzes.filter(q => q.opcion !== null).length
   const checksMarcados = b.checks.filter(c => c.marcado).length
-  return { retosHechos, retosConRespuesta, quizzesContestados, checksMarcados }
+  const riesgosMarcados = b.riesgos.filter(r => r.expuesto).length
+  const planEventosRellenos = b.planEventos.filter(p => p.respuesta.trim().length > 0).length
+  const abiertasRellenas = b.abiertas.filter(a => a.respuesta.trim().length > 0).length
+  return {
+    retosHechos, retosConRespuesta,
+    quizzesContestados, checksMarcados,
+    riesgosMarcados, planEventosRellenos, abiertasRellenas,
+  }
 }
 
 function exportCsv(students: StudentLessonResponse[]) {
@@ -68,6 +95,9 @@ function exportCsv(students: StudentLessonResponse[]) {
       else if (k.startsWith('reto-hecho:')) { tipo = 'reto_hecho'; id = k.slice(11) }
       else if (k.startsWith('quiz:')) { tipo = 'quiz'; id = k.slice(5) }
       else if (k.startsWith('check:')) { tipo = 'checkpoint'; id = k.slice(6) }
+      else if (k.startsWith('riesgo-expuesto:')) { tipo = 'riesgo_expuesto'; id = k.slice(16) }
+      else if (k.startsWith('plan-evento:')) { tipo = 'plan_evento'; id = k.slice(12) }
+      else if (k.startsWith('abierta:')) { tipo = 'pregunta_abierta'; id = k.slice(8) }
       else if (k.startsWith('cuaderno:')) { tipo = 'cuaderno'; id = k.slice(9) }
       const valor = typeof v === 'string' ? v : JSON.stringify(v)
       rows.push([
@@ -173,10 +203,19 @@ export default function AdminClase() {
                   <span className="text-xs text-slate-500 italic">sin respuestas todavía</span>
                 )}
                 {hasActivity && (
-                  <div className="flex gap-3 text-xs text-slate-400 flex-shrink-0">
+                  <div className="flex gap-3 text-xs text-slate-400 flex-shrink-0 flex-wrap justify-end">
                     <span>Retos: <span className="text-white font-medium">{p.retosConRespuesta}/{b.retos.length || '—'}</span></span>
-                    <span>Quizzes: <span className="text-white font-medium">{p.quizzesContestados}/{b.quizzes.length || '—'}</span></span>
+                    <span>Quiz: <span className="text-white font-medium">{p.quizzesContestados}/{b.quizzes.length || '—'}</span></span>
                     <span>Checks: <span className="text-white font-medium">{p.checksMarcados}/{b.checks.length || '—'}</span></span>
+                    {b.riesgos.length > 0 && (
+                      <span>Riesgos: <span className="text-white font-medium">{p.riesgosMarcados}/{b.riesgos.length}</span></span>
+                    )}
+                    {b.planEventos.length > 0 && (
+                      <span>Plan: <span className="text-white font-medium">{p.planEventosRellenos}/{b.planEventos.length}</span></span>
+                    )}
+                    {b.abiertas.length > 0 && (
+                      <span>Abiertas: <span className="text-white font-medium">{p.abiertasRellenas}/{b.abiertas.length}</span></span>
+                    )}
                   </div>
                 )}
                 <div className="text-xs text-slate-500 flex-shrink-0 w-32 text-right">
@@ -250,6 +289,77 @@ export default function AdminClase() {
                           >
                             {c.marcado ? '✓' : '·'} {c.id}
                           </span>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {b.riesgos.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold text-rose-300 mb-2">Riesgos auto-identificados</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {b.riesgos.map(r => (
+                          <span
+                            key={r.id}
+                            className={
+                              'px-2 py-1 rounded text-xs font-mono ' +
+                              (r.expuesto
+                                ? 'bg-rose-900/40 text-rose-300 border border-rose-700'
+                                : 'bg-slate-800 text-slate-500 border border-slate-700')
+                            }
+                          >
+                            {r.expuesto ? '✓ expuesto' : '· no marcado'} · {r.id}
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {b.planEventos.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold text-amber-300 mb-2">Plan de eventos extremos</h3>
+                      <div className="space-y-2">
+                        {b.planEventos.map(p => (
+                          <div key={p.id} className="bg-slate-950/60 border border-slate-700 rounded p-3">
+                            <div className="font-mono text-xs text-slate-400 mb-1">Escenario {p.id}</div>
+                            {p.respuesta.trim() ? (
+                              <pre className="whitespace-pre-wrap text-sm text-slate-200 font-sans">{p.respuesta}</pre>
+                            ) : (
+                              <div className="text-xs text-slate-500 italic">Sin plan escrito</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {b.abiertas.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold text-cyan-300 mb-2">Preguntas abiertas</h3>
+                      <div className="space-y-2">
+                        {b.abiertas.map(a => (
+                          <div key={a.id} className="bg-slate-950/60 border border-slate-700 rounded p-3">
+                            <div className="font-mono text-xs text-slate-400 mb-1">{a.id}</div>
+                            {a.respuesta.trim() ? (
+                              <pre className="whitespace-pre-wrap text-sm text-slate-200 font-sans">{a.respuesta}</pre>
+                            ) : (
+                              <div className="text-xs text-slate-500 italic">Sin respuesta</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {b.otros.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold text-slate-400 mb-2">Otros datos</h3>
+                      <div className="space-y-1 font-mono text-xs">
+                        {b.otros.map(o => (
+                          <div key={o.key} className="bg-slate-950/60 border border-slate-700 rounded p-2 flex gap-3">
+                            <span className="text-slate-400 min-w-[140px]">{o.key}</span>
+                            <span className="text-slate-200 break-all">{o.valor}</span>
+                          </div>
                         ))}
                       </div>
                     </section>

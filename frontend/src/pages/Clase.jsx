@@ -3873,7 +3873,8 @@ const TOC = [
       { n: "1.1", titulo: "Niveles de diversificación", anchor: "sub-niveles" },
       { n: "1.2", titulo: "El motor matemático: la correlación", anchor: "sub-correlacion" },
       { n: "1.3", titulo: "Tres casos reales que enseñan", anchor: "sub-casos" },
-      { n: "1.4", titulo: "Plantillas de cartera", anchor: "sub-plantillas" },
+      { n: "1.4", titulo: "Más allá del sector: factores", anchor: "sub-factores" },
+      { n: "1.5", titulo: "Plantillas de cartera", anchor: "sub-plantillas" },
     ],
   },
   {
@@ -3893,15 +3894,23 @@ const TOC = [
     anchor: "seccion-carteras",
     sub: [
       { n: "3.1", titulo: "Asset Allocation", anchor: "sub-allocation" },
-      { n: "3.2", titulo: "Riesgo relativo · Beta y Alfa", anchor: "sub-beta" },
-      { n: "3.3", titulo: "Métricas clave", anchor: "sub-metricas" },
-      { n: "3.4", titulo: "Los 7 riesgos ocultos", anchor: "sub-riesgos" },
+      { n: "3.2", titulo: "Cómo asignar los pesos", anchor: "sub-pesos" },
+      { n: "3.3", titulo: "Riesgo relativo · Beta y Alfa", anchor: "sub-beta" },
+      { n: "3.4", titulo: "Rebalanceo", anchor: "sub-rebalanceo" },
+      { n: "3.5", titulo: "Métricas clave", anchor: "sub-metricas" },
+      { n: "3.6", titulo: "Plan de eventos extremos", anchor: "sub-eventos" },
+      { n: "3.7", titulo: "Los 7 riesgos ocultos", anchor: "sub-riesgos" },
     ],
   },
   {
     n: "04",
     titulo: "Principios irrenunciables",
     anchor: "seccion-principios",
+  },
+  {
+    n: "05",
+    titulo: "Evaluación final · 60 preguntas",
+    anchor: "seccion-evaluacion",
   },
 ];
 
@@ -4050,6 +4059,287 @@ const BotonVolverIndice = () => {
     </button>
   );
 };
+
+// ════════════════════════════════════════════════════════════
+//  DIVERSIFICACIÓN POR FACTORES
+// ════════════════════════════════════════════════════════════
+
+const FACTORES = [
+  {
+    n: "01",
+    nombre: "Crecimiento (Growth)",
+    def: "Empresas con altas tasas de crecimiento esperado. P/E altos, poco dividendo.",
+    ejemplos: "NVDA, TSLA, NFLX, ARKK, ETFs Nasdaq",
+    sufre: "Cuando suben los tipos de interés (sus beneficios futuros valen menos hoy)",
+    color: C.red,
+  },
+  {
+    n: "02",
+    nombre: "Valor (Value)",
+    def: "Empresas baratas según métricas fundamentales (P/E bajo, alto dividendo).",
+    ejemplos: "BRK-B, JPM, XOM, sectores tradicionales",
+    sufre: "En entornos growth o cuando 'lo barato sigue barato' por motivos estructurales",
+    color: C.blue,
+  },
+  {
+    n: "03",
+    nombre: "Tamaño (Size)",
+    def: "Pequeñas (small caps) frente a grandes. Históricamente las pequeñas rinden más a largo plazo, con más volatilidad.",
+    ejemplos: "Russell 2000 (small) vs S&P 500 (large)",
+    sufre: "En crisis de liquidez (los pequeños no pueden venderse fácilmente)",
+    color: C.gold,
+  },
+  {
+    n: "04",
+    nombre: "Calidad (Quality)",
+    def: "Balances sólidos, alta rentabilidad sostenida y baja deuda.",
+    ejemplos: "MSFT, JNJ, KO, PG",
+    sufre: "En rallies muy especulativos donde se prefiere riesgo sobre solidez",
+    color: C.green,
+  },
+  {
+    n: "05",
+    nombre: "Momentum",
+    def: "Activos que más han subido en los últimos 6-12 meses. Apuesta a que las tendencias continúan.",
+    ejemplos: "Tickers en máximos de 52 semanas",
+    sufre: "En reversiones bruscas (factor con mayores drawdowns)",
+    color: C.red,
+  },
+  {
+    n: "06",
+    nombre: "Duración (en bonos)",
+    def: "Sensibilidad de un bono a cambios en los tipos. Bonos largos = alta duración.",
+    ejemplos: "TLT (USA 20+ años) vs BIL (T-bills 1-3 meses)",
+    sufre: "Cuando suben los tipos de interés (precio del bono baja)",
+    color: C.blue,
+  },
+  {
+    n: "07",
+    nombre: "Sensibilidad a tipos",
+    def: "Aplica también a acciones: tech/growth + REITs + utilities tienden a sufrir cuando suben los tipos.",
+    ejemplos: "Tech (NVDA) + REITs (PLD, AMT) + Utilities (NEE, DUK)",
+    sufre: "Subidas rápidas de tipos como en 2022",
+    color: C.gold,
+  },
+];
+
+const DiversificacionFactores = () => (
+  <Card accent={C.blue}>
+    <Tag color={C.blue}>Más allá del sector</Tag>
+    <h3
+      style={{
+        fontFamily: fontDisplay,
+        fontSize: 24,
+        fontWeight: 500,
+        margin: "12px 0 14px",
+        color: C.ink,
+        letterSpacing: "-0.02em",
+      }}
+    >
+      Los 7 factores que mueven los activos
+    </h3>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+        gap: 14,
+        marginBottom: 18,
+      }}
+    >
+      {FACTORES.map((f) => (
+        <div
+          key={f.n}
+          style={{
+            border: `1px solid ${C.rule}`,
+            borderTop: `3px solid ${f.color}`,
+            padding: 14,
+            background: C.card,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span
+              style={{
+                fontFamily: fontDisplay,
+                fontSize: 26,
+                fontWeight: 900,
+                fontStyle: "italic",
+                color: f.color,
+                lineHeight: 1,
+              }}
+            >
+              {f.n}
+            </span>
+            <span
+              style={{
+                fontFamily: fontDisplay,
+                fontSize: 16,
+                fontWeight: 500,
+                color: C.ink,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {f.nombre}
+            </span>
+          </div>
+          <div style={{ fontFamily: fontBody, fontSize: 12.5, lineHeight: 1.5, color: C.inkSoft, marginBottom: 8 }}>
+            {f.def}
+          </div>
+          <div style={{ fontFamily: fontMono, fontSize: 10.5, color: C.muted, marginBottom: 4, letterSpacing: "0.05em" }}>
+            EJEMPLOS · {f.ejemplos}
+          </div>
+          <div style={{ fontFamily: fontMono, fontSize: 10.5, color: f.color, fontStyle: "italic" }}>
+            ↳ Sufre {f.sufre.toLowerCase()}
+          </div>
+        </div>
+      ))}
+    </div>
+    <div
+      style={{
+        background: C.paperDark,
+        borderLeft: `4px solid ${C.red}`,
+        padding: "14px 16px",
+        fontFamily: fontDisplay,
+        fontSize: 14,
+        lineHeight: 1.55,
+        color: C.ink,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: fontMono,
+          fontSize: 10,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: C.muted,
+          marginBottom: 6,
+        }}
+      >
+        Caso real · 2022
+      </div>
+      Una cartera con NVDA (tech) + PLD (REIT) + NEE (utility) parece muy diversificada por sectores. Pero los tres comparten alta <strong>sensibilidad a tipos</strong>. En 2022, cuando la Fed subió los tipos del 0% al 5%, los tres cayeron entre 30% y 45%. La diversificación sectorial NO funcionó porque el factor era el mismo.
+    </div>
+  </Card>
+);
+
+// ════════════════════════════════════════════════════════════
+//  PLAN DE EVENTOS EXTREMOS
+// ════════════════════════════════════════════════════════════
+
+const ESCENARIOS_EVENTOS = [
+  {
+    id: "1",
+    titulo: "Drawdown del 15% desde mi máximo",
+    contexto: "Racha de pérdidas o corrección de mercado",
+    placeholder: "Ej: reducir tamaño de posición a la mitad, no abrir nuevas, revisar últimas 10 ops...",
+  },
+  {
+    id: "2",
+    titulo: "Volatilidad se duplica vs mes anterior",
+    contexto: "Crisis política, eventos macro",
+    placeholder: "Ej: cerrar posiciones más volátiles, aumentar liquidez al 20%...",
+  },
+  {
+    id: "3",
+    titulo: "Correlaciones convergen a 0,9+",
+    contexto: "Evento de pánico, 'todo cae junto'",
+    placeholder: "Ej: cerrar posiciones del mismo factor, mantener solo las de menor correlación...",
+  },
+  {
+    id: "4",
+    titulo: "Una posición pesa ya >25% del total",
+    contexto: "Una acción que ha multiplicado mucho",
+    placeholder: "Ej: vender la mitad, fijar trailing stop, no añadir más...",
+  },
+  {
+    id: "5",
+    titulo: "Pierdo 5% en una sola sesión",
+    contexto: "Gap, noticia inesperada",
+    placeholder: "Ej: parar 24h, no vender por pánico, revisar si la tesis sigue válida...",
+  },
+];
+
+const PlanEventoFila = ({ escenario }) => {
+  const [resp, setResp] = useStoredValue(`plan-evento:${escenario.id}`, "");
+  const tieneRespuesta = resp.trim().length > 0;
+  return (
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${tieneRespuesta ? C.green : C.rule}`,
+        borderLeft: `4px solid ${tieneRespuesta ? C.green : C.red}`,
+        padding: 16,
+        marginBottom: 12,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: fontMono,
+          fontSize: 10,
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
+          color: C.muted,
+          marginBottom: 4,
+        }}
+      >
+        Escenario {escenario.id} · {escenario.contexto}
+      </div>
+      <div
+        style={{
+          fontFamily: fontDisplay,
+          fontSize: 17,
+          fontWeight: 500,
+          color: C.ink,
+          letterSpacing: "-0.01em",
+          marginBottom: 10,
+        }}
+      >
+        {escenario.titulo}
+      </div>
+      <textarea
+        value={resp}
+        onChange={(e) => setResp(e.target.value)}
+        placeholder={escenario.placeholder}
+        rows={3}
+        style={{
+          width: "100%",
+          fontFamily: fontBody,
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: C.ink,
+          background: C.paper,
+          border: `1px solid ${C.rule}`,
+          padding: 10,
+          resize: "vertical",
+          outline: "none",
+          boxSizing: "border-box",
+        }}
+      />
+    </div>
+  );
+};
+
+const PlanEventosExtremos = () => (
+  <Card accent={C.red}>
+    <Tag color={C.red}>Plan de actuación predefinido</Tag>
+    <h3
+      style={{
+        fontFamily: fontDisplay,
+        fontSize: 24,
+        fontWeight: 500,
+        margin: "12px 0 18px",
+        color: C.ink,
+        letterSpacing: "-0.02em",
+      }}
+    >
+      ¿Qué harás cuando lleguen los problemas?
+    </h3>
+    <div>
+      {ESCENARIOS_EVENTOS.map((e) => (
+        <PlanEventoFila key={e.id} escenario={e} />
+      ))}
+    </div>
+  </Card>
+);
 
 // ════════════════════════════════════════════════════════════
 //  LOS 7 RIESGOS OCULTOS
@@ -4446,7 +4736,19 @@ export default function Clase() {
             ]}
           />
 
-          <SubHead n="1.4" id="sub-plantillas">Plantillas de cartera para experimentar</SubHead>
+          <SubHead n="1.4" id="sub-factores">Más allá del sector: factores</SubHead>
+          <EnCristiano titulo="Sectores ya, ahora factores">
+            Hasta ahora hemos hablado de sectores. Pero hay una capa más profunda:
+            los <strong>factores</strong>. Un factor es una característica del activo que
+            determina cómo va a reaccionar a ciertos eventos. Dos acciones de
+            sectores DISTINTOS pueden compartir el mismo factor (por ejemplo,
+            una tech y un REIT comparten "sensibilidad a tipos") y caer juntas
+            cuando ese factor sufre. Por eso, la diversificación VERDADERA se
+            mide en factores, no en sectores.
+          </EnCristiano>
+          <DiversificacionFactores />
+
+          <SubHead n="1.5" id="sub-plantillas">Plantillas de cartera para experimentar</SubHead>
           <Body>
             La mejor forma de entender la correlación es ver la matriz con
             datos reales. Aquí tienes <strong>4 carteras tipo</strong> que
@@ -4830,7 +5132,7 @@ export default function Clase() {
             pista="No hay perfil 'mejor'. El conservador no es 'cobarde' y el agresivo no es 'valiente'. Lo importante es que tu cartera coincida con TU perfil real, no con el que crees que deberías tener."
           />
 
-          <SubHead n="3.2" id="sub-beta">Riesgo relativo · Beta y Alfa</SubHead>
+          <SubHead n="3.3" id="sub-beta">Riesgo relativo · Beta y Alfa</SubHead>
 
           <EnCristiano titulo="Beta y Alfa, en cristiano">
             <strong>Beta (β)</strong>: cuánto se mueve tu cartera comparada
@@ -4866,7 +5168,7 @@ export default function Clase() {
             pista="Las carteras concentradas en growth/tech tienen β alta y caen fuerte en correcciones. Las defensivas tienen β baja y aguantan mejor. No hay 'mejor', hay coherencia con tu perfil."
           />
 
-          <SubHead n="3.3" id="sub-metricas">Métricas clave · el cuadro de mando</SubHead>
+          <SubHead n="3.5" id="sub-metricas">Métricas clave · el cuadro de mando</SubHead>
 
           <EnCristiano titulo="Sin números, no hay control">
             Las métricas son tu cuadro de mando: te dicen si tu cartera
@@ -4899,7 +5201,18 @@ export default function Clase() {
             pista="Si una métrica no la mides, no la controlas. Si no la controlas, te controla ella a ti. Empieza con 5 números, no más."
           />
 
-          <SubHead n="3.4" id="sub-riesgos">Los 7 riesgos ocultos</SubHead>
+          <SubHead n="3.6" id="sub-eventos">Plan de eventos extremos</SubHead>
+          <EnCristiano titulo="Decidir en frío para no improvisar en caliente">
+            Cuando llega la crisis, no tienes tiempo de pensar. Si no tienes
+            un plan escrito de antemano, vas a improvisar, y improvisar bajo
+            presión es como hacer cirugía sin anestesia: sale mal el 90% de
+            las veces. Este ejercicio te obliga a decidir AHORA, en frío, qué
+            harás cuando lleguen los problemas. Después, en caliente, solo
+            tienes que ejecutar.
+          </EnCristiano>
+          <PlanEventosExtremos />
+
+          <SubHead n="3.7" id="sub-riesgos">Los 7 riesgos ocultos</SubHead>
           <EnCristiano titulo="Lo que tu cartera no te está contando">
             Una cartera puede parecer perfectamente diversificada y, aun así,
             esconder los siguientes riesgos. La mayoría de inversores se
