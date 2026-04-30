@@ -2708,20 +2708,124 @@ const EsperanzaMatematica = () => {
           <div
             style={{
               marginTop: 18,
-              padding: 14,
+              padding: "16px 18px",
               background: C.paperDark,
               border: `1px solid ${C.ink}`,
-              fontFamily: fontMono,
-              fontSize: 11,
+              fontFamily: fontBody,
+              fontSize: 13,
               color: C.inkSoft,
-              lineHeight: 1.6,
+              lineHeight: 1.65,
             }}
           >
-            <strong style={{ color: C.ink }}>E</strong> = (P
-            <sub>ganar</sub> × G̅) − (P<sub>perder</sub> × L̅)
-            <br />
-            <strong style={{ color: C.ink }}>R/R</strong> = G̅ / L̅ ={" "}
-            {num(RR, 2)}
+            <div
+              style={{
+                fontFamily: fontMono,
+                fontSize: 10,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: C.muted,
+                marginBottom: 10,
+              }}
+            >
+              Fórmula y leyenda
+            </div>
+            <div
+              style={{
+                fontFamily: fontMono,
+                fontSize: 14,
+                color: C.ink,
+                fontWeight: 700,
+                marginBottom: 10,
+              }}
+            >
+              E = (P<sub>ganar</sub> × G̅) − (P<sub>perder</sub> × L̅)
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ color: C.gold, fontFamily: fontMono, fontWeight: 700 }}>P<sub>ganar</sub></span> · probabilidad de acertar (tu win rate)
+              <br />
+              <span style={{ color: C.gold, fontFamily: fontMono, fontWeight: 700 }}>G̅</span> · ganancia media cuando aciertas
+              <br />
+              <span style={{ color: C.gold, fontFamily: fontMono, fontWeight: 700 }}>P<sub>perder</sub></span> · 1 − P<sub>ganar</sub> (probabilidad de fallar)
+              <br />
+              <span style={{ color: C.gold, fontFamily: fontMono, fontWeight: 700 }}>L̅</span> · pérdida media cuando fallas
+            </div>
+
+            <div
+              style={{
+                fontFamily: fontMono,
+                fontSize: 10,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: C.muted,
+                marginTop: 14,
+                marginBottom: 8,
+              }}
+            >
+              Sustituyendo con tus valores
+            </div>
+            <div
+              style={{
+                fontFamily: fontMono,
+                fontSize: 12.5,
+                color: C.ink,
+                lineHeight: 1.7,
+                background: C.card,
+                padding: "10px 12px",
+                border: `1px dashed ${C.rule}`,
+              }}
+            >
+              E = ({(winRate / 100).toFixed(2)} × {avgWin}) − ({(lossRate / 100).toFixed(2)} × {avgLoss})
+              <br />
+              &nbsp;&nbsp;= {((winRate / 100) * avgWin).toFixed(0)} − {((lossRate / 100) * avgLoss).toFixed(0)}
+              <br />
+              &nbsp;&nbsp;= <strong style={{ color: positivo ? C.green : C.red }}>{E >= 0 ? "+" : ""}{num(E, 2)} €</strong> por operación
+            </div>
+
+            <div
+              style={{
+                fontFamily: fontMono,
+                fontSize: 10,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: C.muted,
+                marginTop: 14,
+                marginBottom: 6,
+              }}
+            >
+              Ratio R/R · Reward / Risk
+            </div>
+            <div
+              style={{
+                fontFamily: fontMono,
+                fontSize: 12.5,
+                color: C.ink,
+                lineHeight: 1.65,
+              }}
+            >
+              R/R = G̅ / L̅ = {avgWin} / {avgLoss} = <strong style={{ color: C.gold }}>{num(RR, 2)}</strong>
+              <div style={{ fontFamily: fontBody, fontSize: 12, color: C.inkSoft, marginTop: 4, fontStyle: "italic" }}>
+                {RR >= 1
+                  ? `Ganas ${num(RR, 2)} € por cada 1 € que arriesgas.`
+                  : `Por cada 1 € que arriesgas, solo ganas ${num(RR, 2)} € cuando aciertas.`}
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontFamily: fontBody,
+                fontSize: 12.5,
+                color: C.ink,
+                lineHeight: 1.55,
+                marginTop: 14,
+                paddingTop: 12,
+                borderTop: `1px solid ${C.rule}`,
+              }}
+            >
+              <strong>Lectura:</strong>{" "}
+              {positivo
+                ? `con ${winRate}% de aciertos y R/R = ${num(RR, 2)}, este sistema gana ${num(E, 2)} € de media por operación. En 100 ops, esperas ${num(E * 100, 0)} €.`
+                : `aunque aciertes ${winRate}% de las veces, con R/R = ${num(RR, 2)} pierdes ${num(Math.abs(E), 2)} € de media por operación. La frecuencia de aciertos NO basta; importa el balance G̅/L̅.`}
+            </div>
           </div>
         </div>
 
