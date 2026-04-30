@@ -711,8 +711,8 @@ def calculate_correlation_matrix(req: CorrelationRequest) -> CorrelationResponse
 
     valid_tickers: list[str] = base["valid_tickers"]
     missing: list[str] = base["missing"]
-    matrix: np.ndarray = base["matrix"]
-    individual_vols: np.ndarray = base["individual_vols"]
+    matrix: np.ndarray = np.array(base["matrix"], copy=True)
+    individual_vols: np.ndarray = np.array(base["individual_vols"], copy=True)
     n_obs: int = base["n_observations"]
 
     n = len(valid_tickers)
