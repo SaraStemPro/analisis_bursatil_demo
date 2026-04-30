@@ -4222,6 +4222,472 @@ const DiversificacionFactores = () => (
 );
 
 // ════════════════════════════════════════════════════════════
+//  SIMULADOR DE PESOS — capital vs riesgo
+// ════════════════════════════════════════════════════════════
+
+const ACTIVOS_PESOS = [
+  { ticker: "SPY", nombre: "S&P 500", sigma: 16 },
+  { ticker: "GLD", nombre: "Oro", sigma: 14 },
+  { ticker: "NVDA", nombre: "Nvidia", sigma: 45 },
+];
+
+const calcularPesos = (metodo, sigmas) => {
+  switch (metodo) {
+    case "iguales":
+      return [1 / 3, 1 / 3, 1 / 3];
+    case "marketcap":
+      return [0.8, 0.15, 0.05];
+    case "porriesgo": {
+      const inv = sigmas.map((s) => 1 / s);
+      const sum = inv.reduce((a, b) => a + b, 0);
+      return inv.map((i) => i / sum);
+    }
+    case "volobjetivo":
+      return [0.5, 0.45, 0.05];
+    default:
+      return [1 / 3, 1 / 3, 1 / 3];
+  }
+};
+
+const calcularVolCartera = (pesos, sigmas, rho = 0.3) => {
+  let varP = 0;
+  for (let i = 0; i < pesos.length; i++) {
+    for (let j = 0; j < pesos.length; j++) {
+      const corr = i === j ? 1 : rho;
+      varP += pesos[i] * pesos[j] * (sigmas[i] / 100) * (sigmas[j] / 100) * corr;
+    }
+  }
+  return Math.sqrt(Math.max(varP, 0)) * 100;
+};
+
+const calcularContribucionRiesgo = (pesos, sigmas) => {
+  const contrib = pesos.map((w, i) => w * sigmas[i]);
+  const sum = contrib.reduce((a, b) => a + b, 0);
+  return contrib.map((c) => c / sum);
+};
+
+const METODOS_PESOS = [
+  { id: "iguales", label: "Pesos iguales" },
+  { id: "marketcap", label: "Por capitalización" },
+  { id: "porriesgo", label: "Por riesgo (1/σ)" },
+  { id: "volobjetivo", label: "Por vol. objetivo" },
+];
+
+const MENSAJES_PESOS = {
+  iguales:
+    "Sencillo, pero NVDA representa una porción enorme del riesgo total aunque solo aporte 33% del capital.",
+  marketcap:
+    "Refleja el mercado pero concentras en SPY. Estás casi 'comprando el índice'.",
+  porriesgo:
+    "Cada activo aporta aproximadamente lo mismo al riesgo total. NVDA pesa poco en capital pero mucho en σ.",
+  volobjetivo:
+    "Pesos calculados para que la cartera tenga σ ≈ 12%. NVDA acaba pesando muy poco porque su volatilidad es desproporcionada.",
+};
+
+const SimuladorPesos = () => {
+  const [metodo, setMetodo] = useState("iguales");
+  const sigmas = ACTIVOS_PESOS.map((a) => a.sigma);
+  const pesos = useMemo(() => calcularPesos(metodo, sigmas), [metodo]);
+  const volCartera = calcularVolCartera(pesos, sigmas, 0.3);
+  const contribuciones = calcularContribucionRiesgo(pesos, sigmas);
+
+  const dataCapital = ACTIVOS_PESOS.map((a, i) => ({
+    name: a.ticker,
+    value: parseFloat((pesos[i] * 100).toFixed(1)),
+  }));
+  const dataRiesgo = ACTIVOS_PESOS.map((a, i) => ({
+    name: a.ticker,
+    value: parseFloat((contribuciones[i] * 100).toFixed(1)),
+  }));
+
+  const COLORS_PESOS = [C.blue, C.gold, C.red];
+
+  return (
+    <Card accent={C.blue}>
+      <Tag color={C.blue}>Capital vs riesgo</Tag>
+      <h3
+        style={{
+          fontFamily: fontDisplay,
+          fontSize: 24,
+          fontWeight: 500,
+          margin: "12px 0 18px",
+          color: C.ink,
+          letterSpacing: "-0.02em",
+        }}
+      >
+        ¿Pesos iguales en capital significa riesgo igual?
+      </h3>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+        {METODOS_PESOS.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setMetodo(m.id)}
+            style={{
+              fontFamily: fontMono,
+              fontSize: 11,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              padding: "10px 14px",
+              border: `1px solid ${metodo === m.id ? C.ink : C.rule}`,
+              background: metodo === m.id ? C.ink : "transparent",
+              color: metodo === m.id ? C.card : C.inkSoft,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 14,
+          marginBottom: 22,
+        }}
+      >
+        <Stat label="Vol. cartera" value={`${num(volCartera, 1)}%`} color={C.blue} big />
+        <Stat
+          label="Activos"
+          value={ACTIVOS_PESOS.map((a) => a.ticker).join(" · ")}
+          sub="σ: 16% · 14% · 45%"
+          color={C.muted}
+        />
+        <Stat label="ρ asumida" value="0,30" sub="entre los 3 activos" color={C.muted} />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 22,
+          marginBottom: 18,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontFamily: fontMono,
+              fontSize: 10,
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              color: C.muted,
+              marginBottom: 6,
+            }}
+          >
+            Peso en CAPITAL
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={dataCapital} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={2}>
+                {dataCapital.map((_, i) => (
+                  <Cell key={i} fill={COLORS_PESOS[i]} stroke={C.ink} strokeWidth={1} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => `${v}%`} />
+              <Legend wrapperStyle={{ fontFamily: fontMono, fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div>
+          <div
+            style={{
+              fontFamily: fontMono,
+              fontSize: 10,
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              color: C.muted,
+              marginBottom: 6,
+            }}
+          >
+            Peso en RIESGO
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={dataRiesgo} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={2}>
+                {dataRiesgo.map((_, i) => (
+                  <Cell key={i} fill={COLORS_PESOS[i]} stroke={C.ink} strokeWidth={1} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => `${v}%`} />
+              <Legend wrapperStyle={{ fontFamily: fontMono, fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: "14px 16px",
+          background: C.paperDark,
+          borderLeft: `3px solid ${C.blue}`,
+          fontFamily: fontDisplay,
+          fontSize: 14,
+          lineHeight: 1.55,
+          color: C.ink,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: fontMono,
+            fontSize: 9,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: C.muted,
+            marginBottom: 6,
+          }}
+        >
+          Lectura
+        </div>
+        {MENSAJES_PESOS[metodo]}
+      </div>
+    </Card>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
+//  SIMULADOR DE REBALANCEO
+// ════════════════════════════════════════════════════════════
+
+const simularCartera = (meses, retRV, retRF, modo) => {
+  let RV = 6000;
+  let RF = 4000;
+  let rebalanceos = 0;
+  const historico = [];
+  const tasaMensualRV = Math.pow(1 + retRV / 100, 1 / 12) - 1;
+  const tasaMensualRF = Math.pow(1 + retRF / 100, 1 / 12) - 1;
+
+  for (let m = 0; m <= meses; m++) {
+    if (m > 0) {
+      RV *= 1 + tasaMensualRV;
+      RF *= 1 + tasaMensualRF;
+    }
+    const total = RV + RF;
+    const pesoRV = RV / total;
+
+    let rebalancearAhora = false;
+    if (modo === "anual" && m > 0 && m % 12 === 0) {
+      rebalancearAhora = true;
+    } else if (modo === "umbral" && Math.abs(pesoRV - 0.6) > 0.05) {
+      rebalancearAhora = true;
+    }
+
+    if (rebalancearAhora) {
+      RV = total * 0.6;
+      RF = total * 0.4;
+      rebalanceos++;
+    }
+
+    historico.push({
+      mes: m,
+      pesoRV: parseFloat(((RV / (RV + RF)) * 100).toFixed(2)),
+      total: parseFloat((RV + RF).toFixed(0)),
+    });
+  }
+  return { RV, RF, rebalanceos, historico };
+};
+
+const SimuladorRebalanceo = () => {
+  const [meses, setMeses] = useState(36);
+  const [retRV, setRetRV] = useState(12);
+  const [retRF, setRetRF] = useState(3);
+  const [modo, setModo] = useState("sin");
+
+  const sim = useMemo(
+    () => simularCartera(meses, retRV, retRF, modo),
+    [meses, retRV, retRF, modo]
+  );
+  const total = sim.RV + sim.RF;
+  const pesoRV = (sim.RV / total) * 100;
+  const desviacion = pesoRV - 60;
+
+  // Curvas comparativas (los 3 modos a la vez)
+  const curvaSin = useMemo(() => simularCartera(meses, retRV, retRF, "sin").historico, [meses, retRV, retRF]);
+  const curvaAnual = useMemo(() => simularCartera(meses, retRV, retRF, "anual").historico, [meses, retRV, retRF]);
+  const curvaUmbral = useMemo(() => simularCartera(meses, retRV, retRF, "umbral").historico, [meses, retRV, retRF]);
+
+  const dataCombinada = useMemo(() => {
+    return curvaSin.map((p, i) => ({
+      mes: p.mes,
+      sin: p.pesoRV,
+      anual: curvaAnual[i]?.pesoRV ?? null,
+      umbral: curvaUmbral[i]?.pesoRV ?? null,
+    }));
+  }, [curvaSin, curvaAnual, curvaUmbral]);
+
+  const dataDonut = [
+    { name: "RV", value: parseFloat(pesoRV.toFixed(1)) },
+    { name: "RF", value: parseFloat((100 - pesoRV).toFixed(1)) },
+  ];
+  const colorPeso =
+    Math.abs(desviacion) < 5 ? C.green : Math.abs(desviacion) < 10 ? C.gold : C.red;
+
+  const MODOS = [
+    { id: "sin", label: "Sin rebalancear" },
+    { id: "anual", label: "Rebalanceo anual" },
+    { id: "umbral", label: "Umbral 5pp" },
+  ];
+
+  return (
+    <Card accent={C.gold}>
+      <Tag color={C.gold}>Mantener la cartera en el carril</Tag>
+      <h3
+        style={{
+          fontFamily: fontDisplay,
+          fontSize: 24,
+          fontWeight: 500,
+          margin: "12px 0 8px",
+          color: C.ink,
+          letterSpacing: "-0.02em",
+        }}
+      >
+        Cartera 60/40 a lo largo del tiempo
+      </h3>
+      <p
+        style={{
+          fontFamily: fontBody,
+          fontSize: 13,
+          color: C.inkSoft,
+          lineHeight: 1.55,
+          marginBottom: 18,
+        }}
+      >
+        <strong>Cómo se usa:</strong> partes de 10.000 € repartidos 60/40 (6.000 RV + 4.000 RF).
+        Mueve el tiempo y las rentabilidades. Compara los 3 modos: sin rebalancear, anual y por umbral.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 28 }}>
+        <div>
+          <Label value={`${meses} meses`} hint="Tiempo transcurrido">Tiempo</Label>
+          <Slider value={meses} onChange={setMeses} min={0} max={60} />
+
+          <Label value={`${retRV}% / año`} hint="Rentabilidad media RV">Rentabilidad RV</Label>
+          <Slider value={retRV} onChange={setRetRV} min={-10} max={20} />
+
+          <Label value={`${retRF}% / año`} hint="Rentabilidad media RF">Rentabilidad RF</Label>
+          <Slider value={retRF} onChange={setRetRF} min={-5} max={8} />
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
+            {MODOS.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setModo(m.id)}
+                style={{
+                  fontFamily: fontMono,
+                  fontSize: 10,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  padding: "8px 12px",
+                  border: `1px solid ${modo === m.id ? C.ink : C.rule}`,
+                  background: modo === m.id ? C.ink : "transparent",
+                  color: modo === m.id ? C.card : C.inkSoft,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              padding: "16px 0",
+              borderTop: `1px solid ${C.rule}`,
+              borderBottom: `1px solid ${C.rule}`,
+              marginBottom: 14,
+            }}
+          >
+            <Stat label="Peso RV actual" value={`${num(pesoRV, 1)}%`} color={colorPeso} big />
+            <Stat
+              label="Desviación"
+              value={`${desviacion >= 0 ? "+" : ""}${num(desviacion, 1)} pp`}
+              sub="vs objetivo 60%"
+              color={colorPeso}
+            />
+            <Stat label="Rebalanceos" value={`${sim.rebalanceos}`} sub="ejecutados" color={C.muted} />
+            <Stat label="Total cartera" value={`${num(total, 0)} €`} color={C.ink} />
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "120px 1fr",
+              gap: 14,
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <ResponsiveContainer width="100%" height={120}>
+              <PieChart>
+                <Pie data={dataDonut} dataKey="value" innerRadius={28} outerRadius={50} paddingAngle={2}>
+                  <Cell fill={C.blue} stroke={C.ink} strokeWidth={1} />
+                  <Cell fill={C.gold} stroke={C.ink} strokeWidth={1} />
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ fontFamily: fontMono, fontSize: 11, color: C.inkSoft, lineHeight: 1.6 }}>
+              <div><span style={{ color: C.blue, fontWeight: 700 }}>RV</span> · {num(sim.RV, 0)} €</div>
+              <div><span style={{ color: C.gold, fontWeight: 700 }}>RF</span> · {num(sim.RF, 0)} €</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontFamily: fontMono,
+              fontSize: 10,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: C.muted,
+              marginBottom: 6,
+            }}
+          >
+            Peso RV en el tiempo · 3 modos comparados
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={dataCombinada}>
+              <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
+              <XAxis dataKey="mes" tick={{ fontSize: 10, fontFamily: fontMono, fill: C.muted }} stroke={C.rule} />
+              <YAxis
+                tick={{ fontSize: 10, fontFamily: fontMono, fill: C.muted }}
+                stroke={C.rule}
+                domain={[40, 90]}
+                unit="%"
+              />
+              <Tooltip
+                contentStyle={{
+                  background: C.paper,
+                  border: `1px solid ${C.ink}`,
+                  fontFamily: fontMono,
+                  fontSize: 11,
+                  borderRadius: 0,
+                }}
+                formatter={(v) => [`${v}%`, ""]}
+              />
+              <Legend wrapperStyle={{ fontFamily: fontMono, fontSize: 11 }} />
+              <ReferenceLine y={60} stroke={C.green} strokeDasharray="4 4" />
+              <ReferenceLine y={55} stroke={C.gold} strokeDasharray="2 4" />
+              <ReferenceLine y={65} stroke={C.gold} strokeDasharray="2 4" />
+              <Line type="monotone" dataKey="sin" stroke={C.red} strokeWidth={2} dot={false} name="Sin rebalancear" />
+              <Line type="monotone" dataKey="anual" stroke={C.blue} strokeWidth={2} dot={false} name="Anual" />
+              <Line type="monotone" dataKey="umbral" stroke={C.gold} strokeWidth={2} dot={false} name="Umbral 5pp" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
 //  PLAN DE EVENTOS EXTREMOS
 // ════════════════════════════════════════════════════════════
 
@@ -5132,6 +5598,25 @@ export default function Clase() {
             pista="No hay perfil 'mejor'. El conservador no es 'cobarde' y el agresivo no es 'valiente'. Lo importante es que tu cartera coincida con TU perfil real, no con el que crees que deberías tener."
           />
 
+          <SubHead n="3.2" id="sub-pesos">Cómo asignar los pesos</SubHead>
+          <EnCristiano titulo="Capital y riesgo no son lo mismo">
+            Imagina que tres amigos aportan 100 € cada uno a una apuesta común.
+            Pero uno juega a la ruleta, otro al blackjack y otro a las cartas.
+            Aunque hayan puesto la misma cantidad, NO están asumiendo el mismo
+            riesgo: el de la ruleta puede perder los 100 € esta noche, el de las
+            cartas seguramente no. En tu cartera pasa lo mismo: meter 1.000 € en
+            NVDA NO es lo mismo que meter 1.000 € en un bono. El{" "}
+            <strong>peso en capital</strong> es cuánto pones; el{" "}
+            <strong>peso en riesgo</strong> es cuánto puede afectarte.
+          </EnCristiano>
+          <SimuladorPesos />
+          <Reto
+            id="3F"
+            titulo="¿Qué activo de tu cartera domina el riesgo?"
+            enunciado="Coge tu cartera real (en la plataforma o en papel). Para cada activo, calcula peso_riesgo ≈ peso_capital × volatilidad. ¿Cuál tiene un peso de riesgo mucho mayor que su peso de capital? ¿Lo tenías identificado? ¿Qué harías al respecto?"
+            pista="Ejemplo: si NVDA pesa 10% en capital pero σ=45%, contribuye con 4,5 unidades de riesgo. Si SPY pesa 30% pero σ=16%, contribuye con 4,8. Aunque NVDA sea menor en capital, está casi al mismo nivel de riesgo."
+          />
+
           <SubHead n="3.3" id="sub-beta">Riesgo relativo · Beta y Alfa</SubHead>
 
           <EnCristiano titulo="Beta y Alfa, en cristiano">
@@ -5166,6 +5651,24 @@ export default function Clase() {
             titulo="Calcula la beta aproximada de tu cartera"
             enunciado="No tienes que hacer una regresión, basta con estimar. <br/>1) Mira tu cartera de la plataforma. <br/>2) Si está llena de acciones tecnológicas → tu β probablemente está entre 1,2 y 1,8. <br/>3) Si está llena de defensivos (utilities, consumo básico) → tu β está entre 0,5 y 0,9. <br/>4) Si es mixta → ≈ 1. <br/>5) Apunta tu estimación. Cuando suba/baje el S&P 10%, ¿qué le pasará a tu cartera?"
             pista="Las carteras concentradas en growth/tech tienen β alta y caen fuerte en correcciones. Las defensivas tienen β baja y aguantan mejor. No hay 'mejor', hay coherencia con tu perfil."
+          />
+
+          <SubHead n="3.4" id="sub-rebalanceo">Rebalanceo · mantener la cartera en el carril</SubHead>
+          <EjemploPasoAPaso
+            titulo="Por qué hace falta rebalancear"
+            pasos={[
+              "Cartera inicial 60/40 con 10.000 €: <strong>6.000 € RV + 4.000 € RF</strong>.",
+              "Tras 24 meses con RV +12%/año y RF +3%/año (sin rebalancear): RV ≈ 7.526 €, RF ≈ 4.243 €. <strong>Peso RV ≈ 64%</strong>. La cartera 'ha crecido' pero también se ha vuelto más arriesgada sin que tú decidieras nada.",
+              "Tras 60 meses sin rebalancear: peso RV ≈ <strong>73%</strong>. Tu cartera 'moderada' se ha convertido en 'agresiva' sola.",
+              "Lección clave: <strong>rebalancear no es para ganar más</strong>. Es para que la cartera siga siendo la que decidiste que fuera.",
+            ]}
+          />
+          <SimuladorRebalanceo />
+          <Reto
+            id="3D"
+            titulo="¿Cuándo y cómo rebalanceas?"
+            enunciado="Define TU regla de rebalanceo: ¿anual? ¿semestral? ¿por umbral del 5%? ¿del 10%? ¿una mezcla? Justifica POR QUÉ. Recuerda: rebalancear obliga a vender ganadores y comprar perdedores. ¿Estás dispuesta?"
+            pista="No hay regla 'óptima'. Hay reglas que cumples y reglas que abandonas. Una regla simple que ejecutas siempre supera a una sofisticada que aplicas a medias."
           />
 
           <SubHead n="3.5" id="sub-metricas">Métricas clave · el cuadro de mando</SubHead>
