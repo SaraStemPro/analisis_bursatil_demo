@@ -335,6 +335,8 @@ lib/correlationInterpretation.ts                ← Diagnósticos pedagógicos, 
   - Heatmap interactivo: click en celda → detalle del par con interpretación
   - Selector de período (3mo-5y) para demostrar inestabilidad de correlaciones
   - Sugerencias accionables según diagnóstico
+  - Tooltips explicativos en cada KPI (icono ℹ con hover)
+  - Intro que diferencia distribución sectorial (variedad de etiquetas) vs correlación (comportamiento real)
   - Mutation manual (botón "Calcular"), no auto-fetch
 
 ## Arquitectura de Backtesting
