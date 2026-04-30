@@ -1,7 +1,25 @@
 import { useState } from 'react'
+import { Info } from 'lucide-react'
 import { useCorrelation, type CorrelationPeriod, type CorrelationResponse } from '../../hooks/useCorrelation'
 import { CorrelationHeatmap } from './CorrelationHeatmap'
 import { diagnoseAvgCorrelation, diagnoseDiversificationRatio, getSuggestions, fmtPct, type Diagnosis } from '../../lib/correlationInterpretation'
+
+function Tip({ text }: { text: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span className="relative inline-block ml-1">
+      <button onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} onClick={() => setShow(!show)} className="text-slate-500 hover:text-slate-300" type="button">
+        <Info size={12} />
+      </button>
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-700 text-slate-200 text-xs rounded-lg shadow-lg w-64 leading-relaxed pointer-events-none">
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-700" />
+        </span>
+      )}
+    </span>
+  )
+}
 
 interface Props {
   tickers: string[]
@@ -28,8 +46,9 @@ export function CorrelationPanel({ tickers, weights }: Props) {
         <div>
           <h2 className="text-lg font-semibold text-white">Análisis de correlación</h2>
           <p className="mt-1 text-sm text-slate-400 max-w-prose">
-            ¿Tu cartera está diversificada de verdad o tienes activos que se mueven a la vez?
-            Calcula la correlación y descubre si estás cubierto o solo aparentemente.
+            La distribución sectorial (arriba) mide <span className="text-slate-300">variedad de etiquetas</span>: cuántos sectores distintos tienes.
+            La correlación mide <span className="text-slate-300">comportamiento real</span>: si tus activos suben y bajan juntos o no.
+            Puedes tener 5 sectores y aun así tener correlación alta si todos reaccionan igual al mercado.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -82,10 +101,14 @@ function CorrelationResults({ data }: { data: CorrelationResponse }) {
     <div className="space-y-5">
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KPI label="Correlación media" value={data.avg_correlation.toFixed(2)} sub="entre todos los pares" diagnosis={avgDiagnosis} />
-        <KPI label="Diversification ratio" value={data.diversification_ratio.toFixed(2)} sub="σ media ponderada / σ cartera" diagnosis={drDiagnosis} />
-        <KPI label="Vol. cartera anualizada" value={fmtPct(data.portfolio_volatility)} sub={`vs ${fmtPct(data.weighted_avg_volatility)} si ρ=+1`} />
-        <KPI label="Riesgo evitado" value={`${riskAvoidedPct.toFixed(1)}%`} sub="reducción por diversificar" />
+        <KPI label="Correlación media" value={data.avg_correlation.toFixed(2)} sub="entre todos los pares" diagnosis={avgDiagnosis}
+          tip="Promedio de la correlación de Pearson entre cada par de activos. Mide si se mueven juntos (+1) o no (0). Por debajo de 0.3 hay diversificación real." />
+        <KPI label="Diversification ratio" value={data.diversification_ratio.toFixed(2)} sub="σ media ponderada / σ cartera" diagnosis={drDiagnosis}
+          tip="Volatilidad media ponderada dividida por la volatilidad real de la cartera. Si es 1.0 no hay beneficio de diversificar. Cuanto mayor, más riesgo estás eliminando al combinar activos." />
+        <KPI label="Vol. cartera anualizada" value={fmtPct(data.portfolio_volatility)} sub={`vs ${fmtPct(data.weighted_avg_volatility)} si ρ=+1`}
+          tip="Desviación típica anualizada (σ×√252) de los retornos de tu cartera. El valor comparativo es lo que sería si todos los activos estuvieran perfectamente correlacionados." />
+        <KPI label="Riesgo evitado" value={`${riskAvoidedPct.toFixed(1)}%`} sub="reducción por diversificar"
+          tip="Porcentaje de volatilidad que la diversificación te ha ahorrado: (σ_media − σ_cartera) / σ_media. Un 30% significa que tu cartera oscila un 30% menos que si todos se movieran igual." />
       </div>
 
       {/* Diagnosis */}
@@ -129,10 +152,10 @@ function CorrelationResults({ data }: { data: CorrelationResponse }) {
   )
 }
 
-function KPI({ label, value, sub, diagnosis }: { label: string; value: string; sub: string; diagnosis?: { color: string } }) {
+function KPI({ label, value, sub, diagnosis, tip }: { label: string; value: string; sub: string; diagnosis?: { color: string }; tip?: string }) {
   return (
     <div className="rounded-md border border-slate-700 bg-slate-800 p-3">
-      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-xs text-slate-500 flex items-center">{label}{tip && <Tip text={tip} />}</div>
       <div className={`mt-1 text-2xl font-bold tabular-nums ${diagnosis?.color ?? 'text-white'}`}>{value}</div>
       <div className="mt-0.5 text-xs text-slate-500">{sub}</div>
     </div>
