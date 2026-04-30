@@ -40,6 +40,7 @@ Lecciones aprendidas a base de bugs. Antes de "limpiar" cualquiera de estas cosa
 - **Compra de cartera secuencial** (`for...of await`), no paralela: si paralela, se pisan al deducir del balance.
 - **Spread asimétrico**: 0.01% solo al ask (`buy` y `close short`). NUNCA al bid.
 - **Forex se multiplica ×10000 cuando precio < 10** (para que EURUSD a 1.16 se opere como 11600). Si lo "corriges" rompes el cálculo de margen.
+- **Pesos del `CorrelationPanel`**: enviar `weights={totalCost(symbol, price, qty)}`, NO `weights={qty}`. Mandar cantidades en vez de € invertidos hace que `σ²_p = w' Σ w` se calcule con pesos equivocados (5 AAPL + 3 NVDA se trataría como 62%/37% en lugar de ~20%/80%), y rompe la idea pedagógica del simulador.
 - **Clase.jsx es JSX, no TS** — no añadas `<Tipo>`, no esperes intellisense.
 - **No hay CI ni pre-commit hooks**: los tests sólo corren si los lanzas tú.
 - **`SPEC.md` está obsoleto** (ver sección Documentación arriba). No es fuente de verdad.
