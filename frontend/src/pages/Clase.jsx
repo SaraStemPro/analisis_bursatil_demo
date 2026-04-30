@@ -2,6 +2,14 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { lesson as lessonApi } from "../api";
 import {
+  TEST_DIVERSIFICACION,
+  ABIERTAS_DIVERSIFICACION,
+  TEST_GESTIONMON,
+  ABIERTAS_GESTIONMON,
+  TEST_CARTERAS,
+  ABIERTAS_CARTERAS,
+} from "./clase/evaluacion-data.js";
+import {
   LineChart,
   Line,
   AreaChart,
@@ -5050,6 +5058,194 @@ const RiesgosOcultos = () => {
 };
 
 // ════════════════════════════════════════════════════════════
+//  EVALUACIÓN FINAL · 60 preguntas
+// ════════════════════════════════════════════════════════════
+
+const PreguntaAbierta = ({ id, pregunta }) => {
+  const [resp, setResp] = useStoredValue(`abierta:${id}`, "");
+  const tieneRespuesta = resp.trim().length > 0;
+  return (
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${tieneRespuesta ? C.green : C.rule}`,
+        borderLeft: `3px solid ${tieneRespuesta ? C.green : C.blue}`,
+        padding: 16,
+        marginBottom: 12,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: fontMono,
+          fontSize: 10,
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
+          color: C.muted,
+          marginBottom: 6,
+        }}
+      >
+        Pregunta abierta · {id}
+      </div>
+      <div
+        style={{
+          fontFamily: fontDisplay,
+          fontSize: 16,
+          fontWeight: 500,
+          color: C.ink,
+          letterSpacing: "-0.01em",
+          lineHeight: 1.45,
+          marginBottom: 10,
+        }}
+      >
+        {pregunta}
+      </div>
+      <textarea
+        value={resp}
+        onChange={(e) => setResp(e.target.value)}
+        placeholder="Tu respuesta..."
+        rows={3}
+        style={{
+          width: "100%",
+          fontFamily: fontBody,
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: C.ink,
+          background: C.paper,
+          border: `1px solid ${C.rule}`,
+          padding: 10,
+          resize: "vertical",
+          outline: "none",
+          boxSizing: "border-box",
+        }}
+      />
+    </div>
+  );
+};
+
+const BLOQUES_EVALUACION = [
+  {
+    id: "div",
+    label: "Diversificación",
+    color: C.gold,
+    test: TEST_DIVERSIFICACION,
+    abiertas: ABIERTAS_DIVERSIFICACION,
+  },
+  {
+    id: "gm",
+    label: "Gestión Monetaria",
+    color: C.red,
+    test: TEST_GESTIONMON,
+    abiertas: ABIERTAS_GESTIONMON,
+  },
+  {
+    id: "cart",
+    label: "Gestión de Carteras",
+    color: C.blue,
+    test: TEST_CARTERAS,
+    abiertas: ABIERTAS_CARTERAS,
+  },
+];
+
+const EvaluacionFinal = () => {
+  const [activo, setActivo] = useState("div");
+  const bloque = BLOQUES_EVALUACION.find((b) => b.id === activo);
+
+  return (
+    <Card accent={C.ink}>
+      <Tag color={C.ink} filled>Evaluación final</Tag>
+      <h3
+        style={{
+          fontFamily: fontDisplay,
+          fontSize: 24,
+          fontWeight: 500,
+          margin: "12px 0 8px",
+          color: C.ink,
+          letterSpacing: "-0.02em",
+        }}
+      >
+        60 preguntas para revisar lo aprendido
+      </h3>
+      <p
+        style={{
+          fontFamily: fontBody,
+          fontSize: 13,
+          color: C.inkSoft,
+          lineHeight: 1.55,
+          marginBottom: 18,
+        }}
+      >
+        20 preguntas por bloque (10 tipo test + 10 abiertas). Tus respuestas se
+        guardan automáticamente y se envían al profesor.
+      </p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
+        {BLOQUES_EVALUACION.map((b) => (
+          <button
+            key={b.id}
+            onClick={() => setActivo(b.id)}
+            style={{
+              fontFamily: fontMono,
+              fontSize: 11,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              padding: "10px 16px",
+              border: `1px solid ${activo === b.id ? C.ink : C.rule}`,
+              background: activo === b.id ? b.color : "transparent",
+              color: activo === b.id ? C.card : C.inkSoft,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {b.label} · 20
+          </button>
+        ))}
+      </div>
+
+      <div
+        style={{
+          fontFamily: fontMono,
+          fontSize: 11,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: C.muted,
+          marginTop: 8,
+          marginBottom: 14,
+        }}
+      >
+        ▸ Tipo test (10)
+      </div>
+      {bloque.test.map((q) => (
+        <Quiz
+          key={q.id}
+          id={q.id}
+          pregunta={q.pregunta}
+          opciones={q.opciones}
+          correcta={q.correcta}
+          explicacion={q.explicacion}
+        />
+      ))}
+
+      <div
+        style={{
+          fontFamily: fontMono,
+          fontSize: 11,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: C.muted,
+          marginTop: 28,
+          marginBottom: 14,
+        }}
+      >
+        ▸ Preguntas abiertas (10)
+      </div>
+      {bloque.abiertas.map((q) => (
+        <PreguntaAbierta key={q.id} id={q.id} pregunta={q.pregunta} />
+      ))}
+    </Card>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
 //  APP
 // ════════════════════════════════════════════════════════════
 
@@ -5853,6 +6049,19 @@ export default function Clase() {
           </div>
 
           <MiCuaderno />
+        </section>
+
+        {/* ════════════════════════════════════════════════════ */}
+        {/* SECCIÓN 5 · EVALUACIÓN FINAL                         */}
+        {/* ════════════════════════════════════════════════════ */}
+        <section id="seccion-evaluacion" style={{ marginBottom: 80, scrollMarginTop: 24 }}>
+          <SectionHeader
+            n="05"
+            kicker="Evaluación final"
+            title="60 preguntas para revisar lo aprendido"
+            lead="Una pasada completa por los tres bloques. Las respuestas se guardan automáticamente y el profesor las recibe en su panel."
+          />
+          <EvaluacionFinal />
         </section>
 
         <PuenteIA />
