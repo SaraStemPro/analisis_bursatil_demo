@@ -10,6 +10,7 @@ from .strategy import Strategy
 from .backtest_run import BacktestRun
 from .backtest_trade import BacktestTrade
 from .backtest_portfolio_run import BacktestPortfolioRun
+from .lesson_response import LessonResponse
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "BacktestRun",
     "BacktestTrade",
     "BacktestPortfolioRun",
+    "LessonResponse",
 ]

@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { lesson as lessonApi } from "../api";
 import {
   LineChart,
   Line,
@@ -82,10 +83,44 @@ const eur = (v) =>
 //  Cada alumno guarda sus notas/checks en su navegador.
 // ════════════════════════════════════════════════════════════
 
+const STORAGE_PREFIX = "leccion3:";
+const LESSON_ID = "leccion3";
+
+// Bus interno para que useStoredValue notifique al sync hook cuando cambian datos.
+const lessonBus = (() => {
+  const listeners = new Set();
+  return {
+    notify: () => listeners.forEach((l) => l()),
+    subscribe: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+  };
+})();
+
+// Recolecta TODO lo guardado bajo prefijo `leccion3:` desde localStorage.
+const collectLessonData = () => {
+  const out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) {
+        const subkey = k.slice(STORAGE_PREFIX.length);
+        try {
+          out[subkey] = JSON.parse(localStorage.getItem(k));
+        } catch {
+          out[subkey] = localStorage.getItem(k);
+        }
+      }
+    }
+  } catch { /* storage no disponible */ }
+  return out;
+};
+
 const useStoredValue = (key, initial) => {
   const [value, setValue] = useState(() => {
     try {
-      const v = localStorage.getItem(`leccion3:${key}`);
+      const v = localStorage.getItem(`${STORAGE_PREFIX}${key}`);
       return v ? JSON.parse(v) : initial;
     } catch {
       return initial;
@@ -95,11 +130,147 @@ const useStoredValue = (key, initial) => {
   const save = (v) => {
     setValue(v);
     try {
-      localStorage.setItem(`leccion3:${key}`, JSON.stringify(v));
+      localStorage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(v));
+      lessonBus.notify();
     } catch { /* quota exceeded */ }
   };
 
   return [value, save, true];
+};
+
+// Hidrata localStorage con los datos remotos del alumno ANTES de montar los
+// componentes hijos (ellos leen localStorage de forma síncrona en su useState).
+// Devuelve { ready, status } donde ready=true significa que ya se puede renderizar
+// la lección y status sirve para el badge visual.
+const useStudentLessonSync = (lessonId) => {
+  const [status, setStatus] = useState("loading");
+  const [ready, setReady] = useState(false);
+  const debounceRef = useRef(null);
+  const inFlightRef = useRef(false);
+  const pendingRef = useRef(false);
+
+  useEffect(() => {
+    if (!localStorage.getItem("token")) {
+      setStatus("offline");
+      setReady(true);
+      return;
+    }
+    let cancelled = false;
+    lessonApi
+      .getResponses(lessonId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res && res.data && typeof res.data === "object") {
+          try {
+            // Limpia keys locales antiguas que ya no existan en remoto
+            const remoteKeys = new Set(Object.keys(res.data));
+            const toDelete = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith(STORAGE_PREFIX)) {
+                const subkey = k.slice(STORAGE_PREFIX.length);
+                if (!remoteKeys.has(subkey)) toDelete.push(k);
+              }
+            }
+            toDelete.forEach((k) => localStorage.removeItem(k));
+            // Vuelca todo lo remoto a localStorage
+            Object.entries(res.data).forEach(([k, v]) => {
+              localStorage.setItem(`${STORAGE_PREFIX}${k}`, JSON.stringify(v));
+            });
+          } catch { /* */ }
+          setStatus("saved");
+        } else {
+          setStatus("idle");
+        }
+        setReady(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStatus("error");
+        setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonId]);
+
+  // Auto-save con debounce ante cualquier cambio
+  useEffect(() => {
+    if (!ready) return;
+    if (!localStorage.getItem("token")) return;
+
+    const flush = () => {
+      if (inFlightRef.current) {
+        pendingRef.current = true;
+        return;
+      }
+      const data = collectLessonData();
+      inFlightRef.current = true;
+      setStatus("saving");
+      lessonApi
+        .saveResponses(lessonId, data)
+        .then(() => setStatus("saved"))
+        .catch(() => setStatus("error"))
+        .finally(() => {
+          inFlightRef.current = false;
+          if (pendingRef.current) {
+            pendingRef.current = false;
+            flush();
+          }
+        });
+    };
+
+    const onChange = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(flush, 1500);
+    };
+
+    const unsub = lessonBus.subscribe(onChange);
+    return () => {
+      unsub();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [lessonId, ready]);
+
+  return { ready, status };
+};
+
+// Badge visual del estado del autoguardado.
+const SaveStatusBadge = ({ status }) => {
+  const map = {
+    idle: { label: "Sin cambios", color: C.muted, dot: C.muted },
+    loading: { label: "Cargando respuestas…", color: C.muted, dot: C.gold },
+    saving: { label: "Guardando…", color: C.gold, dot: C.gold },
+    saved: { label: "Guardado en la nube", color: C.green, dot: C.green },
+    error: { label: "Error al guardar — se conservan en este navegador", color: C.red, dot: C.red },
+    offline: { label: "Sin sesión — guardado solo en este navegador", color: C.muted, dot: C.muted },
+  };
+  const s = map[status] || map.idle;
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        fontFamily: fontMono,
+        fontSize: 11,
+        color: s.color,
+        letterSpacing: "0.05em",
+      }}
+    >
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: s.dot,
+          display: "inline-block",
+        }}
+      />
+      {s.label}
+    </div>
+  );
 };
 
 // ════════════════════════════════════════════════════════════
@@ -3526,6 +3697,28 @@ const PuenteIA = () => (
 // ════════════════════════════════════════════════════════════
 
 export default function Clase() {
+  const { ready, status } = useStudentLessonSync(LESSON_ID);
+
+  if (!ready) {
+    return (
+      <div
+        style={{
+          background: C.paper,
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: fontBody,
+          color: C.muted,
+          fontSize: 14,
+        }}
+      >
+        <FontLoader />
+        Cargando tus respuestas…
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -3537,6 +3730,21 @@ export default function Clase() {
       }}
     >
       <FontLoader />
+      <div
+        style={{
+          position: "fixed",
+          top: 14,
+          right: 18,
+          zIndex: 50,
+          background: C.card,
+          border: `1px solid ${C.rule}`,
+          padding: "6px 12px",
+          borderRadius: 999,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+      >
+        <SaveStatusBadge status={status} />
+      </div>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <Hero />
         <StorageNotice />

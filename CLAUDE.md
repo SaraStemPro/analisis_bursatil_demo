@@ -153,9 +153,17 @@ backend/app/schemas/
      - 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas copiables
      - 3 bloques: Diversificación, Gestión monetaria, Gestión de carteras
      - Simuladores interactivos con recharts (tamaño posición, esperanza matemática, drawdown, martingala, asset allocation, beta)
-     - Persistencia en localStorage (prefijo `leccion3:`)
+     - Persistencia híbrida: **localStorage** (prefijo `leccion3:`) + **Supabase** (tabla `lesson_responses`, JSON blob)
+     - Auto-save con debounce 1.5 s + coalescing (in-flight + pending) en `useStudentLessonSync`
+     - Hidratación en mount: GET → vuelca remoto a localStorage → render (loader breve)
+     - Badge fijo arriba-derecha: cargando · guardando · guardado · error · sin sesión
      - Componente JSX autocontenido con estilo propio (tema cálido/académico, fuentes Fraunces+Manrope)
      - Icono GraduationCap en navbar
+   - Panel profesor `/admin/clase`:
+     - Lista alumnos con contadores (retos hechos / quizzes contestados / checkpoints marcados)
+     - Filas expandibles con cuaderno, retos (texto + estado hecho), quizzes (opción), checkpoints
+     - Botón "Exportar CSV" + auto-refresh 30 s
+     - Solo accesible para `role=professor` (require_role)
 9. 🔄 Pulido (UI/UX, deploy)
 
 ## Indicadores — 10 en catálogo backend
@@ -222,7 +230,7 @@ Alumna:     sara@demo.com / Demo1234
 Código de invitación: AB_2026
 ```
 
-## API — 45 rutas implementadas
+## API — 48 rutas implementadas
 ```
 Auth:       POST register, login | GET me | POST invite
 Market:     GET search, quote/{ticker}, history/{ticker}, detailed-quote/{ticker}
@@ -239,6 +247,9 @@ Tutor:      POST chat | GET conversations, conversations/{id}/messages
             DELETE conversations/{id}
             POST/GET documents | GET documents/{id}/download | DELETE documents/{id}
             GET faq
+Lesson:     GET lesson/{id}/responses (alumno)
+            PUT lesson/{id}/responses (alumno upsert con debounce)
+            GET lesson/{id}/responses/all (solo profesor)
 Health:     GET /api/health
 ```
 

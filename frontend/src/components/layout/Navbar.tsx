@@ -39,17 +39,30 @@ export default function Navbar() {
             </Link>
           ))}
           {user?.role === 'professor' && (
-            <Link
-              to="/admin"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors ${
-                location.pathname === '/admin'
-                  ? 'bg-slate-700 text-amber-400'
-                  : 'text-amber-500/70 hover:bg-slate-800 hover:text-amber-400'
-              }`}
-            >
-              <Shield size={16} />
-              <span className="hidden md:inline">Admin</span>
-            </Link>
+            <>
+              <Link
+                to="/admin"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors ${
+                  location.pathname === '/admin'
+                    ? 'bg-slate-700 text-amber-400'
+                    : 'text-amber-500/70 hover:bg-slate-800 hover:text-amber-400'
+                }`}
+              >
+                <Shield size={16} />
+                <span className="hidden md:inline">Admin</span>
+              </Link>
+              <Link
+                to="/admin/clase"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors ${
+                  location.pathname === '/admin/clase'
+                    ? 'bg-slate-700 text-amber-400'
+                    : 'text-amber-500/70 hover:bg-slate-800 hover:text-amber-400'
+                }`}
+              >
+                <GraduationCap size={16} />
+                <span className="hidden md:inline">Clase</span>
+              </Link>
+            </>
           )}
         </div>
 

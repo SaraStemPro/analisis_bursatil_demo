@@ -104,6 +104,31 @@ export const tutor = {
   faq: () => api.get<{ items: { question: string; count: number }[] }>('/tutor/faq'),
 }
 
+// --- Lesson responses ---
+export type LessonResponseRead = {
+  lesson_id: string
+  data: Record<string, unknown>
+  updated_at: string
+}
+
+export type StudentLessonResponse = {
+  user_id: string
+  user_name: string
+  user_email: string
+  lesson_id: string
+  data: Record<string, unknown>
+  updated_at: string | null
+}
+
+export const lesson = {
+  getResponses: (lessonId: string) =>
+    api.get<LessonResponseRead | null>(`/lesson/${encodeURIComponent(lessonId)}/responses`),
+  saveResponses: (lessonId: string, data: Record<string, unknown>) =>
+    api.put<LessonResponseRead>(`/lesson/${encodeURIComponent(lessonId)}/responses`, { data }),
+  listAll: (lessonId: string) =>
+    api.get<StudentLessonResponse[]>(`/lesson/${encodeURIComponent(lessonId)}/responses/all`),
+}
+
 // --- Backtest ---
 export const backtest = {
   templates: () => api.get<Strategy[]>('/backtest/strategies/templates'),

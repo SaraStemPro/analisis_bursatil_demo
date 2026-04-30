@@ -65,6 +65,11 @@ from .tutor import (
     MessageResponse,
     Source,
 )
+from .lesson import (
+    LessonResponseRead,
+    LessonResponseUpsert,
+    StudentLessonResponse,
+)
 from .backtest import (
     BacktestCompareRequest,
     BacktestCompareResponse,
@@ -175,4 +180,8 @@ __all__ = [
     "PortfolioRunSummary",
     "PortfolioTickerResult",
     "TickerAllocation",
+    # Lesson
+    "LessonResponseRead",
+    "LessonResponseUpsert",
+    "StudentLessonResponse",
 ]

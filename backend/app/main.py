@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import Base, SessionLocal, engine
-from .routers import auth, market, indicators, demo, backtest, tutor
+from .routers import auth, market, indicators, demo, backtest, tutor, lesson
 from .services.market_service import start_cache_warmer
 from .services.demo_service import start_stop_loss_monitor
 from .utils.auth import hash_password
@@ -217,6 +217,7 @@ app.include_router(indicators.router)
 app.include_router(demo.router)
 app.include_router(backtest.router)
 app.include_router(tutor.router)
+app.include_router(lesson.router)
 
 
 @app.on_event("startup")
