@@ -70,6 +70,32 @@ const SECTOR_COLORS: Record<string, string> = {
   'Basic Materials': '#eab308',
 }
 
+const FILTERS_STORAGE_KEY = 'screener:filters:v1'
+
+type StoredFilters = {
+  universe?: Universe
+  selectedSectors?: string[]
+  capIndex?: number
+  peMin?: string; peMax?: string
+  divMin?: string; divMax?: string
+  priceMin?: string; priceMax?: string
+  changeMin?: string; changeMax?: string
+  betaMin?: string; betaMax?: string
+  volMin?: string; volMax?: string
+  roeMin?: string; roeMax?: string
+  mddMin?: string; mddMax?: string
+  sortKey?: SortKey; sortAsc?: boolean
+  showFilters?: boolean
+}
+
+function loadStoredFilters(): StoredFilters {
+  try {
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as StoredFilters
+  } catch { /* */ }
+  return {}
+}
+
 function InfoTooltip({ text }: { text: string }) {
   const [show, setShow] = useState(false)
   return (
@@ -101,32 +127,47 @@ export default function Screener() {
   const [preloadStatus, setPreloadStatus] = useState<{ loading: boolean; failed: string[] }>({ loading: false, failed: [] })
   const [autoCalcKey, setAutoCalcKey] = useState<string | undefined>(undefined)
 
-  // Filter state
-  const [universe, setUniverse] = useState<Universe>('sp500')
-  const [selectedSectors, setSelectedSectors] = useState<string[]>([])
-  const [capIndex, setCapIndex] = useState(0)
-  const [peMin, setPeMin] = useState('')
-  const [peMax, setPeMax] = useState('')
-  const [divMin, setDivMin] = useState('')
-  const [divMax, setDivMax] = useState('')
-  const [priceMin, setPriceMin] = useState('')
-  const [priceMax, setPriceMax] = useState('')
-  const [changeMin, setChangeMin] = useState('')
-  const [changeMax, setChangeMax] = useState('')
-  const [betaMin, setBetaMin] = useState('')
-  const [betaMax, setBetaMax] = useState('')
-  const [volMin, setVolMin] = useState('')
-  const [volMax, setVolMax] = useState('')
-  const [roeMin, setRoeMin] = useState('')
-  const [roeMax, setRoeMax] = useState('')
-  const [mddMin, setMddMin] = useState('')
-  const [mddMax, setMddMax] = useState('')
-  const [showFilters, setShowFilters] = useState(true)
+  // Filter state — hidratado desde localStorage en el primer render
+  const stored = useMemo(() => loadStoredFilters(), [])
+  const [universe, setUniverse] = useState<Universe>(stored.universe ?? 'sp500')
+  const [selectedSectors, setSelectedSectors] = useState<string[]>(stored.selectedSectors ?? [])
+  const [capIndex, setCapIndex] = useState(stored.capIndex ?? 0)
+  const [peMin, setPeMin] = useState(stored.peMin ?? '')
+  const [peMax, setPeMax] = useState(stored.peMax ?? '')
+  const [divMin, setDivMin] = useState(stored.divMin ?? '')
+  const [divMax, setDivMax] = useState(stored.divMax ?? '')
+  const [priceMin, setPriceMin] = useState(stored.priceMin ?? '')
+  const [priceMax, setPriceMax] = useState(stored.priceMax ?? '')
+  const [changeMin, setChangeMin] = useState(stored.changeMin ?? '')
+  const [changeMax, setChangeMax] = useState(stored.changeMax ?? '')
+  const [betaMin, setBetaMin] = useState(stored.betaMin ?? '')
+  const [betaMax, setBetaMax] = useState(stored.betaMax ?? '')
+  const [volMin, setVolMin] = useState(stored.volMin ?? '')
+  const [volMax, setVolMax] = useState(stored.volMax ?? '')
+  const [roeMin, setRoeMin] = useState(stored.roeMin ?? '')
+  const [roeMax, setRoeMax] = useState(stored.roeMax ?? '')
+  const [mddMin, setMddMin] = useState(stored.mddMin ?? '')
+  const [mddMax, setMddMax] = useState(stored.mddMax ?? '')
+  const [showFilters, setShowFilters] = useState(stored.showFilters ?? true)
 
   // Table state
-  const [sortKey, setSortKey] = useState<SortKey>('market_cap')
-  const [sortAsc, setSortAsc] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>(stored.sortKey ?? 'market_cap')
+  const [sortAsc, setSortAsc] = useState(stored.sortAsc ?? false)
   const [searchText, setSearchText] = useState('')
+
+  // Persistencia: guarda los filtros cada vez que cambien
+  useEffect(() => {
+    const snapshot: StoredFilters = {
+      universe, selectedSectors, capIndex,
+      peMin, peMax, divMin, divMax, priceMin, priceMax,
+      changeMin, changeMax, betaMin, betaMax,
+      volMin, volMax, roeMin, roeMax, mddMin, mddMax,
+      sortKey, sortAsc, showFilters,
+    }
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(snapshot))
+    } catch { /* quota */ }
+  }, [universe, selectedSectors, capIndex, peMin, peMax, divMin, divMax, priceMin, priceMax, changeMin, changeMax, betaMin, betaMax, volMin, volMax, roeMin, roeMax, mddMin, mddMax, sortKey, sortAsc, showFilters])
 
   // Portfolio simulator
   const [portfolio, setPortfolio] = useState<Map<string, { stock: DetailedQuote; qty: number }>>(new Map())
@@ -525,6 +566,7 @@ export default function Screener() {
                   setChangeMin(''); setChangeMax(''); setBetaMin(''); setBetaMax('')
                   setVolMin(''); setVolMax(''); setRoeMin(''); setRoeMax('')
                   setMddMin(''); setMddMax('')
+                  try { localStorage.removeItem(FILTERS_STORAGE_KEY) } catch { /* */ }
                 }}
                 className="w-full text-center text-xs text-slate-500 hover:text-white py-1"
               >
