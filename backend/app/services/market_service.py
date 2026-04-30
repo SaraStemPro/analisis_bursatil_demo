@@ -503,6 +503,47 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
             stocks=filtered,
         )
 
+    # Último recurso: si .info falló para todos y no hay cache previa
+    # (típico tras restart del servidor + rate limit), hacer una sola
+    # llamada batch a yf.download para reconstruir el universo con
+    # precio y cambio %. Sin fundamentales (sector, P/E, etc.) pero
+    # con tickers visibles.
+    if not stocks:
+        try:
+            df = yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)
+            if df is not None and not df.empty:
+                close = df["Close"] if "Close" in df.columns else None
+                if close is not None:
+                    def _build_minimal(ticker: str, price: float, prev: float):
+                        change_pct = ((price / prev - 1) * 100) if prev else 0.0
+                        return DetailedQuoteResponse(
+                            symbol=ticker,
+                            name=ticker,
+                            price=round(price, 4),
+                            change_percent=round(change_pct, 2),
+                        )
+
+                    if len(tickers) == 1:
+                        series = close.dropna()
+                        if len(series) >= 1:
+                            stocks.append(_build_minimal(
+                                tickers[0],
+                                float(series.iloc[-1]),
+                                float(series.iloc[-2]) if len(series) >= 2 else float(series.iloc[-1]),
+                            ))
+                    else:
+                        for ticker in tickers:
+                            try:
+                                series = close[ticker].dropna()
+                                if len(series) >= 1:
+                                    price = float(series.iloc[-1])
+                                    prev = float(series.iloc[-2]) if len(series) >= 2 else price
+                                    stocks.append(_build_minimal(ticker, price, prev))
+                            except (KeyError, TypeError):
+                                continue
+        except Exception:
+            pass
+
     # Only cache if we got results — avoid poisoning cache with empty data
     if stocks:
         _screener_cache[cache_key] = (now, stocks)
