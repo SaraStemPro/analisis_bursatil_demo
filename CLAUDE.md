@@ -150,7 +150,8 @@ backend/app/schemas/
      - Modo "Long + Short" (both): señal entrada → Long, señal salida → Short, independientes
    - Clase interactiva (`/clase`):
      - Lección de diversificación y gestión de carteras (Bloque 3)
-     - 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas copiables
+     - 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas (botón "Probar en el Screener" → `/screener?tickers=...`)
+     - Laboratorio de correlación con narrativa en vivo (lectura verbal del estado según ρ y volatilidades)
      - 3 bloques: Diversificación, Gestión monetaria, Gestión de carteras
      - Simuladores interactivos con recharts (tamaño posición, esperanza matemática, drawdown, martingala, asset allocation, beta)
      - Persistencia híbrida: **localStorage** (prefijo `leccion3:`) + **Supabase** (tabla `lesson_responses`, JSON blob)
@@ -345,6 +346,7 @@ lib/correlationInterpretation.ts                ← Diagnósticos pedagógicos, 
 - Scroll horizontal con barra arriba (CSS `rotateX(180deg)` trick)
 - Simulador con cantidades por activo, precios en tiempo real, diversity score penalizado, tips
 - Compra secuencial → navega a Paper Trading automáticamente
+- Precarga del simulador vía `?tickers=A,B,C` (usado por las plantillas de `/clase`): hace `detailedQuote` de cada ticker y los añade al simulador con qty=1, abre el panel y limpia el query param
 - **Análisis de correlación** (aparece con 2+ activos en simulador):
   - `POST /api/market/correlation` con cache 1h por (tickers_sorted, period)
   - Matriz NxN de correlación + volatilidades anualizadas + diversification ratio

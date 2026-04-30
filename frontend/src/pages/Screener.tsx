@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { market, demo } from '../api'
 import type { ScreenerFilters, DetailedQuote } from '../types'
 import {
@@ -96,6 +96,9 @@ function InfoTooltip({ text }: { text: string }) {
 export default function Screener() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const preloadDoneRef = useRef<string>('')
+  const [preloadStatus, setPreloadStatus] = useState<{ loading: boolean; failed: string[] }>({ loading: false, failed: [] })
 
   // Filter state
   const [universe, setUniverse] = useState<Universe>('sp500')
@@ -128,6 +131,44 @@ export default function Screener() {
   const [carteraName, setCarteraName] = useState('')
   const [carteraNotes, setCarteraNotes] = useState('')
   const [carteraError, setCarteraError] = useState('')
+
+  // Preload simulator from ?tickers=A,B,C (e.g. desde la lección /clase)
+  useEffect(() => {
+    const raw = searchParams.get('tickers')
+    if (!raw) return
+    if (preloadDoneRef.current === raw) return
+    preloadDoneRef.current = raw
+    const tickers = raw
+      .split(',')
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean)
+    if (tickers.length === 0) return
+    setPreloadStatus({ loading: true, failed: [] })
+    setShowSimulator(true)
+    ;(async () => {
+      const failed: string[] = []
+      for (const t of tickers) {
+        try {
+          const dq = await market.detailedQuote(t)
+          setPortfolio((prev) => {
+            const m = new Map(prev)
+            if (!m.has(dq.symbol)) m.set(dq.symbol, { stock: dq, qty: 1 })
+            return m
+          })
+        } catch {
+          failed.push(t)
+        }
+      }
+      setPreloadStatus({ loading: false, failed })
+      // Limpia el query param para que recargar no vuelva a cargar la cesta
+      setSearchParams((sp) => {
+        const next = new URLSearchParams(sp)
+        next.delete('tickers')
+        return next
+      }, { replace: true })
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // Build filters object
   const filters: ScreenerFilters = useMemo(() => {
@@ -473,6 +514,18 @@ export default function Screener() {
 
         {/* Main content area */}
         <div className="flex-1 min-w-0">
+          {/* Banner de precarga desde la lección */}
+          {(preloadStatus.loading || preloadStatus.failed.length > 0) && (
+            <div className={`rounded-lg p-3 mb-4 border text-sm ${
+              preloadStatus.loading
+                ? 'bg-sky-900/30 border-sky-700/50 text-sky-200'
+                : 'bg-amber-900/30 border-amber-700/50 text-amber-200'
+            }`}>
+              {preloadStatus.loading
+                ? 'Cargando tickers de la plantilla en el simulador…'
+                : `No se pudieron cargar: ${preloadStatus.failed.join(', ')}. El resto está añadido al simulador.`}
+            </div>
+          )}
           {/* Portfolio simulator panel */}
           {showSimulator && portfolioEntries.length > 0 && (
             <div className="bg-slate-900 rounded-lg p-5 border border-emerald-700/50 mb-4">

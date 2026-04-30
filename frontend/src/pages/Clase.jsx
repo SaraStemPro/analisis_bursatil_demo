@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { lesson as lessonApi } from "../api";
 import {
   LineChart,
@@ -1602,6 +1603,71 @@ const CorrelationLab = () => {
     return arr;
   }, [wA, volA, volB]);
 
+  // Narrativa en vivo según la posición del punto dorado.
+  const narrativa = useMemo(() => {
+    const sigmaAt = (r) =>
+      Math.sqrt(
+        Math.max(
+          wAd * wAd * sigmaA * sigmaA +
+            wBd * wBd * sigmaB * sigmaB +
+            2 * wAd * wBd * sigmaA * sigmaB * r,
+          0
+        )
+      ) * 100;
+    const sigmaAt0 = sigmaAt(0);
+    const sigmaAtMin = sigmaAt(-1);
+    const ahorroHasta0 = sigmaP - sigmaAt0;
+    const ahorroMax = sigmaP - sigmaAtMin;
+    const ahorroVsPerfecta = reduction;
+
+    let estado;
+    let estadoColor;
+    if (rho >= 0.8) {
+      estado =
+        "Tu cartera está prácticamente concentrada: ambos activos se mueven casi igual, así que la diversificación apenas hace nada.";
+      estadoColor = C.red;
+    } else if (rho >= 0.5) {
+      estado =
+        "Tu cartera está solo parcialmente diversificada: los dos activos comparten gran parte de su movimiento.";
+      estadoColor = C.gold;
+    } else if (rho >= 0.2) {
+      estado =
+        "Tu cartera está diversificada de forma razonable: la correlación es positiva pero contenida.";
+      estadoColor = C.blue;
+    } else if (rho >= -0.2) {
+      estado =
+        "Tu cartera está bien diversificada: los dos activos se mueven de forma casi independiente.";
+      estadoColor = C.green;
+    } else {
+      estado =
+        "Tu cartera está casi en cobertura: los movimientos de uno tienden a cancelar los del otro.";
+      estadoColor = C.green;
+    }
+
+    let accion;
+    if (rho > 0.05) {
+      accion = `Si bajaras la correlación a 0, ahorrarías otros ${num(
+        ahorroHasta0,
+        1
+      )} puntos de volatilidad. Llegando al límite teórico (ρ = −1) llegarías a ${num(
+        sigmaAtMin,
+        1
+      )}%.`;
+    } else if (rho < -0.05) {
+      accion = `Ya estás aprovechando correlación negativa: tu cartera ahorra ${num(
+        ahorroVsPerfecta,
+        1
+      )} puntos frente a dos activos idénticos. Recuerda: ρ tan baja es muy poco común en mercados reales.`;
+    } else {
+      accion = `Estás en el rango habitual del mercado real (ρ ≈ 0). Bajar más la correlación es matemáticamente posible (hasta ${num(
+        sigmaAtMin,
+        1
+      )}% con ρ = −1) pero rara vez ocurre con activos reales.`;
+    }
+
+    return { estado, estadoColor, accion };
+  }, [rho, wA, volA, volB, sigmaP, reduction]);
+
   return (
     <Card accent={C.blue}>
       <div
@@ -1768,6 +1834,34 @@ const CorrelationLab = () => {
             >
               Punto dorado = tu cartera. Cuanto más a la izquierda
               (correlación negativa), menor riesgo total.
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                padding: "14px 16px",
+                background: C.paperDark,
+                borderLeft: `3px solid ${narrativa.estadoColor}`,
+                fontFamily: fontDisplay,
+                fontSize: 14,
+                lineHeight: 1.5,
+                color: C.ink,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: fontMono,
+                  fontSize: 9,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  color: C.muted,
+                  marginBottom: 6,
+                }}
+              >
+                ↳ Lectura en vivo
+              </div>
+              <span style={{ fontWeight: 500 }}>{narrativa.estado}</span>{" "}
+              <span style={{ color: C.inkSoft }}>{narrativa.accion}</span>
             </div>
           </div>
         </div>
@@ -1965,6 +2059,7 @@ const CasosPracticos = () => {
 // Plantillas de cartera para experimentar en el screener
 const PlantillasCartera = () => {
   const [activa, setActiva] = useState(0);
+  const navigate = useNavigate();
   const plantillas = [
     {
       nombre: "Concentrada · 'Big Tech'",
@@ -2136,25 +2231,50 @@ const PlantillasCartera = () => {
               </span>
             ))}
           </div>
-          <button
-            onClick={() => {
-              navigator.clipboard?.writeText(p.tickers.join(", "));
-            }}
-            style={{
-              fontFamily: fontMono,
-              fontSize: 10,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              padding: "8px 14px",
-              border: `1px solid ${C.ink}`,
-              background: C.gold,
-              color: C.ink,
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
-            ⎘ Copiar tickers
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                navigate(
+                  `/screener?tickers=${encodeURIComponent(
+                    p.tickers.join(",")
+                  )}`
+                );
+              }}
+              style={{
+                fontFamily: fontMono,
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                padding: "8px 14px",
+                border: `1px solid ${C.ink}`,
+                background: C.gold,
+                color: C.ink,
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              → Probar en el Screener
+            </button>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(p.tickers.join(", "));
+              }}
+              style={{
+                fontFamily: fontMono,
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                padding: "8px 14px",
+                border: `1px solid ${C.ink}`,
+                background: "transparent",
+                color: C.ink,
+                cursor: "pointer",
+                fontWeight: 500,
+              }}
+            >
+              ⎘ Copiar tickers
+            </button>
+          </div>
         </div>
 
         <div>
