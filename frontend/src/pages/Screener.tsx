@@ -10,7 +10,7 @@ import {
 import { isCfd, totalCost, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 import { CorrelationPanel } from '../components/screener/CorrelationPanel'
 
-type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility'
+type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility' | 'return_1y' | 'return_3y'
 
 type Universe = ScreenerFilters['universe']
 
@@ -710,7 +710,7 @@ export default function Screener() {
           ) : (
             <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
               <div className="scrollbar-top" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #1e293b' }}>
-                <table className="w-full text-sm" style={{ minWidth: isEquity ? '1100px' : '600px' }}>
+                <table className="w-full text-sm" style={{ minWidth: isEquity ? '1200px' : '700px' }}>
                   <thead>
                     <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-900/80">
                       <th className="px-3 py-2 w-8"></th>
@@ -725,6 +725,7 @@ export default function Screener() {
                       <SortHeader k="beta" label="Beta" right tooltip="Sensibilidad al mercado (β)" />
                       {isEquity && <SortHeader k="roe" label="ROE" right tooltip="Return on Equity: beneficio neto / fondos propios. Mide la rentabilidad sobre el capital de los accionistas." />}
                       <SortHeader k="volatility" label="Vol σ" right tooltip="Volatilidad anualizada: desviación típica de retornos diarios × √252" />
+                      <SortHeader k="return_1y" label="Rent. 1Y" right tooltip="Rentabilidad del último año (precio_hoy / precio_hace_1_año − 1). El número pequeño debajo es el CAGR a 3 años (rentabilidad anualizada compuesta). PASADO, no predicción." />
                       <th className="px-3 pb-2 pt-2 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -762,6 +763,22 @@ export default function Screener() {
                         <td className="px-3 py-2 text-right text-slate-300">{s.beta ? s.beta.toFixed(2) : '-'}</td>
                         {isEquity && <td className="px-3 py-2 text-right text-slate-300">{formatPct(s.roe)}</td>}
                         <td className="px-3 py-2 text-right text-slate-300">{s.volatility != null ? `${(s.volatility * 100).toFixed(1)}%` : '-'}</td>
+                        <td className="px-3 py-2 text-right">
+                          {s.return_1y != null ? (
+                            <div className="flex flex-col items-end leading-tight">
+                              <span className={s.return_1y >= 0 ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                                {s.return_1y >= 0 ? '+' : ''}{(s.return_1y * 100).toFixed(1)}%
+                              </span>
+                              {s.return_3y != null && (
+                                <span className="text-[10px] text-slate-500" title="CAGR 3Y">
+                                  {s.return_3y >= 0 ? '+' : ''}{(s.return_3y * 100).toFixed(1)}%/y · 3Y
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500">-</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button

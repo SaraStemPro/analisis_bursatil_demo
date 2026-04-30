@@ -110,6 +110,8 @@ class DetailedQuoteResponse(BaseModel):
     fifty_two_week_low: float | None = None
     avg_volume: float | None = None
     volatility: float | None = None
+    return_1y: float | None = None
+    return_3y: float | None = None
 
 
 class ScreenerFilters(BaseModel):

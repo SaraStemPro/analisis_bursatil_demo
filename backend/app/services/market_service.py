@@ -37,6 +37,8 @@ _INFO_TTL = 1800  # 30 minutes
 
 _volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
 _VOLATILITY_TTL = 300  # 5 minutes
+_returns_cache: dict[str, tuple[float, dict[str, dict[str, float | None]]]] = {}
+_RETURNS_TTL = 1800  # 30 minutes — cambian poco
 
 _quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
 _QUOTE_TTL = 300  # 5 minutes
@@ -249,6 +251,64 @@ def _calculate_volatilities(tickers: list[str]) -> dict[str, float]:
     return result
 
 
+def _calculate_returns_annualized(tickers: list[str]) -> dict[str, dict[str, float | None]]:
+    """Batch-calculate 1Y total return and 3Y CAGR for a list of tickers.
+
+    Returns dict ticker -> {"ret_1y": float|None, "ret_3y": float|None}, ambos como decimal
+    (0.18 = +18%). Si un ticker no tiene suficiente histórico, se devuelve None en su lugar.
+    """
+    now = time.time()
+    cache_key = ",".join(sorted(tickers))
+    if cache_key in _returns_cache:
+        cached_time, cached_data = _returns_cache[cache_key]
+        if now - cached_time < _RETURNS_TTL:
+            return cached_data
+
+    result: dict[str, dict[str, float | None]] = {}
+    try:
+        df = yf.download(tickers, period="3y", interval="1d", progress=False, threads=True)
+        if df.empty:
+            return result
+
+        def _compute(series) -> dict[str, float | None]:
+            series = series.dropna()
+            if len(series) < 2:
+                return {"ret_1y": None, "ret_3y": None}
+            ret_1y: float | None = None
+            ret_3y: float | None = None
+            if len(series) >= 252:
+                p_now = float(series.iloc[-1])
+                p_1y_ago = float(series.iloc[-252])
+                if p_1y_ago > 0:
+                    ret_1y = round(p_now / p_1y_ago - 1, 4)
+            years = len(series) / 252
+            if years >= 0.5:
+                p_start = float(series.iloc[0])
+                p_end = float(series.iloc[-1])
+                if p_start > 0 and p_end > 0:
+                    ret_3y = round((p_end / p_start) ** (1 / years) - 1, 4)
+            return {"ret_1y": ret_1y, "ret_3y": ret_3y}
+
+        if len(tickers) == 1:
+            close = df["Close"] if "Close" in df.columns else df.get("Close")
+            if close is not None:
+                result[tickers[0]] = _compute(close)
+        else:
+            close = df["Close"] if "Close" in df.columns else df.get("Close")
+            if close is not None:
+                for ticker in tickers:
+                    try:
+                        result[ticker] = _compute(close[ticker])
+                    except (KeyError, TypeError):
+                        continue
+    except Exception:
+        pass
+
+    if result:
+        _returns_cache[cache_key] = (now, result)
+    return result
+
+
 def search_tickers(query: str) -> list[TickerSearchResult]:
     """Busca tickers por nombre o símbolo usando yfinance."""
     try:
@@ -405,11 +465,16 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
         except Exception:
             continue
 
-    # Enrich with volatility data
+    # Enrich with volatility + returns data
     if stocks:
         volatilities = _calculate_volatilities(tickers)
+        returns = _calculate_returns_annualized(tickers)
         for stock in stocks:
             stock.volatility = volatilities.get(stock.symbol)
+            r = returns.get(stock.symbol)
+            if r:
+                stock.return_1y = r.get("ret_1y")
+                stock.return_3y = r.get("ret_3y")
 
     # Only cache if we got results — avoid poisoning cache with empty data
     if stocks:

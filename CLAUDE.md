@@ -300,6 +300,7 @@ lib/correlationInterpretation.ts                ← diagnósticos pedagógicos, 
 ```
 
 - Columnas adaptativas: `isEquity` oculta Market Cap/Sector/P/E/Div%/ROE para índices/divisas/materias primas.
+- Columna **Rent. 1Y** sortable: rentabilidad histórica del último año + CAGR 3Y como subtítulo. Se calcula con `_calculate_returns_annualized()` (3y de histórico via `yf.download`, cache 30 min). NO es expected return ni predicción — el tooltip lo deja claro.
 - Scroll horizontal con barra arriba (truco CSS `rotateX(180deg)`).
 - Simulador con cantidades por activo, costes con margen CFD, diversity score penalizado, tips.
 - Compra secuencial → navega a Paper Trading automáticamente.

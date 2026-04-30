@@ -204,6 +204,8 @@ export interface DetailedQuote {
   fifty_two_week_low: number | null
   avg_volume: number | null
   volatility: number | null
+  return_1y: number | null
+  return_3y: number | null
 }
 
 export interface ScreenerFilters {
