@@ -467,16 +467,58 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
                 stocks=filtered,
             )
 
-    # Fetch all data for the universe
+    # Estrategia híbrida: yf.download como FUENTE PRIMARIA (1 sola
+    # llamada batch, más fiable cuando Yahoo rate-limita .info), y
+    # .info como ENRIQUECIMIENTO opcional cuando esté disponible.
+    base_prices: dict[str, dict[str, float]] = {}
+    try:
+        df = yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)
+        if df is not None and not df.empty:
+            close = df["Close"] if "Close" in df.columns else None
+            if close is not None:
+                if len(tickers) == 1:
+                    series = close.dropna()
+                    if len(series) >= 1:
+                        price = float(series.iloc[-1])
+                        prev = float(series.iloc[-2]) if len(series) >= 2 else price
+                        base_prices[tickers[0]] = {"price": price, "prev": prev}
+                else:
+                    for ticker in tickers:
+                        try:
+                            series = close[ticker].dropna()
+                            if len(series) >= 1:
+                                price = float(series.iloc[-1])
+                                prev = float(series.iloc[-2]) if len(series) >= 2 else price
+                                base_prices[ticker] = {"price": price, "prev": prev}
+                        except (KeyError, TypeError):
+                            continue
+    except Exception:
+        pass
+
+    # Construir lista de stocks: si .info disponible -> full data;
+    # si no, usar base_prices (precio+cambio de yf.download).
     stocks: list[DetailedQuoteResponse] = []
     for ticker in tickers:
+        info = None
         try:
             info = _get_cached_info(ticker)
-            if not info or not info.get("regularMarketPrice"):
-                continue
-            stocks.append(_info_to_detailed_quote(info, ticker))
         except Exception:
+            info = None
+
+        if info and info.get("regularMarketPrice"):
+            stocks.append(_info_to_detailed_quote(info, ticker))
             continue
+
+        # Fallback a precios batch (sin fundamentales)
+        bp = base_prices.get(ticker)
+        if bp:
+            change_pct = ((bp["price"] / bp["prev"] - 1) * 100) if bp["prev"] else 0.0
+            stocks.append(DetailedQuoteResponse(
+                symbol=ticker,
+                name=ticker,
+                price=round(bp["price"], 4),
+                change_percent=round(change_pct, 2),
+            ))
 
     # Enrich with volatility + returns data
     if stocks:
@@ -490,9 +532,7 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
                 stock.return_3y = r.get("ret_3y")
                 stock.max_drawdown = r.get("mdd_3y")
 
-    # Stale fallback: si Yahoo falló y no hemos podido construir nada,
-    # devolver el último cache aunque haya caducado (mejor datos viejos
-    # que pantalla vacía durante una clase).
+    # Stale fallback: si TODO falló (yf.download también) y hay cache previa
     if not stocks and cached_entry:
         cached_data = cached_entry[1]
         filtered = _apply_filters(cached_data, filters)
@@ -502,47 +542,6 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
             filtered=len(filtered),
             stocks=filtered,
         )
-
-    # Último recurso: si .info falló para todos y no hay cache previa
-    # (típico tras restart del servidor + rate limit), hacer una sola
-    # llamada batch a yf.download para reconstruir el universo con
-    # precio y cambio %. Sin fundamentales (sector, P/E, etc.) pero
-    # con tickers visibles.
-    if not stocks:
-        try:
-            df = yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)
-            if df is not None and not df.empty:
-                close = df["Close"] if "Close" in df.columns else None
-                if close is not None:
-                    def _build_minimal(ticker: str, price: float, prev: float):
-                        change_pct = ((price / prev - 1) * 100) if prev else 0.0
-                        return DetailedQuoteResponse(
-                            symbol=ticker,
-                            name=ticker,
-                            price=round(price, 4),
-                            change_percent=round(change_pct, 2),
-                        )
-
-                    if len(tickers) == 1:
-                        series = close.dropna()
-                        if len(series) >= 1:
-                            stocks.append(_build_minimal(
-                                tickers[0],
-                                float(series.iloc[-1]),
-                                float(series.iloc[-2]) if len(series) >= 2 else float(series.iloc[-1]),
-                            ))
-                    else:
-                        for ticker in tickers:
-                            try:
-                                series = close[ticker].dropna()
-                                if len(series) >= 1:
-                                    price = float(series.iloc[-1])
-                                    prev = float(series.iloc[-2]) if len(series) >= 2 else price
-                                    stocks.append(_build_minimal(ticker, price, prev))
-                            except (KeyError, TypeError):
-                                continue
-        except Exception:
-            pass
 
     # Only cache if we got results — avoid poisoning cache with empty data
     if stocks:
