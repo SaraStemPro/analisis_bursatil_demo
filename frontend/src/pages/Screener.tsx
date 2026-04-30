@@ -99,6 +99,7 @@ export default function Screener() {
   const [searchParams, setSearchParams] = useSearchParams()
   const preloadDoneRef = useRef<string>('')
   const [preloadStatus, setPreloadStatus] = useState<{ loading: boolean; failed: string[] }>({ loading: false, failed: [] })
+  const [autoCalcKey, setAutoCalcKey] = useState<string | undefined>(undefined)
 
   // Filter state
   const [universe, setUniverse] = useState<Universe>('sp500')
@@ -160,6 +161,10 @@ export default function Screener() {
         }
       }
       setPreloadStatus({ loading: false, failed })
+      // Dispara el auto-cálculo de correlación (solo si quedan >=2 tickers cargados)
+      if (tickers.length - failed.length >= 2) {
+        setAutoCalcKey(`preload:${raw}`)
+      }
       // Limpia el query param para que recargar no vuelva a cargar la cesta
       setSearchParams((sp) => {
         const next = new URLSearchParams(sp)
@@ -674,6 +679,7 @@ export default function Screener() {
             <CorrelationPanel
               tickers={portfolioEntries.map(({ stock }) => stock.symbol)}
               weights={portfolioEntries.map(({ qty }) => qty)}
+              autoCalcKey={autoCalcKey}
             />
           )}
 

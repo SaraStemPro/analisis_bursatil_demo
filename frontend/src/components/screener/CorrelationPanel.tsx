@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 import { useCorrelation, type CorrelationPeriod, type CorrelationResponse } from '../../hooks/useCorrelation'
 import { CorrelationHeatmap } from './CorrelationHeatmap'
@@ -24,6 +24,7 @@ function Tip({ text }: { text: string }) {
 interface Props {
   tickers: string[]
   weights?: number[]
+  autoCalcKey?: string  // si cambia y hay >=2 tickers, dispara el cálculo automáticamente (una sola vez por valor)
 }
 
 const PERIOD_OPTIONS: { value: CorrelationPeriod; label: string }[] = [
@@ -34,11 +35,23 @@ const PERIOD_OPTIONS: { value: CorrelationPeriod; label: string }[] = [
   { value: '5y',  label: '5 años' },
 ]
 
-export function CorrelationPanel({ tickers, weights }: Props) {
+export function CorrelationPanel({ tickers, weights, autoCalcKey }: Props) {
   const [period, setPeriod] = useState<CorrelationPeriod>('6mo')
   const correlation = useCorrelation()
 
   const canCalc = tickers.length >= 2 && tickers.length <= 30
+
+  // Auto-cálculo cuando autoCalcKey cambia (p. ej. precarga desde ?tickers= de la lección).
+  // Sólo dispara una vez por valor del key para no pisarse con cambios manuales del usuario.
+  const lastAutoKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!autoCalcKey) return
+    if (lastAutoKeyRef.current === autoCalcKey) return
+    if (!canCalc) return
+    lastAutoKeyRef.current = autoCalcKey
+    correlation.mutate({ tickers, period, weights })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCalcKey, canCalc])
 
   return (
     <section className="rounded-lg border border-slate-700 bg-slate-900 p-5">
