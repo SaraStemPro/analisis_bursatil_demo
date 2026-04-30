@@ -10,7 +10,7 @@ import {
 import { isCfd, totalCost, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
 import { CorrelationPanel } from '../components/screener/CorrelationPanel'
 
-type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility' | 'return_1y' | 'return_3y'
+type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility' | 'return_1y' | 'return_3y' | 'max_drawdown'
 
 type Universe = ScreenerFilters['universe']
 
@@ -119,6 +119,8 @@ export default function Screener() {
   const [volMax, setVolMax] = useState('')
   const [roeMin, setRoeMin] = useState('')
   const [roeMax, setRoeMax] = useState('')
+  const [mddMin, setMddMin] = useState('')
+  const [mddMax, setMddMax] = useState('')
   const [showFilters, setShowFilters] = useState(true)
 
   // Table state
@@ -197,8 +199,10 @@ export default function Screener() {
       volatility_max: volMax ? Number(volMax) / 100 : undefined,
       roe_min: roeMin ? Number(roeMin) / 100 : undefined,
       roe_max: roeMax ? Number(roeMax) / 100 : undefined,
+      mdd_min: mddMin ? Number(mddMin) / 100 : undefined,
+      mdd_max: mddMax ? Number(mddMax) / 100 : undefined,
     }
-  }, [universe, selectedSectors, capIndex, peMin, peMax, divMin, divMax, priceMin, priceMax, changeMin, changeMax, betaMin, betaMax, volMin, volMax, roeMin, roeMax])
+  }, [universe, selectedSectors, capIndex, peMin, peMax, divMin, divMax, priceMin, priceMax, changeMin, changeMax, betaMin, betaMax, volMin, volMax, roeMin, roeMax, mddMin, mddMax])
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['screener', filters],
@@ -501,6 +505,18 @@ export default function Screener() {
                 </div>
               </div>
 
+              {/* Max Drawdown */}
+              <div>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center">
+                  Max Drawdown %
+                  <InfoTooltip text="Mayor caída desde un máximo previo (3 años). Ej: 30% = el activo cayó como mucho un 30% desde un pico. Filtra valores que han sufrido mucho. Mete Max=20 para ver solo activos con caídas moderadas." />
+                </h3>
+                <div className="flex gap-1">
+                  <input placeholder="Min" value={mddMin} onChange={(e) => setMddMin(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="5" />
+                  <input placeholder="Max" value={mddMax} onChange={(e) => setMddMax(e.target.value)} className="w-1/2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white" type="number" step="5" />
+                </div>
+              </div>
+
               {/* Reset */}
               <button
                 onClick={() => {
@@ -508,6 +524,7 @@ export default function Screener() {
                   setDivMin(''); setDivMax(''); setPriceMin(''); setPriceMax('')
                   setChangeMin(''); setChangeMax(''); setBetaMin(''); setBetaMax('')
                   setVolMin(''); setVolMax(''); setRoeMin(''); setRoeMax('')
+                  setMddMin(''); setMddMax('')
                 }}
                 className="w-full text-center text-xs text-slate-500 hover:text-white py-1"
               >
@@ -710,7 +727,7 @@ export default function Screener() {
           ) : (
             <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
               <div className="scrollbar-top" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #1e293b' }}>
-                <table className="w-full text-sm" style={{ minWidth: isEquity ? '1200px' : '700px' }}>
+                <table className="w-full text-sm" style={{ minWidth: isEquity ? '1280px' : '780px' }}>
                   <thead>
                     <tr className="text-slate-400 text-left border-b border-slate-700 bg-slate-900/80">
                       <th className="px-3 py-2 w-8"></th>
@@ -726,6 +743,7 @@ export default function Screener() {
                       {isEquity && <SortHeader k="roe" label="ROE" right tooltip="Return on Equity: beneficio neto / fondos propios. Mide la rentabilidad sobre el capital de los accionistas." />}
                       <SortHeader k="volatility" label="Vol σ" right tooltip="Volatilidad anualizada: desviación típica de retornos diarios × √252" />
                       <SortHeader k="return_1y" label="Rent. 1Y" right tooltip="Rentabilidad del último año (precio_hoy / precio_hace_1_año − 1). El número pequeño debajo es el CAGR a 3 años (rentabilidad anualizada compuesta). PASADO, no predicción." />
+                      <SortHeader k="max_drawdown" label="MDD" right tooltip="Max Drawdown a 3 años: peor caída desde un máximo previo. Mide cuánto sufrió el activo en su peor racha. Útil para filtrar valores demasiado volátiles para tu perfil." />
                       <th className="px-3 pb-2 pt-2 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -775,6 +793,20 @@ export default function Screener() {
                                 </span>
                               )}
                             </div>
+                          ) : (
+                            <span className="text-slate-500">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {s.max_drawdown != null ? (
+                            <span className={
+                              s.max_drawdown >= 0.5 ? 'text-red-400' :
+                              s.max_drawdown >= 0.3 ? 'text-amber-400' :
+                              s.max_drawdown >= 0.15 ? 'text-yellow-400' :
+                              'text-emerald-400'
+                            } title={`Peor caída desde máximo (3Y): -${(s.max_drawdown * 100).toFixed(1)}%`}>
+                              −{(s.max_drawdown * 100).toFixed(1)}%
+                            </span>
                           ) : (
                             <span className="text-slate-500">-</span>
                           )}

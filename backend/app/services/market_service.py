@@ -273,9 +273,10 @@ def _calculate_returns_annualized(tickers: list[str]) -> dict[str, dict[str, flo
         def _compute(series) -> dict[str, float | None]:
             series = series.dropna()
             if len(series) < 2:
-                return {"ret_1y": None, "ret_3y": None}
+                return {"ret_1y": None, "ret_3y": None, "mdd_3y": None}
             ret_1y: float | None = None
             ret_3y: float | None = None
+            mdd: float | None = None
             if len(series) >= 252:
                 p_now = float(series.iloc[-1])
                 p_1y_ago = float(series.iloc[-252])
@@ -287,7 +288,18 @@ def _calculate_returns_annualized(tickers: list[str]) -> dict[str, dict[str, flo
                 p_end = float(series.iloc[-1])
                 if p_start > 0 and p_end > 0:
                     ret_3y = round((p_end / p_start) ** (1 / years) - 1, 4)
-            return {"ret_1y": ret_1y, "ret_3y": ret_3y}
+            # Max drawdown: peor caida desde maximo previo (devuelto como decimal positivo)
+            try:
+                running_max = series.cummax()
+                drawdown = (series - running_max) / running_max
+                worst = float(drawdown.min())
+                if worst < 0:
+                    mdd = round(abs(worst), 4)
+                else:
+                    mdd = 0.0
+            except Exception:
+                mdd = None
+            return {"ret_1y": ret_1y, "ret_3y": ret_3y, "mdd_3y": mdd}
 
         if len(tickers) == 1:
             close = df["Close"] if "Close" in df.columns else df.get("Close")
@@ -475,6 +487,7 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
             if r:
                 stock.return_1y = r.get("ret_1y")
                 stock.return_3y = r.get("ret_3y")
+                stock.max_drawdown = r.get("mdd_3y")
 
     # Only cache if we got results — avoid poisoning cache with empty data
     if stocks:
@@ -589,6 +602,12 @@ def _apply_filters(
 
     if filters.roe_max is not None:
         result = [s for s in result if s.roe is not None and s.roe <= filters.roe_max]
+
+    if filters.mdd_min is not None:
+        result = [s for s in result if s.max_drawdown is not None and s.max_drawdown >= filters.mdd_min]
+
+    if filters.mdd_max is not None:
+        result = [s for s in result if s.max_drawdown is not None and s.max_drawdown <= filters.mdd_max]
 
     return result
 

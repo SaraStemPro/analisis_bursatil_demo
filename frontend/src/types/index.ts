@@ -206,6 +206,7 @@ export interface DetailedQuote {
   volatility: number | null
   return_1y: number | null
   return_3y: number | null
+  max_drawdown: number | null
 }
 
 export interface ScreenerFilters {
@@ -227,6 +228,8 @@ export interface ScreenerFilters {
   volatility_max?: number
   roe_min?: number
   roe_max?: number
+  mdd_min?: number
+  mdd_max?: number
 }
 
 export interface ScreenerResult {

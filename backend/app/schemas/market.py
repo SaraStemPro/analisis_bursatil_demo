@@ -112,6 +112,7 @@ class DetailedQuoteResponse(BaseModel):
     volatility: float | None = None
     return_1y: float | None = None
     return_3y: float | None = None
+    max_drawdown: float | None = None  # positive decimal, p.ej. 0.32 = -32% peor caida
 
 
 class ScreenerFilters(BaseModel):
@@ -133,6 +134,8 @@ class ScreenerFilters(BaseModel):
     volatility_max: float | None = None
     roe_min: float | None = None
     roe_max: float | None = None
+    mdd_min: float | None = None  # decimal positivo (ej. 0.10 = 10%)
+    mdd_max: float | None = None
 
 
 class ScreenerResponse(BaseModel):
