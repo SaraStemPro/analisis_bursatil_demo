@@ -678,7 +678,7 @@ export default function Screener() {
           {portfolioEntries.length >= 2 && (
             <CorrelationPanel
               tickers={portfolioEntries.map(({ stock }) => stock.symbol)}
-              weights={portfolioEntries.map(({ qty }) => qty)}
+              weights={portfolioEntries.map(({ stock, qty }) => totalCost(stock.symbol, stock.price, qty))}
               autoCalcKey={autoCalcKey}
             />
           )}
