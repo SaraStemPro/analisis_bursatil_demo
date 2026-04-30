@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -137,3 +138,64 @@ class ScreenerResponse(BaseModel):
     total: int
     filtered: int
     stocks: list[DetailedQuoteResponse]
+
+
+# --- Correlation analysis ---
+
+CorrelationPeriod = Literal["3mo", "6mo", "1y", "2y", "5y"]
+
+
+class CorrelationRequest(BaseModel):
+    tickers: list[str] = Field(..., min_length=2, max_length=30)
+    period: CorrelationPeriod = "6mo"
+    weights: list[float] | None = None
+
+    @model_validator(mode="after")
+    def _validate(self):
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for t in self.tickers:
+            tu = t.strip().upper()
+            if not tu or tu in seen:
+                continue
+            seen.add(tu)
+            cleaned.append(tu)
+        if len(cleaned) < 2:
+            raise ValueError("Se requieren al menos 2 tickers únicos")
+        self.tickers = cleaned
+        if self.weights is not None:
+            if len(self.weights) != len(self.tickers):
+                raise ValueError("weights debe tener la misma longitud que tickers")
+            if any(w < 0 for w in self.weights):
+                raise ValueError("weights no puede contener valores negativos")
+            total = sum(self.weights)
+            if total <= 0:
+                raise ValueError("La suma de weights debe ser positiva")
+            self.weights = [w / total for w in self.weights]
+        return self
+
+
+class CorrelationPair(BaseModel):
+    a: str
+    b: str
+    correlation: float
+
+    model_config = {"from_attributes": True}
+
+
+class CorrelationResponse(BaseModel):
+    tickers: list[str]
+    period: str
+    matrix: list[list[float]]
+    avg_correlation: float
+    max_pair: CorrelationPair
+    min_pair: CorrelationPair
+    individual_volatilities: list[float]
+    portfolio_volatility: float
+    weighted_avg_volatility: float
+    diversification_ratio: float
+    weights: list[float]
+    n_observations: int
+    missing_tickers: list[str] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}

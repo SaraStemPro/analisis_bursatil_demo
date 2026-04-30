@@ -20,6 +20,9 @@ from .auth import (
 )
 from .course import CourseCreateRequest, CourseResponse
 from .market import (
+    CorrelationPair,
+    CorrelationRequest,
+    CorrelationResponse,
     DetailedQuoteResponse,
     HistoryQuery,
     HistoryResponse,
@@ -109,6 +112,9 @@ __all__ = [
     "CourseCreateRequest",
     "CourseResponse",
     # Market
+    "CorrelationPair",
+    "CorrelationRequest",
+    "CorrelationResponse",
     "DetailedQuoteResponse",
     "HistoryQuery",
     "HistoryResponse",

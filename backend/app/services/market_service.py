@@ -10,7 +10,12 @@ import yfinance as yf
 logger = logging.getLogger(__name__)
 from fastapi import HTTPException, status
 
+import pandas as pd
+
 from ..schemas.market import (
+    CorrelationPair,
+    CorrelationRequest,
+    CorrelationResponse,
     DetailedQuoteResponse,
     HistoryResponse,
     OHLCV,
@@ -674,3 +679,132 @@ def start_cache_warmer():
         return
     t = threading.Thread(target=_cache_warmer_loop, daemon=True, name="cache-warmer")
     t.start()
+
+
+# ============================================================================
+# Correlation analysis
+# ============================================================================
+
+_CORRELATION_TTL = 3600  # 1 hour
+_correlation_cache: dict[tuple, tuple[float, dict]] = {}
+_correlation_lock = threading.Lock()
+
+
+def calculate_correlation_matrix(req: CorrelationRequest) -> CorrelationResponse:
+    tickers = req.tickers
+    period = req.period
+
+    cache_key = (tuple(sorted(tickers)), period)
+    with _correlation_lock:
+        entry = _correlation_cache.get(cache_key)
+        if entry and time.time() - entry[0] < _CORRELATION_TTL:
+            base = entry[1]
+        else:
+            base = None
+
+    if base is None:
+        base = _download_correlation_base(tickers, period)
+        if base is None:
+            raise ValueError("No se pudieron descargar datos para los tickers indicados")
+        with _correlation_lock:
+            _correlation_cache[cache_key] = (time.time(), base)
+
+    valid_tickers: list[str] = base["valid_tickers"]
+    missing: list[str] = base["missing"]
+    matrix: np.ndarray = base["matrix"]
+    individual_vols: np.ndarray = base["individual_vols"]
+    n_obs: int = base["n_observations"]
+
+    n = len(valid_tickers)
+    if n < 2:
+        raise ValueError(f"Tras descartar tickers sin datos solo queda {n}; se necesitan al menos 2")
+
+    # Weights
+    if req.weights is None:
+        weights = np.full(n, 1.0 / n)
+    else:
+        all_weights = dict(zip(req.tickers, req.weights))
+        w_list = [all_weights.get(t, 0) for t in valid_tickers]
+        w_total = sum(w_list)
+        weights = np.array([w / w_total for w in w_list]) if w_total > 0 else np.full(n, 1.0 / n)
+
+    # Off-diagonal metrics
+    iu = np.triu_indices(n, k=1)
+    off_diag = matrix[iu]
+    avg_corr = float(np.mean(off_diag)) if off_diag.size > 0 else 0.0
+
+    max_idx = int(np.argmax(off_diag))
+    min_idx = int(np.argmin(off_diag))
+    max_pair = CorrelationPair(a=valid_tickers[iu[0][max_idx]], b=valid_tickers[iu[1][max_idx]], correlation=float(matrix[iu[0][max_idx], iu[1][max_idx]]))
+    min_pair = CorrelationPair(a=valid_tickers[iu[0][min_idx]], b=valid_tickers[iu[1][min_idx]], correlation=float(matrix[iu[0][min_idx], iu[1][min_idx]]))
+
+    # Portfolio volatility: σ²_p = w' Σ w, where Σ = D·C·D
+    cov = matrix * np.outer(individual_vols, individual_vols)
+    portfolio_var = float(weights @ cov @ weights.T)
+    portfolio_vol = float(np.sqrt(max(portfolio_var, 0.0)))
+    weighted_avg_vol = float(np.sum(weights * individual_vols))
+    div_ratio = weighted_avg_vol / portfolio_vol if portfolio_vol > 1e-9 else 1.0
+
+    return CorrelationResponse(
+        tickers=valid_tickers,
+        period=period,
+        matrix=[[float(round(matrix[i, j], 4)) for j in range(n)] for i in range(n)],
+        avg_correlation=round(avg_corr, 4),
+        max_pair=max_pair,
+        min_pair=min_pair,
+        individual_volatilities=[float(round(v, 4)) for v in individual_vols],
+        portfolio_volatility=round(portfolio_vol, 4),
+        weighted_avg_volatility=round(weighted_avg_vol, 4),
+        diversification_ratio=round(div_ratio, 4),
+        weights=[float(round(w, 4)) for w in weights],
+        n_observations=n_obs,
+        missing_tickers=missing,
+    )
+
+
+def _download_correlation_base(tickers: list[str], period: str) -> dict | None:
+    try:
+        df = yf.download(tickers=tickers, period=period, interval="1d", auto_adjust=True, progress=False, group_by="ticker", threads=True)
+    except Exception as e:
+        logger.warning(f"[correlation] yf.download failed: {e}")
+        return None
+
+    if df is None or df.empty:
+        return None
+
+    closes = pd.DataFrame()
+    missing: list[str] = []
+    for t in tickers:
+        try:
+            serie = df[t]["Close"] if isinstance(df.columns, pd.MultiIndex) else df["Close"]
+            if serie is None or serie.dropna().empty:
+                missing.append(t)
+                continue
+            closes[t] = serie
+        except (KeyError, AttributeError):
+            missing.append(t)
+
+    if closes.shape[1] < 2:
+        return None
+
+    returns = closes.pct_change().dropna(how="all")
+    valid_cols = [c for c in returns.columns if returns[c].dropna().shape[0] >= 10]
+    missing.extend([c for c in returns.columns if c not in valid_cols])
+    returns = returns[valid_cols].dropna()
+
+    if returns.shape[1] < 2 or returns.shape[0] < 10:
+        return None
+
+    valid_tickers = list(returns.columns)
+    corr = returns.corr().to_numpy()
+    np.fill_diagonal(corr, 1.0)
+    corr = (corr + corr.T) / 2
+    individual_vols = (returns.std() * np.sqrt(252)).to_numpy()
+
+    return {
+        "matrix": corr,
+        "valid_tickers": valid_tickers,
+        "missing": missing,
+        "individual_vols": individual_vols,
+        "n_observations": int(returns.shape[0]),
+    }

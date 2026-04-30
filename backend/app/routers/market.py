@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 
 from ..schemas.market import (
+    CorrelationRequest,
+    CorrelationResponse,
     DetailedQuoteResponse,
     HistoryQuery,
     HistoryResponse,
@@ -10,6 +12,7 @@ from ..schemas.market import (
     TickerSearchResult,
 )
 from ..services import market_service
+from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -65,3 +68,16 @@ def screener(filters: ScreenerFilters = ScreenerFilters()):
 @router.get("/screener/sectors/{universe}")
 def screener_sectors(universe: str):
     return {"sectors": market_service.get_screener_sectors(universe)}
+
+
+@router.post("/correlation", response_model=CorrelationResponse)
+async def correlation(
+    request: CorrelationRequest,
+    current_user=Depends(get_current_user),
+) -> CorrelationResponse:
+    try:
+        return market_service.calculate_correlation_matrix(request)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"No se pudo calcular la correlación: {e}")

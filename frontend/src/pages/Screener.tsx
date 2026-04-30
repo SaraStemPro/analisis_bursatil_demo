@@ -8,6 +8,7 @@ import {
   ShoppingCart, Eye, ChevronDown, ChevronUp, X, Plus, Trash2, Info,
 } from 'lucide-react'
 import { isCfd, totalCost, cfdLabel, SPREAD_PCT } from '../lib/cfdUtils'
+import { CorrelationPanel } from '../components/screener/CorrelationPanel'
 
 type SortKey = 'symbol' | 'price' | 'change_percent' | 'market_cap' | 'pe_ratio' | 'dividend_yield' | 'beta' | 'roe' | 'volatility'
 
@@ -613,6 +614,14 @@ export default function Screener() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Correlation panel — appears when 2+ tickers in simulator */}
+          {portfolioEntries.length >= 2 && (
+            <CorrelationPanel
+              tickers={portfolioEntries.map(({ stock }) => stock.symbol)}
+              weights={portfolioEntries.map(({ qty }) => qty)}
+            />
           )}
 
           {/* Search bar */}
