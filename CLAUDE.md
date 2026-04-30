@@ -79,8 +79,9 @@ backend/app/schemas/
 6. ✅ Backtesting (motor completo, 6 templates, constructor visual, long/short, timeframes, offset, patrones de velas, fractales, Bollinger bands seleccionables)
 7. ✅ Tutor IA (RAG: PDF upload, chunking, FAISS/keyword search, chat con LLM, FAQ)
 8. ✅ Frontend completo (React 18 + TS strict + Vite + TailwindCSS v4 + lightweight-charts v5)
-   - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott, hline, vline) con Primitives API
-   - Edición de dibujos: seleccionar + mover + cambiar color (color picker en toolbar)
+   - Herramientas de dibujo (trendline, arrow, text, Fibonacci, Elliott, hline, vline, rect, circle) con Primitives API
+   - Edición de dibujos: seleccionar + mover (botón Move) + copiar/pegar (botón Copy + click destino, o Ctrl+C/V) + cambiar color (color picker en toolbar)
+   - Dibujo en margen derecho: 30 barras de espacio vacío para proyecciones futuras (rightOffset + timeToX extrapolation)
    - Preview en vivo mientras se dibuja (PreviewPrimitive + subscribeCrosshairMove)
    - Detección de patrones de velas: envolvente, vela 20/20, martillo (EA/EB, V20A/V20B, MaA/MaB)
    - Selector de patrones por checkbox (activar/desactivar individualmente)
@@ -88,7 +89,10 @@ backend/app/schemas/
    - Osciladores en ventanas separadas (OscillatorChart) con scroll sincronizado al main chart
    - Fractales de Williams renderizados como marcadores sobre las velas
    - Historial de 5 tickers recientes con botón X para eliminar
-   - Botón "Hoy" (scroll to realtime), escala logarítmica (toggle LOG)
+   - Toggle tipo gráfico: velas japonesas / línea de cierres (CandlestickChart/LineChart icons)
+   - Etiquetas "Horizonte temporal" y "Timeframe" sobre los selectores de período/intervalo
+   - Botón "Hoy" (scroll to realtime), escala logarítmica (toggle LOG), botón "Ajustar" (reset escala horizontal + vertical)
+   - Fibonacci con extensiones: 0%, 23.6%, 38.2%, 50%, 61.8%, 78.6%, 100%, 161.8%, 261.8%, 423.6%
    - Enlace a Yahoo Finance por ticker, info de exchange y market state
    - Precio ask con spread y margen CFD visibles junto al precio
    - Botón refrescar precio + gráfico (invalida cache backend, fuerza dato fresco de Yahoo)
@@ -102,6 +106,8 @@ backend/app/schemas/
    - Formato inteligente de precios: 5 decimales para <10 (forex), 4 para <100, 2 para >=100
    - Eje X intradiario en hora de Madrid (CET/CEST automático)
    - Paper Trading mejorado:
+     - **Posiciones independientes**: cada orden = una posición separada (NO se promedian precios)
+     - Cerrar por `order_id`, no por ticker+side (evita bugs de precio medio)
      - Buy = abrir LONG, Sell = abrir SHORT (posiciones simultáneas long/short permitidas)
      - Cerrar posición (total o parcial) con modal de confirmación
      - Botón "Cerrar todo" para liquidar todas las posiciones
@@ -113,12 +119,14 @@ backend/app/schemas/
      - Spread 0.01% en todas las compras (ask side: buy long + close short)
      - CFD/Futures: indices, materias primas, divisas operan con margen 5%. Forex (<10) ×10000
      - Columnas "P. entrada" / "P. cierre" con etiquetas bid/ask
+     - **Stop loss / Take profit automático**: hilo background cada 2 min comprueba todas las posiciones
      - Sistema de carteras nombradas (portfolio_group):
        - Compra desde el simulador del Screener → crea cartera con nombre
        - Ejecución secuencial (evita race conditions en balance)
        - Carteras se muestran en recuadro independiente con borde cyan
        - Diversity score penalizado (min 5 posiciones, min 3 sectores, concentración >40%)
        - Cerrar cartera completa o posiciones individuales para rebalanceo
+       - Botón "Añadir posición" dentro de cada cartera (OrderForm inline con portfolio_group)
        - Auto-navegación a Paper Trading tras compra de cartera
    - Stock Screener (página independiente `/screener`):
      - 11 universos: S&P 500 (~130), IBEX 35 (35), Tech (42), Healthcare (28), Finance (28), Energy (20), Industrials (23), Consumer (22), Indices (12), Divisas (10), Materias Primas (12), All
@@ -164,7 +172,7 @@ components/charts/OscillatorChart.tsx      ← Un chart independiente por oscila
 components/charts/DrawingToolbar.tsx       ← Toolbar lateral de herramientas de dibujo
 context/drawing-store.ts                  ← Zustand store: dibujos, herramientas, selección
 lib/drawings/DrawingManager.ts            ← Gestiona primitivas de dibujo en un chart
-lib/drawings/primitives/*.ts              ← 7 primitivas + PreviewPrimitive + renderers
+lib/drawings/primitives/*.ts              ← 9 primitivas + PreviewPrimitive + renderers (pointToPixel, timeToX, chartMeta)
 lib/patterns.ts                           ← Detección de patrones de velas (client-side)
 lib/recentTickers.ts                      ← localStorage para tickers recientes
 lib/chartUtils.ts                         ← CHART_THEME, toChartTime() (Madrid TZ), INDICATOR_COLORS
@@ -193,6 +201,11 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime() (Madrid
 - DrawingManager.syncDrawings: compara por referencia → si cambió, destruye y recrea primitiva (actualización inmediata de color/posición)
 - PreviewPrimitive: dibuja preview en vivo durante crosshair move
 - `activeChartId` en store determina qué chart recibe clics de dibujo ('main' | 'osc-RSI' | etc.)
+- **`pointToPixel()` y `timeToX()`** en `renderers.ts`: conversión tiempo→píxel con fallback para margen derecho (fechas futuras)
+- `chartMeta` (objeto compartido en renderers.ts): `dataLength`, `barIntervalSec`, `lastChartTime`, `isIntraday` — actualizado por Charts.tsx, leído por todas las primitivas
+- Tiempo de dibujos: YYYY-MM-DD para daily, Unix seconds (string) para intraday — `parseTimeSec()` y `toTimeValue()` detectan formato automáticamente
+- Copy/paste: `clipboard` + `pasteMode` en store, click para colocar copia
+- Move: `moveMode` + `dragAnchor` + `finishDrag()` en store, botón Move en toolbar
 
 ## Usuarios demo (auto-seed al arrancar)
 ```
@@ -226,13 +239,24 @@ Health:     GET /api/health
 ### Semántica de órdenes
 - `buy` → abre posición LONG (deduce coste del balance)
 - `sell` → abre posición SHORT (deduce margen 100% del balance)
-- `close` → cierra posición (total o parcial), campo `side` indica si cierra long o short
-- Un mismo ticker puede tener posición LONG y SHORT simultáneamente
+- `close` → cierra posición por `order_id` (total o parcial)
+- **Posiciones independientes**: cada orden es su propia posición, sin promediar precios
+- Un mismo ticker puede tener múltiples posiciones LONG y SHORT independientes
+- `_close_order_internal()`: lógica compartida para cerrar (manual, stop loss, take profit, close-all)
+
+### Stop Loss / Take Profit automático
+- **Background monitor**: hilo daemon `_stop_loss_monitor_loop()` cada 2 minutos
+- Comprueba TODAS las órdenes con SL/TP, esté o no conectado el alumno
+- Long: SL si precio ≤ stop_loss, TP si precio ≥ take_profit
+- Short: SL si precio ≥ stop_loss, TP si precio ≤ take_profit
+- Cierra la orden automáticamente con nota `[Auto] Stop loss (precio)` o `[Auto] Take profit (precio)`
+- Se registra en `main.py` vía `start_stop_loss_monitor()` en el evento startup
 
 ### Sistema de carteras (portfolio_group)
 - Las órdenes pueden llevar `portfolio_group` (string) para agruparse en una cartera nombrada
 - `GET /demo/carteras` devuelve las carteras con posiciones, P&L, diversity score
 - `POST /demo/close-cartera/{name}` cierra todas las posiciones de una cartera
+- Botón "Añadir posición" dentro de cada cartera (OrderForm con `portfolioGroup` prop)
 - Diversity score penalizado: Shannon entropy + penalizaciones (min 5 posiciones, min 3 sectores, concentración >40%)
 - Compra secuencial (`for...of await`) para evitar race conditions en el balance
 - Precio explícito: se pasa `price` del screener para evitar discrepancias con yfinance
@@ -262,6 +286,7 @@ components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde
 - CFD: indices (^), materias primas (=F), divisas (=X) operan con margen 5%
 - Forex: precios <10 se multiplican ×10000 (EURUSD 1.16 → 11600, margen 580€)
 - `_is_cfd()`, `_notional_value()`, `_apply_spread()` en demo_service.py
+- `_close_order_internal()`: cierra una orden (completa o parcial) y actualiza balance. Usado por close_position, close_all, stop_loss_monitor
 - `_invested_value()`: margen fijo pagado (no cambia con precio). Para "Invertido"
 - `_position_value()`: margen + PnL no realizado (cambia con precio). Para "Valor total"
 - Frontend: `lib/cfdUtils.ts` replica la lógica CFD del backend
@@ -271,8 +296,15 @@ components/demo/OrderHistory.tsx            ← Historial color-coded (buy verde
 - Columna `side` (String(10), nullable): "long" | "short"
 - Columna `portfolio_group` (String(100), nullable): nombre de cartera
 - Columna `notes` (String(500), mandatory): diario de operaciones obligatorio
+- Columna `stop_loss` y `take_profit` (Numeric(14,5), nullable)
+- Columna `status`: "open" | "closed" (se marca closed al cerrar la orden)
 - Precisión: `Numeric(14, 5)` en todos los campos de precio
 - Migration automática en `main.py` (ALTER TABLE si columna no existe)
+- Migration de estados: `_migrate_close_order_status()` marca órdenes antiguas como cerradas (FIFO)
+
+### Schemas actualizados
+- `ClosePositionRequest`: usa `order_id` (no ticker+side)
+- `PositionResponse`: incluye `order_id`, `entry_price` (no avg_price), `take_profit`, `notes`, `created_at`
 
 ## Arquitectura de Screener
 
