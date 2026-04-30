@@ -2439,11 +2439,11 @@ const TamañoPosicion = () => {
   const [precioStop, setPrecioStop] = useState(95);
 
   const distancia = Math.abs(precioEntrada - precioStop);
-  const distanciaPct = (distancia / precioEntrada) * 100;
+  const distanciaPct = precioEntrada > 0 ? (distancia / precioEntrada) * 100 : 0;
   const riesgoMonetario = capital * (riesgoPct / 100);
-  const acciones = distancia > 0 ? Math.floor(riesgoMonetario / distancia) : 0;
+  const acciones = distancia > 0 && precioEntrada > 0 ? Math.floor(riesgoMonetario / distancia) : 0;
   const exposicion = acciones * precioEntrada;
-  const exposicionPct = (exposicion / capital) * 100;
+  const exposicionPct = capital > 0 ? (exposicion / capital) * 100 : 0;
 
   return (
     <Card accent={C.red}>
@@ -2503,8 +2503,8 @@ const TamañoPosicion = () => {
           <Slider
             value={precioEntrada}
             onChange={setPrecioEntrada}
-            min={10}
-            max={500}
+            min={0}
+            max={2000}
             step={1}
           />
 
@@ -2517,8 +2517,8 @@ const TamañoPosicion = () => {
           <Slider
             value={precioStop}
             onChange={setPrecioStop}
-            min={5}
-            max={precioEntrada}
+            min={0}
+            max={Math.max(precioEntrada, 1)}
             step={0.5}
           />
         </div>
