@@ -1978,6 +1978,21 @@ const CasosPracticos = () => {
         { k: "spEUR", c: C.green, l: "S&P 500 (EUR)" },
       ],
     },
+    {
+      titulo: "Marzo 2020 · cuando todo cae junto",
+      sub: "Evento de cola: las correlaciones convergen a 1",
+      data: [
+        { activo: "S&P 500 (SPY)", caida: -15 },
+        { activo: "Oro (GLD)", caida: -9 },
+        { activo: "Bonos USA largos (TLT)", caida: -8 },
+        { activo: "Bitcoin (BTC-USD)", caida: -38 },
+        { activo: "Petróleo (USO)", caida: -23 },
+      ],
+      moraleja:
+        "Semana del 9-13 marzo 2020: en pocos días los inversores vendieron TODO indiscriminadamente para captar liquidez. Hasta el oro y los bonos —típicamente refugios— cayeron. La diversificación es una herramienta del 95% del tiempo. Para el 5% restante (eventos de cola) hace falta otra cosa: cobertura, liquidez, plan predefinido.",
+      keys: [{ k: "caida", c: C.red, l: "Caída semanal (%)" }],
+      isHorizontal: true,
+    },
   ];
 
   const c = casos[caso];
@@ -2030,35 +2045,69 @@ const CasosPracticos = () => {
           >
             {c.titulo}
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={c.data}>
-              <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
-              <XAxis
-                dataKey="año"
-                tick={{ fontSize: 11, fontFamily: fontMono, fill: C.muted }}
-                stroke={C.rule}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fontFamily: fontMono, fill: C.muted }}
-                stroke={C.rule}
-                unit="%"
-              />
-              <Tooltip
-                contentStyle={{
-                  background: C.paper,
-                  border: `1px solid ${C.ink}`,
-                  fontFamily: fontMono,
-                  fontSize: 12,
-                  borderRadius: 0,
-                }}
-                formatter={(v) => [`${v}%`, ""]}
-              />
-              <ReferenceLine y={0} stroke={C.ink} strokeWidth={1} />
-              <Legend wrapperStyle={{ fontFamily: fontMono, fontSize: 11 }} />
-              {c.keys.map((k) => (
-                <Bar key={k.k} dataKey={k.k} name={k.l} fill={k.c} />
-              ))}
-            </BarChart>
+          <ResponsiveContainer width="100%" height={c.isHorizontal ? 280 : 250}>
+            {c.isHorizontal ? (
+              <BarChart data={c.data} layout="vertical" margin={{ left: 100 }}>
+                <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
+                <XAxis
+                  type="number"
+                  tick={{ fontSize: 10, fontFamily: fontMono, fill: C.muted }}
+                  stroke={C.rule}
+                  unit="%"
+                />
+                <YAxis
+                  type="category"
+                  dataKey="activo"
+                  tick={{ fontSize: 10, fontFamily: fontMono, fill: C.inkSoft }}
+                  stroke={C.rule}
+                  width={100}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: C.paper,
+                    border: `1px solid ${C.ink}`,
+                    fontFamily: fontMono,
+                    fontSize: 12,
+                    borderRadius: 0,
+                  }}
+                  formatter={(v) => [`${v}%`, ""]}
+                />
+                <ReferenceLine x={0} stroke={C.ink} strokeWidth={1} />
+                <Legend wrapperStyle={{ fontFamily: fontMono, fontSize: 11 }} />
+                {c.keys.map((k) => (
+                  <Bar key={k.k} dataKey={k.k} name={k.l} fill={k.c} />
+                ))}
+              </BarChart>
+            ) : (
+              <BarChart data={c.data}>
+                <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
+                <XAxis
+                  dataKey="año"
+                  tick={{ fontSize: 11, fontFamily: fontMono, fill: C.muted }}
+                  stroke={C.rule}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fontFamily: fontMono, fill: C.muted }}
+                  stroke={C.rule}
+                  unit="%"
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: C.paper,
+                    border: `1px solid ${C.ink}`,
+                    fontFamily: fontMono,
+                    fontSize: 12,
+                    borderRadius: 0,
+                  }}
+                  formatter={(v) => [`${v}%`, ""]}
+                />
+                <ReferenceLine y={0} stroke={C.ink} strokeWidth={1} />
+                <Legend wrapperStyle={{ fontFamily: fontMono, fontSize: 11 }} />
+                {c.keys.map((k) => (
+                  <Bar key={k.k} dataKey={k.k} name={k.l} fill={k.c} />
+                ))}
+              </BarChart>
+            )}
           </ResponsiveContainer>
           <div
             style={{

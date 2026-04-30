@@ -382,17 +382,28 @@ backend/app/schemas/common.py            ← enums
 
 ### Lección interactiva (`pages/Clase.jsx` + `pages/AdminClase.tsx`)
 
-**Contenido**: lección de diversificación y gestión de carteras (Bloque 3, master). 12 retos, 8 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas. 3 secciones: Diversificación, Gestión monetaria, Gestión de carteras. Simuladores con Recharts (tamaño posición, esperanza matemática, drawdown, martingala, asset allocation, beta).
+**Contenido**: lección de diversificación y gestión de carteras (Bloque 3, master). 5 secciones (Diversificación, Gestión Monetaria, Gestión de Carteras, Principios, Evaluación final). Índice navegable arriba con scroll suave + botón flotante "Volver al índice".
+
+- **Sección 1 — Diversificación**: niveles, correlación con laboratorio interactivo (narrativa en vivo, tabla de referencia de volatilidades), 3 casos prácticos (incluye marzo 2020), diversificación por **factores** (7 factores: growth, value, size, quality, momentum, duration, sensibilidad a tipos), plantillas de cartera con botón "Probar en el Screener" → `/screener?tickers=...`.
+- **Sección 2 — Gestión Monetaria**: tamaño de posición, esperanza matemática, drawdown, martingala vs antimartingala (todos con simuladores Recharts).
+- **Sección 3 — Gestión de Carteras**: asset allocation, **simulador de pesos capital vs riesgo** (4 métodos), beta/alfa, **simulador de rebalanceo** (60/40 con 3 modos), métricas, **plan de eventos extremos** (5 escenarios con textarea persistente), **los 7 riesgos ocultos** (concentración, correlación, volatilidad, drawdown, liquidez, divisa, tail risk).
+- **Sección 4 — Principios irrenunciables**: 4 principios + cuaderno personal.
+- **Sección 5 — Evaluación final**: 60 preguntas en 3 pestañas (20 por bloque: 10 test + 10 abiertas). Componente `PreguntaAbierta` nuevo. Datos en `pages/clase/evaluacion-data.js`.
+
+12 retos, ~38 quizzes, 8 checkpoints, 1 cuaderno persistente, 4 plantillas, 5 escenarios extremos, 7 riesgos auto-marcables, 30 preguntas abiertas. Simuladores con Recharts.
 
 **Persistencia híbrida**:
 - **localStorage** (prefijo `leccion3:`) para latencia cero en cada cambio.
 - **Supabase** (tabla `lesson_responses`, JSON blob): único registro por `(user_id, lesson_id)`.
-- 5 tipos de claves bajo `leccion3:`:
+- 8 tipos de claves bajo `leccion3:`:
   - `reto:{id}` → string (respuesta de texto)
   - `reto-hecho:{id}` → bool
   - `quiz:{id}` → number | null (índice opción)
   - `check:{id}` → bool
   - `cuaderno:sesion3` → string libre
+  - `riesgo-expuesto:{n}` → bool (auto-marcado en los 7 riesgos)
+  - `plan-evento:{n}` → string (plan de eventos extremos)
+  - `abierta:{id}` → string (preguntas abiertas de la evaluación final)
 
 **Hook `useStudentLessonSync(lessonId)`**:
 - Hidratación en mount: `GET /api/lesson/{id}/responses` → vuelca remoto a localStorage → render (loader breve). Si no hay token, modo offline (solo localStorage).
@@ -406,9 +417,9 @@ backend/app/schemas/common.py            ← enums
 **Estilo**: JSX autocontenido, fuentes Fraunces+Manrope, tema cálido académico. NO usa Tailwind.
 
 **Panel profesor `/admin/clase`**:
-- Lista alumnos con contadores (retos hechos / quizzes contestados / checkpoints).
-- Filas expandibles: cuaderno, retos (texto + estado hecho), quizzes (opción), checkpoints.
-- Botón "Exportar CSV" (todas las claves de todos los alumnos).
+- Lista alumnos con contadores (retos / quiz / checks / riesgos / plan / abiertas).
+- Filas expandibles con secciones por bucket: Cuaderno, Retos, Quizzes, Checkpoints, Riesgos auto-identificados, Plan de eventos extremos, Preguntas abiertas, "Otros datos" (fallback robusto a claves futuras).
+- Botón "Exportar CSV" con tipo discriminado por prefijo (reto_respuesta, reto_hecho, quiz, checkpoint, riesgo_expuesto, plan_evento, pregunta_abierta, cuaderno, otro).
 - Auto-refresh 30s.
 - Solo `role=professor` (`require_role`).
 - Auto-creación de la tabla en Supabase la primera vez que arranca el backend.
