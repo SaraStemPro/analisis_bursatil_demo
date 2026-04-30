@@ -4184,7 +4184,7 @@ const IndiceNavegacion = () => (
   </section>
 );
 
-// Botón flotante "Volver al índice"
+// Botón flotante "Volver al índice grande"
 const BotonVolverIndice = () => {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -4216,8 +4216,112 @@ const BotonVolverIndice = () => {
         fontWeight: 600,
       }}
     >
-      ↑ Volver al índice
+      ↑ Índice completo
     </button>
+  );
+};
+
+// Barra de navegación compacta fija en la parte superior, visible al hacer scroll.
+const IndiceStickyCompacto = () => {
+  const [visible, setVisible] = useState(false);
+  const [activa, setActiva] = useState("seccion-diversificacion");
+
+  useEffect(() => {
+    const onScroll = () => {
+      setVisible(window.scrollY > 600);
+      // Detecta qué sección está actualmente en viewport
+      const offsets = TOC.map((sec) => {
+        const el = document.getElementById(sec.anchor);
+        if (!el) return { anchor: sec.anchor, top: Infinity };
+        return { anchor: sec.anchor, top: el.getBoundingClientRect().top };
+      });
+      // La sección activa es la última cuyo top <= 120px
+      const current = offsets
+        .filter((o) => o.top <= 120)
+        .sort((a, b) => b.top - a.top)[0];
+      if (current) setActiva(current.anchor);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!visible) return null;
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 40,
+        background: "rgba(244, 239, 230, 0.93)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        borderBottom: `1px solid ${C.rule}`,
+        padding: "10px 20px",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: fontMono,
+            fontSize: 9,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: C.muted,
+            marginRight: 8,
+          }}
+        >
+          Índice ·
+        </span>
+        {TOC.map((sec) => {
+          const esActiva = sec.anchor === activa;
+          return (
+            <button
+              key={sec.anchor}
+              onClick={() => scrollToAnchor(sec.anchor)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 12px",
+                border: `1px solid ${esActiva ? C.ink : C.rule}`,
+                background: esActiva ? C.ink : "transparent",
+                cursor: "pointer",
+                fontFamily: fontDisplay,
+                fontSize: 13,
+                color: esActiva ? C.card : C.ink,
+                fontWeight: 500,
+                borderRadius: 999,
+                transition: "all 0.15s",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: fontMono,
+                  fontSize: 10,
+                  color: esActiva ? C.gold : C.gold,
+                  fontWeight: 700,
+                }}
+              >
+                {sec.n}
+              </span>
+              {sec.titulo}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 };
 
@@ -5451,6 +5555,7 @@ export default function Clase() {
       >
         <SaveStatusBadge status={status} />
       </div>
+      <IndiceStickyCompacto />
       <BotonVolverIndice />
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <Hero />
