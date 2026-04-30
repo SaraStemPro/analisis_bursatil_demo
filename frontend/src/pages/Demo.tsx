@@ -374,13 +374,49 @@ export default function Demo() {
 
       {/* Performance */}
       {perf && perf.total_trades > 0 && (
-        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
-          <h2 className="font-semibold mb-3">Rendimiento</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-slate-400">Rentabilidad</p><p className="font-medium">{perf.total_return_pct.toFixed(2)}%</p></div>
-            <div><p className="text-slate-400">Win rate</p><p className="font-medium">{perf.win_rate.toFixed(1)}%</p></div>
-            <div><p className="text-slate-400">Max drawdown</p><p className="font-medium text-red-400">{perf.max_drawdown_pct.toFixed(2)}%</p></div>
-            <div><p className="text-slate-400">Trades</p><p className="font-medium">{perf.total_trades} ({perf.profitable_trades}W / {perf.losing_trades}L)</p></div>
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700 space-y-4">
+          <div>
+            <h2 className="font-semibold mb-3">Rendimiento</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div><p className="text-slate-400">Rentabilidad</p><p className={`font-medium ${perf.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{perf.total_return_pct >= 0 ? '+' : ''}{perf.total_return_pct.toFixed(2)}%</p></div>
+              <div><p className="text-slate-400">Max drawdown</p><p className="font-medium text-red-400">{perf.max_drawdown_pct.toFixed(2)}%</p></div>
+              <div><p className="text-slate-400">Trades cerrados</p><p className="font-medium">{perf.total_trades} ({perf.profitable_trades}W / {perf.losing_trades}L)</p></div>
+              <div><p className="text-slate-400">Mejor / Peor</p><p className="font-medium text-xs"><span className="text-emerald-400">+{perf.best_trade_pnl?.toFixed(0) ?? '—'}€</span> / <span className="text-red-400">{perf.worst_trade_pnl?.toFixed(0) ?? '—'}€</span></p></div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-700">
+            <div className="flex items-baseline justify-between mb-3">
+              <h3 className="text-sm font-semibold text-amber-300">Esperanza matemática del sistema</h3>
+              <span className="text-xs text-slate-500 font-mono">E = (P_gan × G̅) − (P_per × L̅)</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+              <div>
+                <p className="text-slate-400 text-xs">Win rate (P_gan)</p>
+                <p className="font-medium text-emerald-400">{perf.win_rate.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Loss rate (P_per)</p>
+                <p className="font-medium text-red-400">{perf.loss_rate.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Ganancia media (G̅)</p>
+                <p className="font-medium text-emerald-400">{perf.avg_win != null ? `+${perf.avg_win.toFixed(2)} €` : '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Pérdida media (L̅)</p>
+                <p className="font-medium text-red-400">{perf.avg_loss != null ? `−${perf.avg_loss.toFixed(2)} €` : '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">R/R = G̅ / L̅</p>
+                <p className="font-medium text-amber-300">{perf.risk_reward_ratio != null ? perf.risk_reward_ratio.toFixed(2) : '—'}</p>
+              </div>
+            </div>
+            {perf.expected_value != null && (
+              <div className={`mt-3 px-3 py-2 rounded font-mono text-xs border ${perf.expected_value >= 0 ? 'bg-emerald-900/30 border-emerald-700 text-emerald-300' : 'bg-red-900/30 border-red-700 text-red-300'}`}>
+                E = ({(perf.win_rate / 100).toFixed(2)} × {perf.avg_win?.toFixed(2) ?? 0}) − ({(perf.loss_rate / 100).toFixed(2)} × {perf.avg_loss?.toFixed(2) ?? 0}) = <strong>{perf.expected_value >= 0 ? '+' : ''}{perf.expected_value.toFixed(2)} €</strong> esperados por operación. {perf.expected_value >= 0 ? 'Sistema GANADOR ✓' : 'Sistema PERDEDOR ✗ — revisa tu R/R o tu win rate'}
+              </div>
+            )}
           </div>
         </div>
       )}

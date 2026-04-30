@@ -59,6 +59,13 @@ export const demo = {
   adminPositions: () => api.get<{
     username: string; email: string; balance: number; initial_balance: number;
     invested: number; total_value: number; total_pnl: number; total_pnl_pct: number;
+    stats: {
+      total_trades: number; profitable_trades: number; losing_trades: number;
+      win_rate: number; loss_rate: number;
+      avg_win: number | null; avg_loss: number | null;
+      expected_value: number | null; risk_reward_ratio: number | null;
+      best_trade_pnl: number | null; worst_trade_pnl: number | null;
+    };
     positions: { ticker: string; side: string; quantity: number; avg_price: number;
       current_price: number; pnl: number; pnl_pct: number; portfolio_group: string | null;
       currency: string; fx_pnl: number | null }[];

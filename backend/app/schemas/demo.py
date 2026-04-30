@@ -100,12 +100,17 @@ class PerformanceResponse(BaseModel):
     max_drawdown: float
     max_drawdown_pct: float
     win_rate: float
+    loss_rate: float = 0.0
     total_trades: int
     profitable_trades: int
     losing_trades: int
     best_trade_pnl: float | None = None
     worst_trade_pnl: float | None = None
     avg_trade_duration_days: float | None = None
+    avg_win: float | None = None  # ganancia media en € de las ops ganadoras
+    avg_loss: float | None = None  # pérdida media en € de las ops perdedoras (positivo)
+    expected_value: float | None = None  # E = P_gan × G̅ − P_per × L̅
+    risk_reward_ratio: float | None = None  # G̅ / L̅
 
 
 class SectorAllocation(BaseModel):

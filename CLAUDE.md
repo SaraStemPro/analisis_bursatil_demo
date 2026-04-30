@@ -254,9 +254,12 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime() Madrid 
 
 **Panel del profesor `/admin`**:
 - `GET /api/demo/admin/positions` — `require_role("professor", "admin")`.
-- Devuelve todos los estudiantes con posiciones abiertas, P&L en vivo, balance, invertido.
+- Devuelve todos los estudiantes con posiciones abiertas, P&L en vivo, balance, invertido y **stats de trading** (win rate, loss rate, avg_win, avg_loss, R/R, E por operación) calculados sobre operaciones cerradas.
 - Auto-refresh cada 60s + botón manual.
 - Tarjetas: P&L total clase, P&L medio, total invertido, posiciones abiertas.
+- Filas expandibles con la **esperanza matemática del alumno** (E = P_gan × G̅ − P_per × L̅) en cabecera, y la tabla de posiciones debajo.
+
+**Trade stats compartidos**: `_calculate_trade_stats(pnls)` en `demo_service.py` devuelve win_rate, loss_rate, avg_win, avg_loss (positivo), expected_value, risk_reward_ratio. Lo usan tanto `get_performance` (vista alumno) como `get_admin_positions` (vista profesor) — siempre la misma fórmula. Pedagógicamente conectado con el simulador 2.2 de la lección.
 
 **Modelo `Order`**:
 - `side` (String(10), nullable): `"long" | "short"`

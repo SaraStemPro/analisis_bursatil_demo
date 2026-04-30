@@ -122,6 +122,43 @@ export default function Admin() {
               </div>
             </button>
 
+            {/* Expanded: stats + positions */}
+            {expanded.has(s.email) && s.stats && s.stats.total_trades > 0 && (
+              <div className="border-t border-slate-700 px-4 py-3 bg-slate-950/40">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-amber-300 uppercase tracking-wide">Esperanza matemática · {s.stats.total_trades} ops cerradas</h3>
+                  <span className="text-[10px] text-slate-500 font-mono">E = (P_gan × G̅) − (P_per × L̅)</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs mb-2">
+                  <div>
+                    <p className="text-slate-500">Win rate</p>
+                    <p className="font-medium text-emerald-400">{s.stats.win_rate.toFixed(1)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Loss rate</p>
+                    <p className="font-medium text-red-400">{s.stats.loss_rate.toFixed(1)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Ganancia media</p>
+                    <p className="font-medium text-emerald-400">{s.stats.avg_win != null ? `+${s.stats.avg_win.toFixed(2)}€` : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Pérdida media</p>
+                    <p className="font-medium text-red-400">{s.stats.avg_loss != null ? `−${s.stats.avg_loss.toFixed(2)}€` : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">R/R</p>
+                    <p className="font-medium text-amber-300">{s.stats.risk_reward_ratio != null ? s.stats.risk_reward_ratio.toFixed(2) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">E por op.</p>
+                    <p className={`font-medium ${(s.stats.expected_value ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {s.stats.expected_value != null ? `${s.stats.expected_value >= 0 ? '+' : ''}${s.stats.expected_value.toFixed(2)}€` : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Expanded positions */}
             {expanded.has(s.email) && s.positions.length > 0 && (
               <div className="border-t border-slate-700 px-4 py-2">

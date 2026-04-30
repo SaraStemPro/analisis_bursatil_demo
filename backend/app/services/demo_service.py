@@ -513,6 +513,50 @@ def get_orders(db: Session, user_id: str) -> list[OrderResponse]:
     return [_order_to_response(o) for o in orders]
 
 
+def _calculate_trade_stats(pnls: list[float]) -> dict:
+    """Estadísticas didácticas a partir de la lista de PnLs cerrados.
+    Devuelve win_rate, loss_rate, avg_win, avg_loss (positivo), expected_value, R/R.
+    """
+    if not pnls:
+        return {
+            "total_trades": 0,
+            "profitable_trades": 0,
+            "losing_trades": 0,
+            "win_rate": 0.0,
+            "loss_rate": 0.0,
+            "avg_win": None,
+            "avg_loss": None,
+            "expected_value": None,
+            "risk_reward_ratio": None,
+            "best_trade_pnl": None,
+            "worst_trade_pnl": None,
+        }
+    profitable = [p for p in pnls if p > 0]
+    losing = [p for p in pnls if p < 0]  # excluye 0 (break-even) de "perdedoras"
+    n = len(pnls)
+    p_win = len(profitable) / n
+    p_loss = len(losing) / n
+    avg_win = sum(profitable) / len(profitable) if profitable else None
+    avg_loss = abs(sum(losing) / len(losing)) if losing else None  # positivo
+    e = None
+    if avg_win is not None or avg_loss is not None:
+        e = (p_win * (avg_win or 0)) - (p_loss * (avg_loss or 0))
+    rr = (avg_win / avg_loss) if (avg_win is not None and avg_loss and avg_loss > 0) else None
+    return {
+        "total_trades": n,
+        "profitable_trades": len(profitable),
+        "losing_trades": len(losing),
+        "win_rate": round(p_win * 100, 2),
+        "loss_rate": round(p_loss * 100, 2),
+        "avg_win": round(avg_win, 2) if avg_win is not None else None,
+        "avg_loss": round(avg_loss, 2) if avg_loss is not None else None,
+        "expected_value": round(e, 2) if e is not None else None,
+        "risk_reward_ratio": round(rr, 2) if rr is not None else None,
+        "best_trade_pnl": round(max(pnls), 2),
+        "worst_trade_pnl": round(min(pnls), 2),
+    }
+
+
 def get_performance(db: Session, user_id: str) -> PerformanceResponse:
     portfolio = get_or_create_portfolio(db, user_id)
     closed_orders = (
@@ -543,8 +587,7 @@ def get_performance(db: Session, user_id: str) -> PerformanceResponse:
         )
 
     pnls = [float(o.pnl) for o in closed_orders if o.pnl is not None]
-    profitable = [p for p in pnls if p > 0]
-    losing = [p for p in pnls if p <= 0]
+    stats = _calculate_trade_stats(pnls)
 
     total_return = sum(pnls)
     total_return_pct = total_return / float(portfolio.initial_balance) * 100
@@ -577,13 +620,18 @@ def get_performance(db: Session, user_id: str) -> PerformanceResponse:
         total_return_pct=round(total_return_pct, 2),
         max_drawdown=round(max_dd, 2),
         max_drawdown_pct=round(max_dd_pct, 2),
-        win_rate=round(len(profitable) / len(pnls) * 100, 2) if pnls else 0,
-        total_trades=len(pnls),
-        profitable_trades=len(profitable),
-        losing_trades=len(losing),
-        best_trade_pnl=round(max(pnls), 2) if pnls else None,
-        worst_trade_pnl=round(min(pnls), 2) if pnls else None,
+        win_rate=stats["win_rate"],
+        loss_rate=stats["loss_rate"],
+        total_trades=stats["total_trades"],
+        profitable_trades=stats["profitable_trades"],
+        losing_trades=stats["losing_trades"],
+        best_trade_pnl=stats["best_trade_pnl"],
+        worst_trade_pnl=stats["worst_trade_pnl"],
         avg_trade_duration_days=round(sum(durations) / len(durations), 1) if durations else None,
+        avg_win=stats["avg_win"],
+        avg_loss=stats["avg_loss"],
+        expected_value=stats["expected_value"],
+        risk_reward_ratio=stats["risk_reward_ratio"],
     )
 
 
@@ -1110,6 +1158,15 @@ def get_admin_positions(db: Session) -> list[dict]:
         total_pnl = total_value - float(p.initial_balance)
         total_pnl_pct = (total_pnl / float(p.initial_balance) * 100) if p.initial_balance else 0
 
+        # Trade stats sobre operaciones cerradas
+        closed_orders = (
+            db.query(Order)
+            .filter(Order.portfolio_id == p.id, Order.type == "close")
+            .all()
+        )
+        pnls = [float(o.pnl) for o in closed_orders if o.pnl is not None]
+        stats = _calculate_trade_stats(pnls)
+
         students.append({
             "username": user.name,
             "email": user.email,
@@ -1119,6 +1176,7 @@ def get_admin_positions(db: Session) -> list[dict]:
             "total_value": round(total_value, 2),
             "total_pnl": round(total_pnl, 2),
             "total_pnl_pct": round(total_pnl_pct, 2),
+            "stats": stats,
             "positions": [
                 {
                     "ticker": pos.ticker,

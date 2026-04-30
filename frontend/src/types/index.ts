@@ -246,12 +246,17 @@ export interface Performance {
   max_drawdown: number
   max_drawdown_pct: number
   win_rate: number
+  loss_rate: number
   total_trades: number
   profitable_trades: number
   losing_trades: number
   best_trade_pnl: number | null
   worst_trade_pnl: number | null
   avg_trade_duration_days: number | null
+  avg_win: number | null
+  avg_loss: number | null
+  expected_value: number | null
+  risk_reward_ratio: number | null
 }
 
 // --- Tutor ---
