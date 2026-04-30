@@ -6,3 +6,8 @@ __pycache__/
 node_modules/
 dist/
 .venv/
+
+# Carpetas de planning / borradores locales (no se publican)
+mejoras/
+mejoras2/
+mejoras_/

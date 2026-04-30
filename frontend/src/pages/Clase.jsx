@@ -1211,7 +1211,7 @@ const Hero = () => (
       Diversificación
       <br />
       <span style={{ fontStyle: "italic", color: C.gold }}>
-        & gestión monetaria
+        & Gestión de carteras
       </span>
     </h1>
 
