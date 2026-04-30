@@ -796,10 +796,10 @@ def _download_correlation_base(tickers: list[str], period: str) -> dict | None:
         return None
 
     valid_tickers = list(returns.columns)
-    corr = returns.corr().to_numpy()
+    corr = returns.corr().to_numpy().copy()
     np.fill_diagonal(corr, 1.0)
     corr = (corr + corr.T) / 2
-    individual_vols = (returns.std() * np.sqrt(252)).to_numpy()
+    individual_vols = (returns.std() * np.sqrt(252)).to_numpy().copy()
 
     return {
         "matrix": corr,
