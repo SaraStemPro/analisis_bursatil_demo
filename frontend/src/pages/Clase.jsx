@@ -519,35 +519,40 @@ const Body = ({ children, style }) => (
   </p>
 );
 
-const SubHead = ({ children, num: n }) => (
-  <h3
-    style={{
-      fontFamily: fontDisplay,
-      fontSize: 26,
-      fontWeight: 500,
-      color: C.ink,
-      margin: "32px 0 14px",
-      letterSpacing: "-0.02em",
-      display: "flex",
-      alignItems: "baseline",
-      gap: 12,
-    }}
-  >
-    {n && (
-      <span
-        style={{
-          fontFamily: fontMono,
-          fontSize: 13,
-          color: C.gold,
-          fontWeight: 700,
-        }}
-      >
-        {n}
-      </span>
-    )}
-    {children}
-  </h3>
-);
+const SubHead = ({ children, num, n, id }) => {
+  const numero = n ?? num;
+  return (
+    <h3
+      id={id}
+      style={{
+        fontFamily: fontDisplay,
+        fontSize: 26,
+        fontWeight: 500,
+        color: C.ink,
+        margin: "32px 0 14px",
+        letterSpacing: "-0.02em",
+        display: "flex",
+        alignItems: "baseline",
+        gap: 12,
+        scrollMarginTop: 24,
+      }}
+    >
+      {numero && (
+        <span
+          style={{
+            fontFamily: fontMono,
+            fontSize: 13,
+            color: C.gold,
+            fontWeight: 700,
+          }}
+        >
+          {numero}
+        </span>
+      )}
+      {children}
+    </h3>
+  );
+};
 
 const Row = ({ k, v, c = C.ink }) => (
   <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -3856,6 +3861,439 @@ const PuenteIA = () => (
 );
 
 // ════════════════════════════════════════════════════════════
+//  ÍNDICE NAVEGABLE
+// ════════════════════════════════════════════════════════════
+
+const TOC = [
+  {
+    n: "01",
+    titulo: "Diversificación",
+    anchor: "seccion-diversificacion",
+    sub: [
+      { n: "1.1", titulo: "Niveles de diversificación", anchor: "sub-niveles" },
+      { n: "1.2", titulo: "El motor matemático: la correlación", anchor: "sub-correlacion" },
+      { n: "1.3", titulo: "Tres casos reales que enseñan", anchor: "sub-casos" },
+      { n: "1.4", titulo: "Plantillas de cartera", anchor: "sub-plantillas" },
+    ],
+  },
+  {
+    n: "02",
+    titulo: "Gestión Monetaria",
+    anchor: "seccion-gestion-monetaria",
+    sub: [
+      { n: "2.1", titulo: "Cuántas acciones puedo comprar", anchor: "sub-tamano" },
+      { n: "2.2", titulo: "Esperanza matemática", anchor: "sub-esperanza" },
+      { n: "2.3", titulo: "Drawdown · la asimetría que mata cuentas", anchor: "sub-drawdown" },
+      { n: "2.4", titulo: "Martingala vs Antimartingala", anchor: "sub-martingala" },
+    ],
+  },
+  {
+    n: "03",
+    titulo: "Gestión de Carteras",
+    anchor: "seccion-carteras",
+    sub: [
+      { n: "3.1", titulo: "Asset Allocation", anchor: "sub-allocation" },
+      { n: "3.2", titulo: "Riesgo relativo · Beta y Alfa", anchor: "sub-beta" },
+      { n: "3.3", titulo: "Métricas clave", anchor: "sub-metricas" },
+      { n: "3.4", titulo: "Los 7 riesgos ocultos", anchor: "sub-riesgos" },
+    ],
+  },
+  {
+    n: "04",
+    titulo: "Principios irrenunciables",
+    anchor: "seccion-principios",
+  },
+];
+
+const scrollToAnchor = (id) => {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+const IndiceNavegacion = () => (
+  <section
+    id="indice"
+    style={{
+      margin: "0 0 56px",
+      padding: "32px 0",
+      borderTop: `1px solid ${C.rule}`,
+      borderBottom: `1px solid ${C.rule}`,
+    }}
+  >
+    <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 22 }}>
+      <Tag color={C.gold} filled>Índice</Tag>
+      <span
+        style={{
+          fontFamily: fontMono,
+          fontSize: 11,
+          letterSpacing: "0.15em",
+          color: C.muted,
+          textTransform: "uppercase",
+        }}
+      >
+        Navega entre secciones
+      </span>
+    </div>
+
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+        gap: 28,
+      }}
+    >
+      {TOC.map((sec) => (
+        <div key={sec.anchor}>
+          <button
+            onClick={() => scrollToAnchor(sec.anchor)}
+            onMouseEnter={(e) => (e.currentTarget.style.color = C.gold)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = C.ink)}
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 12,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontFamily: fontDisplay,
+              fontSize: 22,
+              fontWeight: 500,
+              color: C.ink,
+              letterSpacing: "-0.015em",
+              marginBottom: 10,
+              textAlign: "left",
+              transition: "color 0.15s",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: fontDisplay,
+                fontSize: 28,
+                fontWeight: 900,
+                fontStyle: "italic",
+                color: C.gold,
+                lineHeight: 1,
+              }}
+            >
+              {sec.n}
+            </span>
+            {sec.titulo}
+          </button>
+
+          {sec.sub && (
+            <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0 36px" }}>
+              {sec.sub.map((s) => (
+                <li key={s.anchor} style={{ marginBottom: 4 }}>
+                  <button
+                    onClick={() => scrollToAnchor(s.anchor)}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = C.gold)}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = C.inkSoft)}
+                    style={{
+                      padding: 0,
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontFamily: fontMono,
+                      fontSize: 12,
+                      color: C.inkSoft,
+                      textAlign: "left",
+                      transition: "color 0.15s",
+                    }}
+                  >
+                    <span style={{ color: C.muted, marginRight: 8 }}>{s.n}</span>
+                    {s.titulo}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
+// Botón flotante "Volver al índice"
+const BotonVolverIndice = () => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 800);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!visible) return null;
+  return (
+    <button
+      onClick={() => scrollToAnchor("indice")}
+      style={{
+        position: "fixed",
+        bottom: 24,
+        right: 24,
+        zIndex: 40,
+        padding: "10px 16px",
+        background: C.ink,
+        color: C.card,
+        border: `1px solid ${C.gold}`,
+        borderRadius: 999,
+        fontFamily: fontMono,
+        fontSize: 11,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        cursor: "pointer",
+        boxShadow: "0 4px 14px rgba(0,0,0,0.18)",
+        fontWeight: 600,
+      }}
+    >
+      ↑ Volver al índice
+    </button>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
+//  LOS 7 RIESGOS OCULTOS
+// ════════════════════════════════════════════════════════════
+
+const RIESGOS = [
+  {
+    n: "01",
+    nombre: "Concentración",
+    def: "Demasiado peso en un activo, sector o país.",
+    ejemplo: "Tener 60% de la cartera en una sola acción aunque sea Apple.",
+    color: C.red,
+  },
+  {
+    n: "02",
+    nombre: "Correlación",
+    def: "Activos distintos que se comportan igual en momentos críticos.",
+    ejemplo: "Iberdrola + Endesa + Naturgy: 3 tickers, 1 sola fuente de riesgo (eléctricas españolas).",
+    color: C.gold,
+  },
+  {
+    n: "03",
+    nombre: "Volatilidad",
+    def: "Oscilaciones que fuerzan decisiones emocionales o incumplimiento de reglas.",
+    ejemplo: "Tu cartera baja un 15% en una semana y vendes en pánico, aunque tu plan dijera aguantar.",
+    color: C.blue,
+  },
+  {
+    n: "04",
+    nombre: "Drawdown",
+    def: "Caídas acumuladas que exigen recuperaciones matemáticamente difíciles.",
+    ejemplo: "Perder 50% requiere ganar 100% para recuperarte.",
+    color: C.red,
+  },
+  {
+    n: "05",
+    nombre: "Liquidez",
+    def: "No poder salir sin impacto, sin coste alto o sin sufrir deslizamiento.",
+    ejemplo: "Small cap que cotiza muy poco; vender 1.000 acciones mueve el precio un 3%.",
+    color: C.gold,
+  },
+  {
+    n: "06",
+    nombre: "Divisa",
+    def: "En carteras internacionales, parte del resultado viene del tipo de cambio.",
+    ejemplo: "S&P 500 sube 10% en USD pero el dólar cae 12% frente al euro → pierdes en euros.",
+    color: C.blue,
+  },
+  {
+    n: "07",
+    nombre: "Cola (tail risk)",
+    def: "Eventos raros pero severos: crisis de liquidez, gaps, correlaciones que tienden a 1.",
+    ejemplo: "Marzo 2020. Todo cae junto, los stops no saltan al precio que esperabas.",
+    color: C.red,
+  },
+];
+
+const RiesgosOcultos = () => {
+  const [marcados, setMarcados] = useState(() => {
+    try {
+      const out = {};
+      RIESGOS.forEach((r) => {
+        const v = localStorage.getItem(`leccion3:riesgo-expuesto:${r.n}`);
+        out[r.n] = v ? JSON.parse(v) : false;
+      });
+      return out;
+    } catch {
+      return {};
+    }
+  });
+
+  const toggle = (n) => {
+    const next = !marcados[n];
+    const updated = { ...marcados, [n]: next };
+    setMarcados(updated);
+    try {
+      localStorage.setItem(`leccion3:riesgo-expuesto:${n}`, JSON.stringify(next));
+      lessonBus.notify();
+    } catch { /* */ }
+  };
+
+  const total = Object.values(marcados).filter(Boolean).length;
+
+  let mensaje;
+  let mensajeColor;
+  if (total <= 1) {
+    mensaje =
+      "¿Seguro? Revisa tu cartera otra vez. Casi todas las carteras tienen al menos 2-3 riesgos significativos.";
+    mensajeColor = C.gold;
+  } else if (total <= 3) {
+    mensaje = "Diagnóstico realista. Tienes identificados los principales riesgos.";
+    mensajeColor = C.blue;
+  } else if (total <= 5) {
+    mensaje = "Hay trabajo que hacer. Prioriza los de mayor impacto.";
+    mensajeColor = C.gold;
+  } else {
+    mensaje =
+      "Reconocimiento honesto. Ahora diseña un plan para reducir cada uno.";
+    mensajeColor = C.green;
+  }
+
+  return (
+    <Card accent={C.red}>
+      <Tag color={C.red}>Auditoría · marca los que te aplican</Tag>
+      <h3
+        style={{
+          fontFamily: fontDisplay,
+          fontSize: 24,
+          fontWeight: 500,
+          margin: "12px 0 18px",
+          color: C.ink,
+          letterSpacing: "-0.02em",
+        }}
+      >
+        Los 7 riesgos ocultos de cualquier cartera
+      </h3>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 16,
+        }}
+      >
+        {RIESGOS.map((r) => (
+          <div
+            key={r.n}
+            style={{
+              border: `1px solid ${marcados[r.n] ? r.color : C.rule}`,
+              borderTop: `3px solid ${r.color}`,
+              padding: 16,
+              background: marcados[r.n] ? C.paperDark : C.card,
+              transition: "background 0.15s, border-color 0.15s",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
+              <span
+                style={{
+                  fontFamily: fontDisplay,
+                  fontSize: 30,
+                  fontWeight: 900,
+                  fontStyle: "italic",
+                  color: r.color,
+                  lineHeight: 1,
+                }}
+              >
+                {r.n}
+              </span>
+              <span
+                style={{
+                  fontFamily: fontDisplay,
+                  fontSize: 18,
+                  fontWeight: 500,
+                  color: C.ink,
+                  letterSpacing: "-0.015em",
+                }}
+              >
+                {r.nombre}
+              </span>
+            </div>
+
+            <div
+              style={{
+                fontFamily: fontBody,
+                fontSize: 13,
+                color: C.inkSoft,
+                lineHeight: 1.5,
+                marginBottom: 10,
+              }}
+            >
+              {r.def}
+            </div>
+
+            <div
+              style={{
+                fontFamily: fontDisplay,
+                fontSize: 12,
+                color: C.ink,
+                fontStyle: "italic",
+                lineHeight: 1.45,
+                padding: 10,
+                border: `1px dashed ${r.color}`,
+                marginBottom: 12,
+              }}
+            >
+              {r.ejemplo}
+            </div>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+                fontFamily: fontMono,
+                fontSize: 11,
+                letterSpacing: "0.05em",
+                color: marcados[r.n] ? r.color : C.muted,
+                fontWeight: marcados[r.n] ? 700 : 500,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!!marcados[r.n]}
+                onChange={() => toggle(r.n)}
+                style={{ width: 16, height: 16, cursor: "pointer", accentColor: r.color }}
+              />
+              {marcados[r.n] ? "✓ ESTOY EXPUESTO" : "¿Estoy expuesto?"}
+            </label>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          marginTop: 22,
+          padding: "16px 18px",
+          background: C.paperDark,
+          borderLeft: `4px solid ${mensajeColor}`,
+          fontFamily: fontDisplay,
+          fontSize: 15,
+          lineHeight: 1.55,
+          color: C.ink,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: fontMono,
+            fontSize: 10,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: C.muted,
+            marginBottom: 6,
+          }}
+        >
+          Diagnóstico · {total} de 7 riesgos marcados
+        </div>
+        {mensaje}
+      </div>
+    </Card>
+  );
+};
+
+// ════════════════════════════════════════════════════════════
 //  APP
 // ════════════════════════════════════════════════════════════
 
@@ -3908,14 +4346,16 @@ export default function Clase() {
       >
         <SaveStatusBadge status={status} />
       </div>
+      <BotonVolverIndice />
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <Hero />
         <StorageNotice />
+        <IndiceNavegacion />
 
         {/* ════════════════════════════════════════════════════ */}
         {/* SECCIÓN 1 · DIVERSIFICACIÓN                          */}
         {/* ════════════════════════════════════════════════════ */}
-        <section style={{ marginBottom: 80 }}>
+        <section id="seccion-diversificacion" style={{ marginBottom: 80, scrollMarginTop: 24 }}>
           <SectionHeader
             n="01"
             kicker="Primera línea de defensa"
@@ -3936,7 +4376,7 @@ export default function Clase() {
             en el mismo camión.”
           </Pull>
 
-          <SubHead n="1.1">Niveles de diversificación</SubHead>
+          <SubHead n="1.1" id="sub-niveles">Niveles de diversificación</SubHead>
           <Body>
             Puedes diversificar en muchas dimensiones a la vez. Cada una te
             protege contra un tipo distinto de problema. La diversificación
@@ -3946,7 +4386,7 @@ export default function Clase() {
           </Body>
           <NivelesDiversificacion />
 
-          <SubHead n="1.2">El motor matemático: la correlación</SubHead>
+          <SubHead n="1.2" id="sub-correlacion">El motor matemático: la correlación</SubHead>
 
           <EnCristiano titulo="Qué es la correlación, sin matemáticas">
             La correlación es un número entre <strong>−1 y +1</strong> que mide
@@ -3985,7 +4425,7 @@ export default function Clase() {
             pista="Cuando ρ = −1, la fórmula tiene mínimo. Pero ¡ojo!: en mercados reales casi nunca se ve ρ = −1. Lo realista es ρ entre 0 y 0,3."
           />
 
-          <SubHead n="1.3">Tres casos reales que enseñan</SubHead>
+          <SubHead n="1.3" id="sub-casos">Tres casos reales que enseñan</SubHead>
           <Body>
             La teoría se entiende cuando se ve en datos reales. Cambia entre
             los tres casos para descubrir cómo la diversificación —o su
@@ -4006,7 +4446,7 @@ export default function Clase() {
             ]}
           />
 
-          <SubHead n="1.4">Plantillas de cartera para experimentar</SubHead>
+          <SubHead n="1.4" id="sub-plantillas">Plantillas de cartera para experimentar</SubHead>
           <Body>
             La mejor forma de entender la correlación es ver la matriz con
             datos reales. Aquí tienes <strong>4 carteras tipo</strong> que
@@ -4098,7 +4538,7 @@ export default function Clase() {
         {/* ════════════════════════════════════════════════════ */}
         {/* SECCIÓN 2 · GESTIÓN MONETARIA                        */}
         {/* ════════════════════════════════════════════════════ */}
-        <section style={{ marginBottom: 80 }}>
+        <section id="seccion-gestion-monetaria" style={{ marginBottom: 80, scrollMarginTop: 24 }}>
           <SectionHeader
             n="02"
             kicker="El puente entre análisis y resultado"
@@ -4114,7 +4554,7 @@ export default function Clase() {
             entusiasmo, no se decide por “ya me compensaré”.
           </EnCristiano>
 
-          <SubHead n="2.1">Cuántas acciones puedo comprar</SubHead>
+          <SubHead n="2.1" id="sub-tamano">Cuántas acciones puedo comprar</SubHead>
           <Body>
             Esta es la calculadora más importante de toda la asignatura. Se
             usa <strong>antes</strong> de cada operación. Solo necesitas
@@ -4155,7 +4595,7 @@ export default function Clase() {
             ]}
           />
 
-          <SubHead n="2.2">Esperanza matemática</SubHead>
+          <SubHead n="2.2" id="sub-esperanza">Esperanza matemática</SubHead>
 
           <EnCristiano titulo="Por qué puedes ganar a la larga aunque pierdas más veces que ganar">
             Mucha gente cree que para ganar en bolsa hay que acertar mucho. Es
@@ -4197,7 +4637,7 @@ export default function Clase() {
             pista="Para que E ≥ 0: WinRate × Ganancia ≥ LossRate × Pérdida. Equivale a R/R ≥ (1 − win) / win. Si win = 30%, R/R ≥ 2,33. Si win = 50%, R/R ≥ 1."
           />
 
-          <SubHead n="2.3">Drawdown · la asimetría que mata cuentas</SubHead>
+          <SubHead n="2.3" id="sub-drawdown">Drawdown · la asimetría que mata cuentas</SubHead>
 
           <EnCristiano titulo="La trampa matemática que casi nadie ve">
             Si pierdes el 50% de tu cuenta, NO te basta con ganar un 50% para
@@ -4237,7 +4677,7 @@ export default function Clase() {
             pista="Una regla típica de mesa profesional: 'Si llego a un −10% de drawdown, reduzco el tamaño de cada operación a la mitad. Si llego a −15%, paro 1 semana y reviso'."
           />
 
-          <SubHead n="2.4">
+          <SubHead n="2.4" id="sub-martingala">
             Modelos de gestión · Martingala vs Antimartingala
           </SubHead>
 
@@ -4326,7 +4766,7 @@ export default function Clase() {
         {/* ════════════════════════════════════════════════════ */}
         {/* SECCIÓN 3 · GESTIÓN DE CARTERAS                      */}
         {/* ════════════════════════════════════════════════════ */}
-        <section style={{ marginBottom: 80 }}>
+        <section id="seccion-carteras" style={{ marginBottom: 80, scrollMarginTop: 24 }}>
           <SectionHeader
             n="03"
             kicker="Del trade individual al conjunto"
@@ -4343,7 +4783,7 @@ export default function Clase() {
             gestiona como tal.
           </EnCristiano>
 
-          <SubHead n="3.1">
+          <SubHead n="3.1" id="sub-allocation">
             Asset Allocation · la decisión que más explica el resultado
           </SubHead>
 
@@ -4390,7 +4830,7 @@ export default function Clase() {
             pista="No hay perfil 'mejor'. El conservador no es 'cobarde' y el agresivo no es 'valiente'. Lo importante es que tu cartera coincida con TU perfil real, no con el que crees que deberías tener."
           />
 
-          <SubHead n="3.2">Riesgo relativo · Beta y Alfa</SubHead>
+          <SubHead n="3.2" id="sub-beta">Riesgo relativo · Beta y Alfa</SubHead>
 
           <EnCristiano titulo="Beta y Alfa, en cristiano">
             <strong>Beta (β)</strong>: cuánto se mueve tu cartera comparada
@@ -4426,7 +4866,7 @@ export default function Clase() {
             pista="Las carteras concentradas en growth/tech tienen β alta y caen fuerte en correcciones. Las defensivas tienen β baja y aguantan mejor. No hay 'mejor', hay coherencia con tu perfil."
           />
 
-          <SubHead n="3.3">Métricas clave · el cuadro de mando</SubHead>
+          <SubHead n="3.3" id="sub-metricas">Métricas clave · el cuadro de mando</SubHead>
 
           <EnCristiano titulo="Sin números, no hay control">
             Las métricas son tu cuadro de mando: te dicen si tu cartera
@@ -4458,6 +4898,17 @@ export default function Clase() {
             enunciado="Anota AQUÍ los 5 números que vas a vigilar a partir de hoy en cada revisión semanal de tu cartera. Por ejemplo: <br/>1) Rentabilidad acumulada: ___ <br/>2) Drawdown actual desde máximo: ___ <br/>3) Volatilidad estimada: ___ <br/>4) % aciertos últimas 20 ops: ___ <br/>5) Ratio R/R medio: ___"
             pista="Si una métrica no la mides, no la controlas. Si no la controlas, te controla ella a ti. Empieza con 5 números, no más."
           />
+
+          <SubHead n="3.4" id="sub-riesgos">Los 7 riesgos ocultos</SubHead>
+          <EnCristiano titulo="Lo que tu cartera no te está contando">
+            Una cartera puede parecer perfectamente diversificada y, aun así,
+            esconder los siguientes riesgos. La mayoría de inversores se
+            centran solo en uno o dos y olvidan los demás. Repasa la lista
+            mirando <strong>tu cartera real</strong> y, para cada riesgo,
+            pregúntate: ¿estoy expuesto? ¿en qué medida? ¿qué haría si se
+            materializa?
+          </EnCristiano>
+          <RiesgosOcultos />
 
           <SubHead>Comprueba que lo has entendido</SubHead>
           <Quiz
@@ -4500,7 +4951,7 @@ export default function Clase() {
         {/* ════════════════════════════════════════════════════ */}
         {/* SECCIÓN 4 · PRINCIPIOS                               */}
         {/* ════════════════════════════════════════════════════ */}
-        <section style={{ marginBottom: 60 }}>
+        <section id="seccion-principios" style={{ marginBottom: 60, scrollMarginTop: 24 }}>
           <SectionHeader
             n="04"
             kicker="Para llevarse a la práctica"
