@@ -28,8 +28,8 @@ router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 # --- Estrategias ---
 
 @router.get("/strategies/templates", response_model=list[StrategyResponse])
-def templates():
-    return backtest_service.get_templates()
+def templates(db: Session = Depends(get_db)):
+    return backtest_service.get_templates(db)
 
 
 @router.get("/strategies", response_model=list[StrategyResponse])
@@ -65,7 +65,7 @@ def update_strategy(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return backtest_service.update_strategy(db, current_user.id, strategy_id, body)
+    return backtest_service.update_strategy(db, current_user.id, current_user.role, strategy_id, body)
 
 
 @router.delete("/strategies/{strategy_id}", status_code=204)
@@ -74,7 +74,7 @@ def delete_strategy(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    backtest_service.delete_strategy(db, current_user.id, strategy_id)
+    backtest_service.delete_strategy(db, current_user.id, current_user.role, strategy_id)
 
 
 # --- Ejecución ---

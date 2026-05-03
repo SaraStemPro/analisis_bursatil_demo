@@ -381,6 +381,12 @@ Comparator:           greater_than, less_than, crosses_above,
 - **Inline rules**: `BacktestRunRequest` acepta `rules` directamente (sin crear estrategia temporal).
 - **`offset` por operando** en `ConditionOperand`: además del offset por `Condition`, cada operando puede tener su propio offset (0-20 velas atrás). Permite expresar comparaciones entre barras distintas dentro de la misma condición (p.ej. `close[t-1] < close[t-2]`).
 
+**Plantillas editables por el profesor**:
+- Built-in templates en código (`TEMPLATES`): inmutables, mismas para todos.
+- Plantillas BD (`SEEDED_DB_TEMPLATES` → seed en BD al arrancar como `Strategy(is_template=True, user_id=None)`): visibles para todos, editables por `role in (professor, admin)` vía `PUT/DELETE /backtest/strategies/{id}` normales. Sirven para sistemas didácticos que la profesora quiere ajustar (p.ej. "Sistema Sara · 20/20 + Bollinger").
+- `get_templates(db?)` fusiona built-in + DB templates.
+- Frontend (`Backtest.tsx`): los templates con UUID built-in (`00000000-0000-0000-0000-{12 hex}`) NO muestran botones de editar/borrar; los demás los muestran cuando `user.role === 'professor'`. Badge "plantilla · editable" en ámbar.
+
 **Frontend**:
 ```
 components/backtest/StrategyBuilder.tsx  ← constructor visual completo

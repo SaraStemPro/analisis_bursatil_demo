@@ -191,6 +191,19 @@ def _migrate_close_order_status():
 _migrate_close_order_status()
 
 
+# Seed plantillas DB compartidas (Sistema Sara y futuras editables por profesor)
+def _seed_db_templates():
+    from .services.backtest_service import seed_db_templates
+    db: Session = SessionLocal()
+    try:
+        seed_db_templates(db)
+    finally:
+        db.close()
+
+
+_seed_db_templates()
+
+
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",

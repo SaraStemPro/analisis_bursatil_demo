@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { FlaskConical, Play, Trash2, Plus, Pencil, Settings2, X, Briefcase, ChevronDown, ChevronRight, Info } from 'lucide-react'
 import StrategyBuilder from '../components/backtest/StrategyBuilder'
 import TickerSearchInput from '../components/demo/TickerSearchInput'
+import { useAuthStore } from '../context/auth-store'
 
 
 const COMP_LABELS: Record<string, string> = {
@@ -16,6 +17,8 @@ type BacktestMode = 'single' | 'portfolio'
 
 export default function Backtest() {
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const isProfessor = user?.role === 'professor' || user?.role === 'admin'
   const [mode, setMode] = useState<BacktestMode>('single')
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null)
   const [customRules, setCustomRules] = useState<StrategyRules | null>(null)
@@ -291,21 +294,51 @@ export default function Backtest() {
             <div className="mb-3">
               <p className="text-xs text-slate-500 mb-2">Plantillas predefinidas</p>
               <div className="space-y-1.5">
-                {templates.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSelectedStrategy(s)}
-                    className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                      selectedStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-slate-800 hover:bg-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{s.name}</span>
-                      <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded">plantilla</span>
+                {templates.map((s) => {
+                  // Las plantillas built-in tienen ID UUID(int=N) (todos los chars son 0 excepto el último)
+                  // Las DB-templates editables tienen UUID normal con caracteres aleatorios
+                  const isBuiltIn = /^00000000-0000-0000-0000-[0-9a-f]{12}$/i.test(s.id)
+                  const editable = !isBuiltIn && isProfessor
+                  return (
+                    <div
+                      key={s.id}
+                      className={`flex items-center gap-1 rounded text-sm transition-colors ${
+                        selectedStrategy?.id === s.id ? 'bg-emerald-900/50 border border-emerald-600' : 'bg-slate-800 hover:bg-slate-700'
+                      }`}
+                    >
+                      <button
+                        onClick={() => setSelectedStrategy(s)}
+                        className="flex-1 text-left px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{s.name}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${editable ? 'bg-amber-900 text-amber-300' : 'bg-blue-900 text-blue-300'}`}>
+                            {editable ? 'plantilla · editable' : 'plantilla'}
+                          </span>
+                        </div>
+                        {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
+                      </button>
+                      {editable && (
+                        <>
+                          <button
+                            onClick={() => { setEditingStrategy(s); setShowBuilder(true) }}
+                            className="p-1.5 text-slate-500 hover:text-amber-400"
+                            title="Editar plantilla compartida"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => { if (confirm(`¿Eliminar plantilla "${s.name}"?`)) deleteStratMut.mutate(s.id) }}
+                            className="p-1.5 text-slate-500 hover:text-red-400 mr-1"
+                            title="Eliminar plantilla compartida"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
                     </div>
-                    {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
-                  </button>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

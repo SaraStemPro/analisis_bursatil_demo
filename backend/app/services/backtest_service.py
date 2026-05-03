@@ -43,6 +43,79 @@ import numpy as np
 # Estrategias predefinidas (templates)
 # ──────────────────────────────────────
 
+# Plantillas DB editables (sembradas en BD al arrancar). Cualquier diccionario
+# aquí dentro produce una Strategy con is_template=True visible para todos. La
+# profesora puede editarlas desde la UI. Para hacer una plantilla NO editable,
+# basta con moverla al array TEMPLATES de abajo.
+SEEDED_DB_TEMPLATES: list[dict] = [
+    {
+        "name": "Sistema Sara · 20/20 + Bollinger",
+        "description": "Vela 20/20 que cruza la banda media de Bollinger — impulso por volatilidad.",
+        "rules": {
+            "side": "both",
+            "entry": {
+                "operator": "AND",
+                "conditions": [
+                    {"left": {"type": "candle_pattern", "pattern": "bullish_2020"}, "comparator": "greater_than", "right": {"type": "value", "value": 0}},
+                    {"left": {"type": "price", "field": "close"}, "comparator": "crosses_above", "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}}},
+                    {"left": {"type": "price", "field": "close", "offset": 1}, "comparator": "less_than", "right": {"type": "price", "field": "close", "offset": 2}},
+                    {"left": {"type": "price", "field": "close", "offset": 2}, "comparator": "less_than", "right": {"type": "price", "field": "close", "offset": 3}},
+                ],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [
+                    {"left": {"type": "price", "field": "close"}, "comparator": "crosses_below", "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}}},
+                ],
+            },
+            "entry_short": {
+                "operator": "AND",
+                "conditions": [
+                    {"left": {"type": "candle_pattern", "pattern": "bearish_2020"}, "comparator": "greater_than", "right": {"type": "value", "value": 0}},
+                    {"left": {"type": "price", "field": "close"}, "comparator": "crosses_below", "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}}},
+                    {"left": {"type": "price", "field": "close", "offset": 1}, "comparator": "greater_than", "right": {"type": "price", "field": "close", "offset": 2}},
+                    {"left": {"type": "price", "field": "close", "offset": 2}, "comparator": "greater_than", "right": {"type": "price", "field": "close", "offset": 3}},
+                ],
+            },
+            "exit_short": {
+                "operator": "AND",
+                "conditions": [
+                    {"left": {"type": "price", "field": "close"}, "comparator": "crosses_above", "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}}},
+                ],
+            },
+            "risk_management": {
+                "stop_loss_type": "fractal",
+                "stop_loss_pct": 5,
+                "position_size_pct": 100,
+                "max_risk_pct": 2,
+                "bbands_trailing_stop": True,
+                "bbands_trailing_length": 20,
+                "bbands_trailing_std": 2,
+            },
+        },
+    },
+]
+
+
+def seed_db_templates(db: Session) -> None:
+    """Crea las plantillas SEEDED_DB_TEMPLATES en BD (is_template=True) si no existen.
+    Se llaman desde main.py al arrancar. Idempotente.
+    """
+    for tpl in SEEDED_DB_TEMPLATES:
+        existing = db.query(Strategy).filter(Strategy.name == tpl["name"], Strategy.is_template == True).first()  # noqa: E712
+        if existing:
+            continue
+        s = Strategy(
+            name=tpl["name"],
+            description=tpl.get("description"),
+            rules=tpl["rules"],
+            is_template=True,
+            user_id=None,
+        )
+        db.add(s)
+    db.commit()
+
+
 TEMPLATES: list[dict] = [
     {
         "name": "Cruce Dorado",
@@ -161,99 +234,6 @@ TEMPLATES: list[dict] = [
         },
     },
     {
-        "name": "Sistema Sara · 20/20 + Bollinger",
-        "description": (
-            "Sistema propio de la profesora Sara. LONG: vela 20/20 alcista cruza la banda media de Bollinger AL ALZA "
-            "tras 2 velas de cierres descendentes (mini retroceso). Stop inicial en el fractal anterior de soporte; "
-            "se mueve a la banda media cuando el precio cierra por encima de la banda superior. SHORT espejo: vela "
-            "20/20 bajista cruza la banda media a la baja tras 2 velas de cierres ascendentes (mini rally). Stop "
-            "inicial en fractal de resistencia; se mueve a la banda media cuando el precio cierra por debajo de la "
-            "banda inferior. Pensado para corto plazo."
-        ),
-        "rules": {
-            "side": "both",
-            "entry": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "left": {"type": "candle_pattern", "pattern": "bullish_2020"},
-                        "comparator": "greater_than",
-                        "right": {"type": "value", "value": 0},
-                    },
-                    {
-                        "left": {"type": "price", "field": "close"},
-                        "comparator": "crosses_above",
-                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
-                    },
-                    {
-                        "left": {"type": "price", "field": "close", "offset": 1},
-                        "comparator": "less_than",
-                        "right": {"type": "price", "field": "close", "offset": 2},
-                    },
-                    {
-                        "left": {"type": "price", "field": "close", "offset": 2},
-                        "comparator": "less_than",
-                        "right": {"type": "price", "field": "close", "offset": 3},
-                    },
-                ],
-            },
-            "exit": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "left": {"type": "price", "field": "close"},
-                        "comparator": "crosses_below",
-                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
-                    },
-                ],
-            },
-            "entry_short": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "left": {"type": "candle_pattern", "pattern": "bearish_2020"},
-                        "comparator": "greater_than",
-                        "right": {"type": "value", "value": 0},
-                    },
-                    {
-                        "left": {"type": "price", "field": "close"},
-                        "comparator": "crosses_below",
-                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
-                    },
-                    {
-                        "left": {"type": "price", "field": "close", "offset": 1},
-                        "comparator": "greater_than",
-                        "right": {"type": "price", "field": "close", "offset": 2},
-                    },
-                    {
-                        "left": {"type": "price", "field": "close", "offset": 2},
-                        "comparator": "greater_than",
-                        "right": {"type": "price", "field": "close", "offset": 3},
-                    },
-                ],
-            },
-            "exit_short": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "left": {"type": "price", "field": "close"},
-                        "comparator": "crosses_above",
-                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
-                    },
-                ],
-            },
-            "risk_management": {
-                "stop_loss_type": "fractal",
-                "stop_loss_pct": 5,
-                "position_size_pct": 100,
-                "max_risk_pct": 2,
-                "bbands_trailing_stop": True,
-                "bbands_trailing_length": 20,
-                "bbands_trailing_std": 2,
-            },
-        },
-    },
-    {
         "name": "EMA Momentum",
         "description": "Compra cuando precio cruza por encima de EMA 20 y RSI > 50. Vende cuando precio cruza por debajo de EMA 20.",
         "rules": {
@@ -290,9 +270,9 @@ TEMPLATES: list[dict] = [
 # CRUD Estrategias
 # ──────────────────────────────────────
 
-def get_templates() -> list[StrategyResponse]:
+def get_templates(db: Session | None = None) -> list[StrategyResponse]:
     now = datetime.now(timezone.utc)
-    return [
+    builtins = [
         StrategyResponse(
             id=UUID(int=i),
             name=t["name"],
@@ -304,6 +284,17 @@ def get_templates() -> list[StrategyResponse]:
         )
         for i, t in enumerate(TEMPLATES)
     ]
+    db_templates: list[StrategyResponse] = []
+    if db is not None:
+        rows = (
+            db.query(Strategy)
+            .filter(Strategy.is_template == True)  # noqa: E712
+            .order_by(Strategy.created_at.asc())
+            .all()
+        )
+        db_templates = [_strategy_to_response(s) for s in rows]
+    # Built-ins primero, luego DB templates (Sistema Sara y futuras)
+    return builtins + db_templates
 
 
 def get_user_strategies(db: Session, user_id: str) -> list[StrategyResponse]:
@@ -331,7 +322,7 @@ def create_strategy(db: Session, user_id: str, body: StrategyCreateRequest) -> S
 
 
 def get_strategy(db: Session, user_id: str, strategy_id: str) -> StrategyResponse:
-    # Primero buscar en templates
+    # Primero buscar en templates built-in (en código)
     for i, t in enumerate(TEMPLATES):
         if str(UUID(int=i)) == strategy_id:
             now = datetime.now(timezone.utc)
@@ -345,24 +336,43 @@ def get_strategy(db: Session, user_id: str, strategy_id: str) -> StrategyRespons
                 updated_at=now,
             )
 
+    # Después buscar en BD: primero como propia, después como template compartido
     strategy = (
         db.query(Strategy)
         .filter(Strategy.id == strategy_id, Strategy.user_id == user_id)
         .first()
     )
     if not strategy:
+        strategy = (
+            db.query(Strategy)
+            .filter(Strategy.id == strategy_id, Strategy.is_template == True)  # noqa: E712
+            .first()
+        )
+    if not strategy:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
     return _strategy_to_response(strategy)
 
 
-def update_strategy(db: Session, user_id: str, strategy_id: str, body: StrategyUpdateRequest) -> StrategyResponse:
+def update_strategy(db: Session, user_id: str, user_role: str, strategy_id: str, body: StrategyUpdateRequest) -> StrategyResponse:
+    # Estrategia propia (no template)
     strategy = (
         db.query(Strategy)
-        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id, Strategy.is_template == False)
+        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id, Strategy.is_template == False)  # noqa: E712
         .first()
     )
+    # Si no es propia, miramos si es un template editable (solo profesor puede)
     if not strategy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
+        template = (
+            db.query(Strategy)
+            .filter(Strategy.id == strategy_id, Strategy.is_template == True)  # noqa: E712
+            .first()
+        )
+        if template:
+            if user_role not in ("professor", "admin"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo el profesor puede editar plantillas compartidas")
+            strategy = template
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
 
     if body.name is not None:
         strategy.name = body.name
@@ -376,14 +386,24 @@ def update_strategy(db: Session, user_id: str, strategy_id: str, body: StrategyU
     return _strategy_to_response(strategy)
 
 
-def delete_strategy(db: Session, user_id: str, strategy_id: str) -> None:
+def delete_strategy(db: Session, user_id: str, user_role: str, strategy_id: str) -> None:
     strategy = (
         db.query(Strategy)
-        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id, Strategy.is_template == False)
+        .filter(Strategy.id == strategy_id, Strategy.user_id == user_id, Strategy.is_template == False)  # noqa: E712
         .first()
     )
     if not strategy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
+        template = (
+            db.query(Strategy)
+            .filter(Strategy.id == strategy_id, Strategy.is_template == True)  # noqa: E712
+            .first()
+        )
+        if template:
+            if user_role not in ("professor", "admin"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo el profesor puede borrar plantillas compartidas")
+            strategy = template
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estrategia no encontrada")
     db.delete(strategy)
     db.commit()
 
