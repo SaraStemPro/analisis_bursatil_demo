@@ -42,6 +42,12 @@ class ConditionOperand(BaseModel):
         default=None,
         description="Patrón de vela (requerido si type='candle_pattern')",
     )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        le=20,
+        description="Velas atrás (0=actual). Permite comparar valores de barras distintas dentro de la misma condición.",
+    )
 
     @model_validator(mode="after")
     def validate_operand(self):
@@ -100,6 +106,12 @@ class RiskManagement(BaseModel):
     take_profit_pct: float | None = Field(default=None, gt=0, le=1000)
     position_size_pct: float = Field(default=100.0, gt=0, le=100, description="% del capital disponible por operación")
     max_risk_pct: float | None = Field(default=None, gt=0, le=100, description="Riesgo máx. por trade como % del capital (ej: 2%). Ajusta el tamaño de posición automáticamente.")
+    bbands_trailing_stop: bool = Field(
+        default=False,
+        description="Si True, el stop se mueve a la banda media de Bollinger cuando el precio cierra fuera de la banda superior (long) / inferior (short). Requiere haber tomado BBANDS en las reglas.",
+    )
+    bbands_trailing_length: int = Field(default=20, ge=2, le=200, description="Período BBANDS para el trailing stop")
+    bbands_trailing_std: float = Field(default=2.0, gt=0, le=5, description="Desviaciones estándar BBANDS para el trailing stop")
 
 
 class StrategyRules(BaseModel):

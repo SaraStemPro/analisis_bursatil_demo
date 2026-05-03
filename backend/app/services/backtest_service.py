@@ -161,6 +161,99 @@ TEMPLATES: list[dict] = [
         },
     },
     {
+        "name": "Sistema Sara · 20/20 + Bollinger",
+        "description": (
+            "Sistema propio de la profesora Sara. LONG: vela 20/20 alcista cruza la banda media de Bollinger AL ALZA "
+            "tras 2 velas de cierres descendentes (mini retroceso). Stop inicial en el fractal anterior de soporte; "
+            "se mueve a la banda media cuando el precio cierra por encima de la banda superior. SHORT espejo: vela "
+            "20/20 bajista cruza la banda media a la baja tras 2 velas de cierres ascendentes (mini rally). Stop "
+            "inicial en fractal de resistencia; se mueve a la banda media cuando el precio cierra por debajo de la "
+            "banda inferior. Pensado para corto plazo."
+        ),
+        "rules": {
+            "side": "both",
+            "entry": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "candle_pattern", "pattern": "bullish_2020"},
+                        "comparator": "greater_than",
+                        "right": {"type": "value", "value": 0},
+                    },
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "comparator": "crosses_above",
+                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
+                    },
+                    {
+                        "left": {"type": "price", "field": "close", "offset": 1},
+                        "comparator": "less_than",
+                        "right": {"type": "price", "field": "close", "offset": 2},
+                    },
+                    {
+                        "left": {"type": "price", "field": "close", "offset": 2},
+                        "comparator": "less_than",
+                        "right": {"type": "price", "field": "close", "offset": 3},
+                    },
+                ],
+            },
+            "exit": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "comparator": "crosses_below",
+                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
+                    },
+                ],
+            },
+            "entry_short": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "candle_pattern", "pattern": "bearish_2020"},
+                        "comparator": "greater_than",
+                        "right": {"type": "value", "value": 0},
+                    },
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "comparator": "crosses_below",
+                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
+                    },
+                    {
+                        "left": {"type": "price", "field": "close", "offset": 1},
+                        "comparator": "greater_than",
+                        "right": {"type": "price", "field": "close", "offset": 2},
+                    },
+                    {
+                        "left": {"type": "price", "field": "close", "offset": 2},
+                        "comparator": "greater_than",
+                        "right": {"type": "price", "field": "close", "offset": 3},
+                    },
+                ],
+            },
+            "exit_short": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "comparator": "crosses_above",
+                        "right": {"type": "indicator", "name": "BBANDS", "params": {"length": 20, "std": 2, "band": "mid"}},
+                    },
+                ],
+            },
+            "risk_management": {
+                "stop_loss_type": "fractal",
+                "stop_loss_pct": 5,
+                "position_size_pct": 100,
+                "max_risk_pct": 2,
+                "bbands_trailing_stop": True,
+                "bbands_trailing_length": 20,
+                "bbands_trailing_std": 2,
+            },
+        },
+    },
+    {
         "name": "EMA Momentum",
         "description": "Compra cuando precio cruza por encima de EMA 20 y RSI > 50. Vende cuando precio cruza por debajo de EMA 20.",
         "rules": {
@@ -635,6 +728,15 @@ def _compute_all_indicators(df: pd.DataFrame, rules: StrategyRules) -> dict[str,
         data["_stop_fractal_down"] = result["fractal_down"]
         data["_stop_fractal_up"] = result["fractal_up"]
 
+    # Compute BBANDS for trailing stop if needed (independiente de las que pidan las reglas)
+    if rules.risk_management.bbands_trailing_stop:
+        bb_len = int(rules.risk_management.bbands_trailing_length)
+        bb_std = float(rules.risk_management.bbands_trailing_std)
+        result = indicator_service._bbands(df["Close"], bb_len, bb_std)
+        data["_trailing_bb_upper"] = result["bbu"]
+        data["_trailing_bb_mid"] = result["bbm"]
+        data["_trailing_bb_lower"] = result["bbl"]
+
     # Compute candle patterns if needed
     if needs_patterns:
         patterns = _detect_candle_patterns(df)
@@ -645,21 +747,27 @@ def _compute_all_indicators(df: pd.DataFrame, rules: StrategyRules) -> dict[str,
 
 
 def _get_operand_value(operand: ConditionOperand, i: int, df: pd.DataFrame, indicator_data: dict) -> float | None:
-    """Obtiene el valor numérico de un operando en el índice i."""
+    """Obtiene el valor numérico de un operando en el índice i.
+    Si el operando lleva su propio offset, se evalúa en i - offset.
+    """
+    op_offset = getattr(operand, "offset", 0) or 0
+    eval_i = i - op_offset
+    if eval_i < 0:
+        return None
     if operand.type == ConditionOperandType.value:
         return operand.value
     elif operand.type == ConditionOperandType.price:
         field_map = {"open": "Open", "high": "High", "low": "Low", "close": "Close"}
         col = field_map.get(operand.field.value, "Close") if operand.field else "Close"
-        return float(df.iloc[i][col])
+        return float(df.iloc[eval_i][col])
     elif operand.type == ConditionOperandType.volume:
-        return float(df.iloc[i]["Volume"])
+        return float(df.iloc[eval_i]["Volume"])
     elif operand.type == ConditionOperandType.candle_pattern:
         pattern_name = operand.pattern.value if operand.pattern else ""
         series = indicator_data.get(f"_pattern_{pattern_name}")
         if series is None:
             return 0.0
-        val = series.iloc[i]
+        val = series.iloc[eval_i]
         return 0.0 if pd.isna(val) else float(val)
     elif operand.type == ConditionOperandType.indicator:
         params = operand.params or {}
@@ -676,7 +784,7 @@ def _get_operand_value(operand: ConditionOperand, i: int, df: pd.DataFrame, indi
             series = indicator_data.get(key)
         if series is None:
             return None
-        val = series.iloc[i]
+        val = series.iloc[eval_i]
         return None if pd.isna(val) else float(val)
     return None
 
@@ -837,6 +945,7 @@ def _open_position(capital: float, close: float, pos_is_short: bool, rules: Stra
         "stop_price": stop_price,
         "invested": min(invest, capital),
         "is_short": pos_is_short,
+        "trailing_active": False,
     }
     return pos, capital - min(invest, capital)
 
@@ -951,6 +1060,31 @@ def _simulate(
             exit_reason = None
             pos_is_short = position["is_short"]
             entry_price = position["entry_price"]
+
+            # Trailing stop a banda media de Bollinger tras breakout
+            if rules.risk_management.bbands_trailing_stop:
+                bb_upper = indicator_data.get("_trailing_bb_upper")
+                bb_mid = indicator_data.get("_trailing_bb_mid")
+                bb_lower = indicator_data.get("_trailing_bb_lower")
+                if bb_upper is not None and bb_mid is not None and bb_lower is not None:
+                    if not position.get("trailing_active"):
+                        # ¿Ha cerrado fuera de la banda de breakout?
+                        if pos_is_short:
+                            if not pd.isna(bb_lower.iloc[i]) and close < float(bb_lower.iloc[i]):
+                                position["trailing_active"] = True
+                        else:
+                            if not pd.isna(bb_upper.iloc[i]) and close > float(bb_upper.iloc[i]):
+                                position["trailing_active"] = True
+                    if position.get("trailing_active") and not pd.isna(bb_mid.iloc[i]):
+                        new_stop = float(bb_mid.iloc[i])
+                        cur_stop = position.get("stop_price")
+                        # Solo movemos en dirección favorable (nunca ampliamos riesgo)
+                        if pos_is_short:
+                            if cur_stop is None or new_stop < cur_stop:
+                                position["stop_price"] = new_stop
+                        else:
+                            if cur_stop is None or new_stop > cur_stop:
+                                position["stop_price"] = new_stop
 
             # Check stop loss
             stop_price = position.get("stop_price")

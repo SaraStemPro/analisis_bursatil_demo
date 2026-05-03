@@ -309,6 +309,7 @@ export interface ConditionOperand {
   field?: PriceField
   value?: number
   pattern?: CandlePattern
+  offset?: number
 }
 
 export interface Condition {
@@ -330,6 +331,9 @@ export interface RiskManagement {
   take_profit_pct: number | null
   position_size_pct: number
   max_risk_pct: number | null
+  bbands_trailing_stop?: boolean
+  bbands_trailing_length?: number
+  bbands_trailing_std?: number
 }
 
 export type StrategySide = 'long' | 'short' | 'both'

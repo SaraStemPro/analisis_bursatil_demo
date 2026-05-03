@@ -373,11 +373,13 @@ Comparator:           greater_than, less_than, crosses_above,
   - Long: `PnL = (exit - entry) × qty`; stop si BAJA.
   - Short: `PnL = (entry - exit) × qty`; stop si SUBE.
 - **Fractal stop**: long usa fractal_down (soporte); short usa fractal_up (resistencia).
+- **BBANDS trailing stop** (`risk_management.bbands_trailing_stop`): tras la entrada, si el precio cierra por encima de la banda superior (long) o por debajo de la inferior (short), el stop se mueve dinámicamente a la banda media. Solo se mueve en dirección favorable (nunca amplía riesgo). Período/std configurables (`bbands_trailing_length`, `bbands_trailing_std`, defaults 20/2).
 - **Risk-based sizing**: `max_risk_pct` limita pérdida por trade.
 - **Timeframes**: 1m, 5m, 15m, 1h, 4h, 1d, 1wk.
 - **Patrones de velas**: 6 patrones detectados con OHLC math nativo.
 - **Modo `both`**: señal entrada → Long, señal salida → Short, independientes.
 - **Inline rules**: `BacktestRunRequest` acepta `rules` directamente (sin crear estrategia temporal).
+- **`offset` por operando** en `ConditionOperand`: además del offset por `Condition`, cada operando puede tener su propio offset (0-20 velas atrás). Permite expresar comparaciones entre barras distintas dentro de la misma condición (p.ej. `close[t-1] < close[t-2]`).
 
 **Frontend**:
 ```

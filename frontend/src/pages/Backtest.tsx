@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backtest } from '../api'
 import type { Strategy, BacktestRun, BacktestRunSummary, StrategyRules, ConditionOperand, RiskManagement, StopLossType, StrategySide, PortfolioBacktestRun, PortfolioRunSummary } from '../types'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { FlaskConical, Play, Trash2, Plus, Pencil, Settings2, X, Briefcase, ChevronDown, ChevronRight } from 'lucide-react'
+import { FlaskConical, Play, Trash2, Plus, Pencil, Settings2, X, Briefcase, ChevronDown, ChevronRight, Info } from 'lucide-react'
 import StrategyBuilder from '../components/backtest/StrategyBuilder'
 import TickerSearchInput from '../components/demo/TickerSearchInput'
 
@@ -778,25 +778,82 @@ function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, upd
 }
 
 
+function MetricInfoTooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span className="relative inline-block ml-1 align-middle">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow(!show)}
+        className="text-slate-500 hover:text-slate-300 transition-colors"
+      >
+        <Info size={11} />
+      </button>
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-700 text-slate-200 text-xs rounded-lg shadow-lg w-64 leading-relaxed pointer-events-none whitespace-normal">
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-700" />
+        </span>
+      )}
+    </span>
+  )
+}
+
+const METRIC_INFO = {
+  total_return_pct: 'Rentabilidad total del periodo en %. Cuánto ha ganado o perdido tu sistema sobre el capital inicial. No anualizada.',
+  total_return: 'Beneficio o pérdida neta acumulada en €, ya descontadas comisiones.',
+  annualized_return_pct: 'CAGR — rentabilidad anualizada compuesta. Permite comparar sistemas con periodos distintos. Aprox: ((1 + total_return)^(1/años)) − 1.',
+  sharpe_ratio: 'Sharpe = retorno medio / volatilidad. Mide rentabilidad por unidad de riesgo. >1 decente, >2 muy bueno, >3 excelente. <0 perdedor.',
+  max_drawdown_pct: 'Mayor caída desde un máximo previo de la curva de capital. Mide tu peor racha. Sistema con MDD 30% ha llegado a estar 30% por debajo de su pico.',
+  max_drawdown: 'Igual que MDD% pero en €.',
+  win_rate: 'Porcentaje de operaciones ganadoras sobre el total. NO mide rentabilidad: un 35% con R/R 3 supera al 70% con R/R 0.5.',
+  profit_factor: 'Suma de ganancias / suma de pérdidas (en valor absoluto). >1 ganador, >1.5 sólido, >2 muy bueno. =1 sistema neutro.',
+  total_trades: 'Número de operaciones cerradas en el periodo. Pocos trades (<20) → resultados poco fiables, más muestra = más significativo.',
+  best_trade: 'Operación más rentable del periodo. Si depende mucho de un único trade, el sistema es frágil.',
+  worst_trade: 'Operación más perdedora. Útil para ver si el stop loss funcionó o se escapó algo.',
+  buy_and_hold: 'Lo que habrías ganado simplemente comprando y manteniendo el activo desde la fecha de inicio. Tu sistema TIENE que superarlo netamente para justificar la actividad.',
+}
+
+function MetricCard({ label, value, color = '', tooltip }: { label: string; value: string; color?: string; tooltip?: string }) {
+  return (
+    <div>
+      <p className="text-slate-400 flex items-center">
+        {label}
+        {tooltip && <MetricInfoTooltip text={tooltip} />}
+      </p>
+      <p className={`font-bold ${color}`}>{value}</p>
+    </div>
+  )
+}
+
 function MetricsGrid({ metrics }: { metrics: import('../types').BacktestMetrics }) {
+  const totColor = metrics.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'
+  const retColor = metrics.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'
+  const bestColor = (metrics.best_trade_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+  const worstColor = (metrics.worst_trade_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-sm">
-      <div><p className="text-slate-400">Rentabilidad</p><p className={`font-bold ${metrics.total_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.total_return_pct >= 0 ? '+' : ''}{metrics.total_return_pct.toFixed(2)}%</p></div>
-      <div><p className="text-slate-400">Retorno</p><p className={`font-bold ${metrics.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.total_return >= 0 ? '+' : ''}{metrics.total_return.toFixed(2)}€</p></div>
-      <div><p className="text-slate-400">Sharpe</p><p className="font-bold">{metrics.sharpe_ratio?.toFixed(2) ?? 'N/A'}</p></div>
-      <div><p className="text-slate-400">Max Drawdown</p><p className="font-bold text-red-400">{metrics.max_drawdown_pct.toFixed(2)}%</p></div>
-      <div><p className="text-slate-400">Win Rate</p><p className="font-bold">{metrics.win_rate.toFixed(1)}%</p></div>
-      <div><p className="text-slate-400">Profit Factor</p><p className="font-bold">{metrics.profit_factor?.toFixed(2) ?? 'N/A'}</p></div>
-      <div><p className="text-slate-400">Trades</p><p className="font-bold">{metrics.total_trades}</p></div>
+      <MetricCard label="Rentabilidad" value={`${metrics.total_return_pct >= 0 ? '+' : ''}${metrics.total_return_pct.toFixed(2)}%`} color={totColor} tooltip={METRIC_INFO.total_return_pct} />
+      <MetricCard label="Retorno" value={`${metrics.total_return >= 0 ? '+' : ''}${metrics.total_return.toFixed(2)}€`} color={retColor} tooltip={METRIC_INFO.total_return} />
+      {metrics.annualized_return_pct != null && (
+        <MetricCard label="Anualizado" value={`${metrics.annualized_return_pct >= 0 ? '+' : ''}${metrics.annualized_return_pct.toFixed(2)}%`} color={metrics.annualized_return_pct >= 0 ? 'text-emerald-400' : 'text-red-400'} tooltip={METRIC_INFO.annualized_return_pct} />
+      )}
+      <MetricCard label="Sharpe" value={metrics.sharpe_ratio?.toFixed(2) ?? 'N/A'} tooltip={METRIC_INFO.sharpe_ratio} />
+      <MetricCard label="Max Drawdown" value={`${metrics.max_drawdown_pct.toFixed(2)}%`} color="text-red-400" tooltip={METRIC_INFO.max_drawdown_pct} />
+      <MetricCard label="Win Rate" value={`${metrics.win_rate.toFixed(1)}%`} tooltip={METRIC_INFO.win_rate} />
+      <MetricCard label="Profit Factor" value={metrics.profit_factor?.toFixed(2) ?? 'N/A'} tooltip={METRIC_INFO.profit_factor} />
+      <MetricCard label="Trades" value={`${metrics.total_trades}`} tooltip={METRIC_INFO.total_trades} />
       {metrics.buy_and_hold_return_pct != null && (
-        <div><p className="text-slate-400">Buy & Hold</p><p className="font-bold">{metrics.buy_and_hold_return_pct.toFixed(2)}%</p></div>
+        <MetricCard label="Buy & Hold" value={`${metrics.buy_and_hold_return_pct.toFixed(2)}%`} tooltip={METRIC_INFO.buy_and_hold} />
       )}
       {metrics.best_trade_pnl != null && metrics.worst_trade_pnl != null && metrics.best_trade_pnl === metrics.worst_trade_pnl ? (
-        <div><p className="text-slate-400">Único trade</p><p className={`font-bold ${metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.best_trade_pnl >= 0 ? '+' : ''}{metrics.best_trade_pnl.toFixed(2)}€</p></div>
+        <MetricCard label="Único trade" value={`${metrics.best_trade_pnl >= 0 ? '+' : ''}${metrics.best_trade_pnl.toFixed(2)}€`} color={bestColor} tooltip={METRIC_INFO.best_trade} />
       ) : (
         <>
-          {metrics.best_trade_pnl != null && <div><p className="text-slate-400">Mejor trade</p><p className={`font-bold ${metrics.best_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.best_trade_pnl >= 0 ? '+' : ''}{metrics.best_trade_pnl.toFixed(2)}€</p></div>}
-          {metrics.worst_trade_pnl != null && <div><p className="text-slate-400">Peor trade</p><p className={`font-bold ${metrics.worst_trade_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{metrics.worst_trade_pnl >= 0 ? '+' : ''}{metrics.worst_trade_pnl.toFixed(2)}€</p></div>}
+          {metrics.best_trade_pnl != null && <MetricCard label="Mejor trade" value={`${metrics.best_trade_pnl >= 0 ? '+' : ''}${metrics.best_trade_pnl.toFixed(2)}€`} color={bestColor} tooltip={METRIC_INFO.best_trade} />}
+          {metrics.worst_trade_pnl != null && <MetricCard label="Peor trade" value={`${metrics.worst_trade_pnl >= 0 ? '+' : ''}${metrics.worst_trade_pnl.toFixed(2)}€`} color={worstColor} tooltip={METRIC_INFO.worst_trade} />}
         </>
       )}
     </div>
