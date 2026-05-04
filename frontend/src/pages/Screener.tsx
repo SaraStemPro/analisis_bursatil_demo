@@ -23,7 +23,8 @@ const UNIVERSE_OPTIONS: { key: Universe; label: string }[] = [
   { key: 'energy', label: 'Energía' },
   { key: 'industrials', label: 'Industria' },
   { key: 'consumer', label: 'Consumo' },
-  { key: 'indices', label: 'Índices' },
+  { key: 'indices', label: 'Índices (spot)' },
+  { key: 'futures', label: 'Futuros índices (24h)' },
   { key: 'currencies', label: 'Divisas' },
   { key: 'commodities', label: 'Materias Primas' },
   { key: 'all', label: 'Todos' },
@@ -361,7 +362,7 @@ export default function Screener() {
   const diversityBarColor = diversityScore >= 70 ? 'bg-emerald-500' : diversityScore >= 40 ? 'bg-amber-500' : 'bg-red-500'
 
   // Hide equity-specific columns for non-equity universes
-  const isEquity = !['indices', 'currencies', 'commodities'].includes(universe)
+  const isEquity = !['indices', 'futures', 'currencies', 'commodities'].includes(universe)
 
   const SortHeader = ({ k, label, right, tooltip }: { k: SortKey; label: string; right?: boolean; tooltip?: string }) => (
     <th

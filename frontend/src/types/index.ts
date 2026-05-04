@@ -210,7 +210,7 @@ export interface DetailedQuote {
 }
 
 export interface ScreenerFilters {
-  universe: 'sp500' | 'ibex35' | 'tech' | 'healthcare' | 'finance' | 'energy' | 'industrials' | 'consumer' | 'indices' | 'currencies' | 'commodities' | 'all'
+  universe: 'sp500' | 'ibex35' | 'tech' | 'healthcare' | 'finance' | 'energy' | 'industrials' | 'consumer' | 'indices' | 'futures' | 'currencies' | 'commodities' | 'all'
   sectors?: string[]
   market_cap_min?: number
   market_cap_max?: number

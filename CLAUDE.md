@@ -289,7 +289,7 @@ components/demo/OrderHistory.tsx             ← historial color-coded (buy verd
 ### Screener (`pages/Screener.tsx`)
 
 **Backend** (`market_service.py`):
-- 11 universos: SP500, IBEX35, Tech, Healthcare, Finance, Energy, Industrials, Consumer, Indices, Currencies, Commodities, All.
+- 12 universos: SP500, IBEX35, Tech, Healthcare, Finance, Energy, Industrials, Consumer, Indices (spot), **Futures (índices, 24h)**, Currencies, Commodities, All.
 - Cache multinivel: `_info_cache` (30 min) para `yf.Ticker().info`, `_screener_cache` (5 min) por universo.
 - **Resultados vacíos NO se cachean** (envenenamiento).
 - Filtrado server-side: `_apply_filters()` con sector, market_cap, P/E, dividend, price, change%, beta, ROE.

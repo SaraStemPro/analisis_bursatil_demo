@@ -116,7 +116,7 @@ class DetailedQuoteResponse(BaseModel):
 
 
 class ScreenerFilters(BaseModel):
-    universe: str = Field(default="sp500", pattern=r"^(sp500|ibex35|tech|healthcare|finance|energy|industrials|consumer|indices|currencies|commodities|all)$")
+    universe: str = Field(default="sp500", pattern=r"^(sp500|ibex35|tech|healthcare|finance|energy|industrials|consumer|indices|futures|currencies|commodities|all)$")
     sectors: list[str] | None = None
     market_cap_min: float | None = None  # in billions
     market_cap_max: float | None = None

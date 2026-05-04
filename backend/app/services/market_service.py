@@ -190,6 +190,20 @@ COMMODITIES_TICKERS = [
     "ZW=F", "ZC=F", "ZS=F", "KC=F", "CT=F", "SB=F",
 ]
 
+# Futuros sobre índices: cotizan ~23h/día (lun a vie casi continuo, parón
+# diario de 1h en CME). Permiten operar con horario más amplio que el spot.
+INDEX_FUTURES_TICKERS = [
+    "ES=F",   # S&P 500 E-mini
+    "NQ=F",   # Nasdaq 100 E-mini
+    "YM=F",   # Dow Jones E-mini
+    "RTY=F",  # Russell 2000 E-mini
+    "MES=F",  # Micro S&P 500 (1/10 del E-mini)
+    "MNQ=F",  # Micro Nasdaq 100
+    "MYM=F",  # Micro Dow Jones
+    "M2K=F",  # Micro Russell 2000
+    "VX=F",   # VIX futures
+]
+
 UNIVERSES: dict[str, list[str]] = {
     "sp500": SP500_TICKERS,
     "ibex35": IBEX35_TICKERS,
@@ -200,9 +214,10 @@ UNIVERSES: dict[str, list[str]] = {
     "industrials": INDUSTRIALS_TICKERS,
     "consumer": CONSUMER_TICKERS,
     "indices": INDICES_TICKERS,
+    "futures": INDEX_FUTURES_TICKERS,
     "currencies": CURRENCIES_TICKERS,
     "commodities": COMMODITIES_TICKERS,
-    "all": list(set(SP500_TICKERS + IBEX35_TICKERS + TECH_TICKERS + HEALTHCARE_TICKERS + FINANCE_TICKERS + ENERGY_TICKERS + INDUSTRIALS_TICKERS + CONSUMER_TICKERS + INDICES_TICKERS + CURRENCIES_TICKERS + COMMODITIES_TICKERS)),
+    "all": list(set(SP500_TICKERS + IBEX35_TICKERS + TECH_TICKERS + HEALTHCARE_TICKERS + FINANCE_TICKERS + ENERGY_TICKERS + INDUSTRIALS_TICKERS + CONSUMER_TICKERS + INDICES_TICKERS + INDEX_FUTURES_TICKERS + CURRENCIES_TICKERS + COMMODITIES_TICKERS)),
 }
 
 
