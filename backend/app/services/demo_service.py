@@ -298,7 +298,10 @@ def get_portfolio(db: Session, user_id: str) -> PortfolioResponse:
 def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
 
-    # Check market state — block orders when market is closed
+    # Check market state — block orders when market is closed.
+    # Si Yahoo no responde (503/timeout) tragamos el error y permitimos
+    # la orden (no bloqueamos por fallos de la fuente de datos). Solo
+    # bloqueamos si conseguimos confirmar que el mercado está cerrado.
     ticker = body.ticker.upper()
     try:
         from .market_service import get_quote
@@ -309,13 +312,35 @@ def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderRe
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Mercado cerrado para {ticker}. Solo puedes operar en horario de mercado.",
             )
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        # Solo re-lanzamos errores de "mercado cerrado" (400). Cualquier
+        # otro HTTPException (503 de Yahoo rate limit, 404, etc.) lo
+        # tragamos para no bloquear la orden por fallo de Yahoo.
+        if e.status_code == status.HTTP_400_BAD_REQUEST:
+            raise
     except Exception:
-        pass  # If quote fails, allow order (don't block on Yahoo errors)
+        pass  # If quote fails, allow order
 
-    current_price = _get_current_price(body.ticker)
-    base_price = body.price if body.price else Decimal(str(current_price))
+    # Si la orden trae precio explícito (típico desde el simulador del
+    # screener), úsalo y no llames a Yahoo. Solo consulta el precio
+    # actual cuando no nos lo pasen.
+    if body.price:
+        base_price = body.price
+    else:
+        try:
+            current_price = _get_current_price(body.ticker)
+            base_price = Decimal(str(current_price))
+        except Exception as e:
+            # Fallback: stale quote del cache si está, si no error
+            try:
+                from .market_service import get_quote
+                quote_data = get_quote(ticker)
+                base_price = Decimal(str(quote_data.price))
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"No se pudo obtener precio de {ticker}. Reintenta en unos segundos o pasa el precio explícito.",
+                ) from e
     is_cfd = _is_cfd(ticker)
 
     # FX conversion for USD-denominated assets
