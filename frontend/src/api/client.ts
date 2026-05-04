@@ -19,7 +19,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Error desconocido' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    let message: string
+    const detail = error?.detail
+    if (typeof detail === 'string') {
+      message = detail
+    } else if (Array.isArray(detail)) {
+      // FastAPI/Pydantic 422: detail es un array de {loc, msg, type}
+      message = detail.map((d) => {
+        const loc = Array.isArray(d?.loc) ? d.loc.slice(-1).join('.') : ''
+        const msg = d?.msg || 'inválido'
+        return loc ? `${loc}: ${msg}` : msg
+      }).join(' · ')
+    } else if (detail && typeof detail === 'object') {
+      message = JSON.stringify(detail)
+    } else {
+      message = `HTTP ${res.status}`
+    }
+    throw new Error(message)
   }
 
   if (res.status === 204) return undefined as T

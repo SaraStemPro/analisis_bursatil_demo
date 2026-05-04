@@ -64,7 +64,7 @@ export default function OrderForm({ initialTicker, portfolioGroup, compact, onOr
       setError('El diario de trading es obligatorio. Justifica tu operación.')
       return
     }
-    // Compute stop_loss price
+    // Compute stop_loss price (redondeado a 5 decimales para no superar el límite de Pydantic)
     let stopLossPrice: number | undefined
     if (quote) {
       if (stopLossMode === 'price') {
@@ -74,6 +74,9 @@ export default function OrderForm({ initialTicker, portfolioGroup, compact, onOr
         stopLossPrice = type === 'buy'
           ? quote.price * (1 - pct)
           : quote.price * (1 + pct)
+      }
+      if (stopLossPrice != null && Number.isFinite(stopLossPrice)) {
+        stopLossPrice = Math.round(stopLossPrice * 1e5) / 1e5
       }
     }
     orderMut.mutate({ ticker, type, quantity, stop_loss: stopLossPrice, notes: notes.trim(), ...(portfolioGroup ? { portfolio_group: portfolioGroup } : {}) })

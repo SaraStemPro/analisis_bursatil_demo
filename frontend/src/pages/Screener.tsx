@@ -171,12 +171,47 @@ export default function Screener() {
     } catch { /* quota */ }
   }, [universe, selectedSectors, capIndex, peMin, peMax, divMin, divMax, priceMin, priceMax, changeMin, changeMax, betaMin, betaMax, volMin, volMax, roeMin, roeMax, mddMin, mddMax, sortKey, sortAsc, showFilters])
 
-  // Portfolio simulator
-  const [portfolio, setPortfolio] = useState<Map<string, { stock: DetailedQuote; qty: number }>>(new Map())
-  const [showSimulator, setShowSimulator] = useState(false)
-  const [carteraName, setCarteraName] = useState('')
-  const [carteraNotes, setCarteraNotes] = useState('')
+  // Portfolio simulator (persistido en localStorage)
+  const SIMULATOR_KEY = 'screener:simulator:v1'
+  const _initialPortfolio = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(SIMULATOR_KEY)
+      if (!raw) return new Map<string, { stock: DetailedQuote; qty: number }>()
+      const parsed = JSON.parse(raw) as { portfolio?: Array<[string, { stock: DetailedQuote; qty: number }]>; show?: boolean; name?: string; notes?: string }
+      if (parsed?.portfolio) {
+        return new Map<string, { stock: DetailedQuote; qty: number }>(parsed.portfolio)
+      }
+    } catch { /* */ }
+    return new Map<string, { stock: DetailedQuote; qty: number }>()
+  }, [])
+  const _initialSimMeta = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(SIMULATOR_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        return { show: !!parsed?.show, name: parsed?.name || '', notes: parsed?.notes || '' }
+      }
+    } catch { /* */ }
+    return { show: false, name: '', notes: '' }
+  }, [])
+  const [portfolio, setPortfolio] = useState<Map<string, { stock: DetailedQuote; qty: number }>>(_initialPortfolio)
+  const [showSimulator, setShowSimulator] = useState(_initialSimMeta.show && _initialPortfolio.size > 0)
+  const [carteraName, setCarteraName] = useState(_initialSimMeta.name)
+  const [carteraNotes, setCarteraNotes] = useState(_initialSimMeta.notes)
   const [carteraError, setCarteraError] = useState('')
+
+  // Persistir simulador en localStorage tras cualquier cambio
+  useEffect(() => {
+    try {
+      const data = {
+        portfolio: Array.from(portfolio.entries()),
+        show: showSimulator,
+        name: carteraName,
+        notes: carteraNotes,
+      }
+      localStorage.setItem(SIMULATOR_KEY, JSON.stringify(data))
+    } catch { /* quota */ }
+  }, [portfolio, showSimulator, carteraName, carteraNotes])
 
   // Preload simulator from ?tickers=A,B,C (e.g. desde la lección /clase)
   useEffect(() => {
@@ -387,6 +422,11 @@ export default function Screener() {
       await buyMut.mutateAsync({ ticker: stock.symbol, type: 'buy', quantity: qty, price: stock.price, portfolio_group: groupName, notes: carteraNotes.trim() })
     }
     qc.invalidateQueries({ queryKey: ['carteras'] })
+    // Limpia el simulador tras compra exitosa (ya está comprado, no hace falta volver a verlo aquí)
+    setPortfolio(new Map())
+    setCarteraName('')
+    setCarteraNotes('')
+    setShowSimulator(false)
     navigate('/demo')
   }
 
