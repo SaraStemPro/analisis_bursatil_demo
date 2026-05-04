@@ -944,7 +944,7 @@ function SingleRunResults({ run }: { run: BacktestRun }) {
       {run.trades && run.trades.length > 0 && (
         <div className="bg-slate-900 rounded-lg p-5 border border-slate-700">
           <h3 className="font-semibold mb-3">Operaciones ({run.trades.length})</h3>
-          <TradesTable trades={run.trades} />
+          <TradesTable trades={run.trades} initialCapital={Number(run.initial_capital)} />
         </div>
       )}
     </div>
@@ -952,17 +952,27 @@ function SingleRunResults({ run }: { run: BacktestRun }) {
 }
 
 
-function TradesTable({ trades }: { trades: import('../types').BacktestTrade[] }) {
+function TradesTable({ trades, initialCapital }: { trades: import('../types').BacktestTrade[]; initialCapital?: number }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="text-slate-400 text-left border-b border-slate-700">
-          <th className="pb-2 px-2">Lado</th><th className="pb-2 px-2">Entrada</th><th className="pb-2 px-2">Salida</th><th className="pb-2 px-2 text-right">P. entrada</th><th className="pb-2 px-2 text-right">P. salida</th><th className="pb-2 px-2 text-right">P&L</th><th className="pb-2 px-2 text-right">%</th><th className="pb-2 px-2">Cierre</th><th className="pb-2 px-2 text-right">Días</th>
+          <th className="pb-2 px-2">Lado</th>
+          <th className="pb-2 px-2">Entrada</th>
+          <th className="pb-2 px-2">Salida</th>
+          <th className="pb-2 px-2 text-right">P. entrada</th>
+          <th className="pb-2 px-2 text-right">P. salida</th>
+          <th className="pb-2 px-2 text-right">P&L</th>
+          <th className="pb-2 px-2 text-right" title="Movimiento del precio entre entrada y salida">% precio</th>
+          <th className="pb-2 px-2 text-right" title="Impacto sobre el capital inicial = P&L / capital_inicial">% capital</th>
+          <th className="pb-2 px-2">Cierre</th>
+          <th className="pb-2 px-2 text-right">Días</th>
         </tr></thead>
         <tbody>
           {trades.map((t) => {
             const pnl = t.pnl ? Number(t.pnl) : null
             const pnlPct = t.pnl_pct ? Number(t.pnl_pct) : null
+            const capitalPct = (pnl != null && initialCapital && initialCapital > 0) ? (pnl / initialCapital) * 100 : null
             const exitReasonLabel = t.exit_reason === 'stop_loss' ? 'Stop Loss' : t.exit_reason === 'take_profit' ? 'Take Profit' : t.exit_reason === 'signal' ? 'Señal salida' : '-'
             const isShort = t.type === 'sell'
             return (
@@ -974,6 +984,7 @@ function TradesTable({ trades }: { trades: import('../types').BacktestTrade[] })
                 <td className="px-2 text-right">{t.exit_price ? Number(t.exit_price).toFixed(2) : '-'}</td>
                 <td className={`px-2 text-right font-medium ${pnl && pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}€` : '-'}</td>
                 <td className={`px-2 text-right ${pnlPct && pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{pnlPct != null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%` : '-'}</td>
+                <td className={`px-2 text-right font-medium ${capitalPct == null ? 'text-slate-500' : capitalPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{capitalPct != null ? `${capitalPct >= 0 ? '+' : ''}${capitalPct.toFixed(2)}%` : '-'}</td>
                 <td className="px-2"><span className={`text-xs px-1.5 py-0.5 rounded ${t.exit_reason === 'stop_loss' ? 'bg-red-900/60 text-red-400' : t.exit_reason === 'take_profit' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-slate-700 text-slate-300'}`}>{exitReasonLabel}</span></td>
                 <td className="px-2 text-right">{t.duration_days ?? '-'}</td>
               </tr>
@@ -1016,7 +1027,7 @@ function TickerResultRow({ result, isExpanded, expandedRunData, onToggle }: {
             {expandedRunData.trades && expandedRunData.trades.length > 0 && (
               <div>
                 <p className="text-xs text-slate-400 mb-2">Operaciones ({expandedRunData.trades.length})</p>
-                <TradesTable trades={expandedRunData.trades} />
+                <TradesTable trades={expandedRunData.trades} initialCapital={Number(expandedRunData.initial_capital)} />
               </div>
             )}
           </div>
