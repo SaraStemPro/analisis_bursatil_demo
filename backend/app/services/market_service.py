@@ -364,23 +364,64 @@ def _calculate_returns_annualized(tickers: list[str]) -> dict[str, dict[str, flo
 
 
 def search_tickers(query: str) -> list[TickerSearchResult]:
-    """Busca tickers por nombre o símbolo usando yfinance."""
-    try:
-        results = yf.Search(query)
-        quotes = results.quotes if hasattr(results, "quotes") else []
-    except Exception:
-        return []
+    """Busca tickers por nombre o símbolo. Combina dos fuentes:
+    1) Búsqueda LOCAL en los universos definidos (rápida, garantiza que
+       tickers como EWG, FDAX=F, ES=F siempre aparezcan).
+    2) Yahoo Search (para tickers no registrados en universos: cualquier
+       acción que el usuario quiera buscar libremente).
+    """
+    query_norm = query.strip().upper()
+    results: list[TickerSearchResult] = []
+    seen: set[str] = set()
 
-    return [
-        TickerSearchResult(
-            symbol=q.get("symbol", ""),
-            name=q.get("shortname") or q.get("longname", ""),
-            exchange=q.get("exchange", ""),
-            type=q.get("quoteType", ""),
+    # 1) Búsqueda local en los universos
+    if query_norm:
+        all_known: set[str] = set()
+        for tickers in UNIVERSES.values():
+            all_known.update(tickers)
+
+        def _score(t: str) -> int:
+            tu = t.upper()
+            if tu == query_norm:
+                return 0
+            if tu.startswith(query_norm):
+                return 1
+            return 2
+
+        local_matches = sorted(
+            [t for t in all_known if query_norm in t.upper()],
+            key=lambda t: (_score(t), t),
         )
-        for q in quotes
-        if q.get("symbol")
-    ]
+        for t in local_matches[:10]:
+            name = t
+            exchange = ""
+            cached = _info_cache.get(t)
+            if cached:
+                info = cached[1]
+                name = info.get("shortName") or info.get("longName") or t
+                exchange = info.get("exchange") or ""
+            results.append(TickerSearchResult(symbol=t, name=name, exchange=exchange, type=""))
+            seen.add(t)
+
+    # 2) Yahoo Search (complemento para tickers fuera de los universos)
+    try:
+        yres = yf.Search(query)
+        quotes = yres.quotes if hasattr(yres, "quotes") else []
+        for q in quotes:
+            sym = q.get("symbol", "")
+            if not sym or sym in seen:
+                continue
+            results.append(TickerSearchResult(
+                symbol=sym,
+                name=q.get("shortname") or q.get("longname", ""),
+                exchange=q.get("exchange", ""),
+                type=q.get("quoteType", ""),
+            ))
+            seen.add(sym)
+    except Exception:
+        pass
+
+    return results[:20]
 
 
 def get_quote(ticker: str) -> QuoteResponse:
