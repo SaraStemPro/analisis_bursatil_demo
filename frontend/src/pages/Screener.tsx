@@ -412,17 +412,38 @@ export default function Screener() {
   )
 
   const buyAllFromSimulator = async () => {
+    setCarteraError('')
+    if (portfolioEntries.length === 0) {
+      setCarteraError('Añade al menos un activo al simulador antes de comprar.')
+      return
+    }
     if (!carteraNotes.trim()) {
       setCarteraError('El diario de trading es obligatorio. Justifica tu inversión.')
       return
     }
     const groupName = carteraName.trim() || `Cartera ${new Date().toLocaleDateString('es-ES')}`
+    const failed: { ticker: string; error: string }[] = []
     // Sequential to avoid race condition on balance
     for (const { stock, qty } of portfolioEntries) {
-      await buyMut.mutateAsync({ ticker: stock.symbol, type: 'buy', quantity: qty, price: stock.price, portfolio_group: groupName, notes: carteraNotes.trim() })
+      try {
+        await buyMut.mutateAsync({ ticker: stock.symbol, type: 'buy', quantity: qty, price: stock.price, portfolio_group: groupName, notes: carteraNotes.trim() })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        failed.push({ ticker: stock.symbol, error: msg })
+      }
     }
     qc.invalidateQueries({ queryKey: ['carteras'] })
-    // Limpia el simulador tras compra exitosa (ya está comprado, no hace falta volver a verlo aquí)
+    if (failed.length === portfolioEntries.length) {
+      // Todas fallaron → no limpiamos, mostramos error agregado
+      setCarteraError(`No se pudo comprar ningún activo. Primer error: ${failed[0].error}`)
+      return
+    }
+    if (failed.length > 0) {
+      // Algunas fallaron → mostrar aviso, pero seguimos al portfolio
+      const list = failed.map((f) => `${f.ticker} (${f.error})`).join(', ')
+      alert(`Cartera comprada parcialmente. Fallaron: ${list}`)
+    }
+    // Limpia el simulador tras compra (al menos parcialmente exitosa)
     setPortfolio(new Map())
     setCarteraName('')
     setCarteraNotes('')
