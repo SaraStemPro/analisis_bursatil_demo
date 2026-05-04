@@ -1441,7 +1441,9 @@ UNIVERSE_LABELS: dict[str, str] = {
     "energy": "Energía",
     "industrials": "Industriales",
     "consumer": "Consumo",
-    "indices": "Índices",
+    "indices": "Índices (spot)",
+    "futures": "Futuros índices (24h)",
+    "europa_etfs": "ETFs Europa",
     "currencies": "Divisas",
     "commodities": "Materias Primas",
 }
