@@ -30,13 +30,13 @@ from ..schemas.market import (
 # Cache layer — all TTLs generous for educational use (not real-time trading)
 # ============================================================================
 _screener_cache: dict[str, tuple[float, list[DetailedQuoteResponse]]] = {}
-_SCREENER_TTL = 300  # 5 minutes
+_SCREENER_TTL = 1800  # 30 minutes — el screener no necesita datos al segundo
 
 _info_cache: dict[str, tuple[float, dict]] = {}
 _INFO_TTL = 1800  # 30 minutes
 
 _volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
-_VOLATILITY_TTL = 300  # 5 minutes
+_VOLATILITY_TTL = 1800  # 30 minutes (reducir martilleo a Yahoo)
 _returns_cache: dict[str, tuple[float, dict[str, dict[str, float | None]]]] = {}
 _RETURNS_TTL = 1800  # 30 minutes — cambian poco
 
@@ -74,11 +74,83 @@ def _batch_download(tickers: list[str], period: str, interval: str = "1d"):
         return frames[0]
 
 
+_metrics_cache: dict[str, tuple[float, dict[str, dict]]] = {}
+_METRICS_TTL = 1800  # 30 minutos: precios, volatilidad y retornos no cambian al segundo
+
+
+def _calculate_universe_metrics(tickers: list[str]) -> dict[str, dict]:
+    """UNA SOLA llamada batch a Yahoo (period=3y) que produce TODAS las
+    métricas que el screener necesita por ticker. Reemplaza las 3 llamadas
+    separadas (_batch_download_close 5d + _calculate_volatilities 1y +
+    _calculate_returns_annualized 3y) que multiplicaban el tráfico a Yahoo.
+
+    Devuelve dict ticker -> {price, prev, vol, ret_1y, ret_3y, mdd_3y}
+    Cache 30 min.
+    """
+    import pandas as pd
+    now = time.time()
+    cache_key = ",".join(sorted(tickers))
+    cached = _metrics_cache.get(cache_key)
+    if cached and (now - cached[0]) < _METRICS_TTL:
+        return cached[1]
+
+    closes = _batch_download_close(tickers, period="3y", interval="1d")
+
+    out: dict[str, dict] = {}
+    for ticker, series in closes.items():
+        try:
+            series = series.dropna()
+            if len(series) < 2:
+                continue
+            metric: dict = {
+                "price": float(series.iloc[-1]),
+                "prev": float(series.iloc[-2]),
+            }
+            # Volatilidad anualizada (último año si hay datos, si no toda la serie)
+            try:
+                window = series.iloc[-252:] if len(series) >= 252 else series
+                if len(window) > 1:
+                    log_returns = np.log(window / window.shift(1)).dropna()
+                    metric["vol"] = round(float(log_returns.std() * math.sqrt(252)), 4)
+            except Exception:
+                metric["vol"] = None
+            # Retorno 1Y
+            if len(series) >= 252:
+                p_1y = float(series.iloc[-252])
+                if p_1y > 0:
+                    metric["ret_1y"] = round(metric["price"] / p_1y - 1, 4)
+            # CAGR 3Y
+            years = len(series) / 252
+            if years >= 0.5:
+                p_start = float(series.iloc[0])
+                if p_start > 0 and metric["price"] > 0:
+                    metric["ret_3y"] = round((metric["price"] / p_start) ** (1 / years) - 1, 4)
+            # Max drawdown
+            try:
+                running_max = series.cummax()
+                drawdown = (series - running_max) / running_max
+                worst = float(drawdown.min())
+                metric["mdd"] = round(abs(worst), 4) if worst < 0 else 0.0
+            except Exception:
+                metric["mdd"] = None
+            out[ticker] = metric
+        except Exception:
+            continue
+
+    if out:
+        _metrics_cache[cache_key] = (now, out)
+    return out
+
+
 def _batch_download_close(tickers: list[str], period: str, interval: str = "1d") -> dict:
-    """Descarga batch en chunks y devuelve dict {ticker: pd.Series de Close}.
+    """Descarga batch y devuelve dict {ticker: pd.Series de Close}.
+    Estrategia en dos pasos:
+    1) UN único yf.download con todos los tickers (lo que funcionaba antes).
+       Si trae >=70% de los tickers, lo aceptamos sin más.
+    2) Si el primer paso devuelve poco, COMPLEMENTAR con chunks de 25 para
+       los tickers que faltan.
     Robusto contra los caprichos de yfinance: prueba múltiples accesos al
     Close (MultiIndex con field arriba, ticker arriba, single-level, etc).
-    Skips silently los tickers para los que Yahoo no devuelve datos.
     """
     import pandas as pd
     out: dict[str, pd.Series] = {}
@@ -90,12 +162,10 @@ def _batch_download_close(tickers: list[str], period: str, interval: str = "1d")
             return
         cols = df.columns
         is_multi = isinstance(cols, pd.MultiIndex)
-        # Caso single-ticker (yf.download con 1 ticker → columnas 'Close', 'Open', ...)
         if len(chunk_tickers) == 1:
             t = chunk_tickers[0]
             try:
                 if is_multi:
-                    # Sigue probando ambos órdenes
                     series = None
                     if ("Close", t) in cols:
                         series = df[("Close", t)]
@@ -113,8 +183,9 @@ def _batch_download_close(tickers: list[str], period: str, interval: str = "1d")
             except Exception:
                 pass
             return
-        # Multi-ticker: intentar varios accesos
         for t in chunk_tickers:
+            if t in out:
+                continue  # ya lo tenemos del paso anterior
             try:
                 series = None
                 if is_multi:
@@ -123,7 +194,6 @@ def _batch_download_close(tickers: list[str], period: str, interval: str = "1d")
                     elif (t, "Close") in cols:
                         series = df[(t, "Close")]
                     else:
-                        # Último intento: slice cruzado por nombre
                         try:
                             series = df.xs("Close", axis=1, level=0)[t]
                         except Exception:
@@ -131,9 +201,6 @@ def _batch_download_close(tickers: list[str], period: str, interval: str = "1d")
                                 series = df.xs("Close", axis=1, level=1)[t]
                             except Exception:
                                 series = None
-                else:
-                    # Estructura plana inesperada con varios tickers; salta
-                    pass
                 if series is not None:
                     s = series.dropna()
                     if len(s) > 0:
@@ -141,8 +208,21 @@ def _batch_download_close(tickers: list[str], period: str, interval: str = "1d")
             except Exception:
                 continue
 
-    for i in range(0, len(tickers), _BATCH_DOWNLOAD_CHUNK):
-        chunk = tickers[i:i + _BATCH_DOWNLOAD_CHUNK]
+    # Paso 1: batch grande de todos los tickers
+    try:
+        df = yf.download(tickers, period=period, interval=interval, progress=False, threads=True)
+        _extract_close(df, tickers)
+    except Exception:
+        pass
+
+    # Si ya tenemos >=70% de los tickers, no chunkear (evita martillear Yahoo)
+    if len(out) >= int(len(tickers) * 0.7):
+        return out
+
+    # Paso 2: chunks para los tickers que faltan
+    missing = [t for t in tickers if t not in out]
+    for i in range(0, len(missing), _BATCH_DOWNLOAD_CHUNK):
+        chunk = missing[i:i + _BATCH_DOWNLOAD_CHUNK]
         try:
             df = yf.download(chunk, period=period, interval=interval, progress=False, threads=True)
             _extract_close(df, chunk)
@@ -636,58 +716,43 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
                 stocks=filtered,
             )
 
-    # Estrategia híbrida: yf.download como FUENTE PRIMARIA (más fiable
-    # cuando Yahoo rate-limita .info), y .info como ENRIQUECIMIENTO
-    # opcional cuando esté disponible. Usamos _batch_download_close que
-    # devuelve un dict {ticker: serie_close} robusto contra los caprichos
-    # de yfinance (MultiIndex, single-ticker, concat).
-    base_prices: dict[str, dict[str, float]] = {}
-    try:
-        closes = _batch_download_close(tickers, period="5d", interval="1d")
-        for ticker, series in closes.items():
-            if len(series) >= 1:
-                price = float(series.iloc[-1])
-                prev = float(series.iloc[-2]) if len(series) >= 2 else price
-                base_prices[ticker] = {"price": price, "prev": prev}
-    except Exception:
-        pass
+    # UNA SOLA llamada batch a Yahoo por universo cada 30 min (cache).
+    # Antes hacíamos 3 batches diferentes (5d, 1y, 3y) + .info por ticker
+    # → saturaba Yahoo. Ahora un único yf.download(period=3y) y derivamos
+    # precio, cambio, volatilidad, retornos y MDD de la misma serie.
+    metrics = _calculate_universe_metrics(tickers)
 
-    # Construir lista de stocks: si .info disponible -> full data;
-    # si no, usar base_prices (precio+cambio de yf.download).
+    def _info_from_cache_only(t: str) -> dict:
+        """Devuelve .info de cache (incluso expirado). NUNCA llama a Yahoo."""
+        entry = _info_cache.get(t)
+        return entry[1] if entry else {}
+
     stocks: list[DetailedQuoteResponse] = []
     for ticker in tickers:
-        info = None
-        try:
-            info = _get_cached_info(ticker)
-        except Exception:
-            info = None
-
+        m = metrics.get(ticker)
+        if not m:
+            continue  # sin datos = no aparece (mejor que aparecer roto)
+        change_pct = ((m["price"] / m["prev"] - 1) * 100) if m.get("prev") else 0.0
+        # Si .info está cacheado, enriquece con sector/marketcap/PE/etc
+        info = _info_from_cache_only(ticker)
         if info and info.get("regularMarketPrice"):
-            stocks.append(_info_to_detailed_quote(info, ticker))
-            continue
-
-        # Fallback a precios batch (sin fundamentales)
-        bp = base_prices.get(ticker)
-        if bp:
-            change_pct = ((bp["price"] / bp["prev"] - 1) * 100) if bp["prev"] else 0.0
-            stocks.append(DetailedQuoteResponse(
+            stock = _info_to_detailed_quote(info, ticker)
+            # Sobrescribe precio/cambio con los del batch fresco (más fiables)
+            stock.price = round(m["price"], 4)
+            stock.change_percent = round(change_pct, 2)
+        else:
+            stock = DetailedQuoteResponse(
                 symbol=ticker,
                 name=ticker,
-                price=round(bp["price"], 4),
+                price=round(m["price"], 4),
                 change_percent=round(change_pct, 2),
-            ))
-
-    # Enrich with volatility + returns data
-    if stocks:
-        volatilities = _calculate_volatilities(tickers)
-        returns = _calculate_returns_annualized(tickers)
-        for stock in stocks:
-            stock.volatility = volatilities.get(stock.symbol)
-            r = returns.get(stock.symbol)
-            if r:
-                stock.return_1y = r.get("ret_1y")
-                stock.return_3y = r.get("ret_3y")
-                stock.max_drawdown = r.get("mdd_3y")
+            )
+        # Métricas calculadas (siempre desde el batch unificado)
+        stock.volatility = m.get("vol")
+        stock.return_1y = m.get("ret_1y")
+        stock.return_3y = m.get("ret_3y")
+        stock.max_drawdown = m.get("mdd")
+        stocks.append(stock)
 
     # Stale fallback: si TODO falló (yf.download también) y hay cache previa
     if not stocks and cached_entry:
