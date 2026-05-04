@@ -120,6 +120,68 @@ def _is_cfd(ticker: str) -> bool:
     return t in _CFD_TICKERS or t.endswith("=X") or t.endswith("=F") or t.startswith("^")
 
 
+def _is_market_open(ticker: str) -> bool:
+    """¿Está abierto el mercado del ticker AHORA? Determinista, no usa Yahoo.
+    Lógica por sufijo:
+    - `=X` (forex): 24/5, abierto domingo 22:00 UTC → viernes 22:00 UTC
+    - `=F` (futuros US): igual que forex (CME 23h, parón 1h diaria ignorado)
+    - `^IBEX` y `.MC` (BME): L-V 9:00-17:30 hora de Madrid
+    - `^FCHI`, `^GDAXI`, `^STOXX50E` (Euronext/Eurex): L-V 9:00-17:30 CET
+    - `^FTSE` (LSE): L-V 8:00-16:30 hora de Londres
+    - Otros índices (^GSPC, ^DJI, ^IXIC, ^RUT, ^VIX): mercado USA
+    - ETFs y stocks USA por defecto: NYSE/NASDAQ 9:30-16:00 hora de NY
+    """
+    import datetime
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:  # py < 3.9 fallback
+        from pytz import timezone as ZoneInfo  # type: ignore
+    t = ticker.upper()
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+
+    # Forex y futuros: 24/5 (lun-vie casi continuo)
+    if t.endswith("=X") or t.endswith("=F"):
+        wd = now_utc.weekday()  # 0=lun, 6=dom
+        if wd == 5:  # sábado entero cerrado
+            return False
+        if wd == 6 and now_utc.hour < 22:  # domingo antes de 22:00 UTC
+            return False
+        if wd == 4 and now_utc.hour >= 22:  # viernes después de 22:00 UTC
+            return False
+        return True
+
+    # España (BME / IBEX): 9:00-17:30 hora Madrid
+    if t.endswith(".MC") or t in ("^IBEX",):
+        madrid = now_utc.astimezone(ZoneInfo("Europe/Madrid"))
+        if madrid.weekday() >= 5:
+            return False
+        minutes = madrid.hour * 60 + madrid.minute
+        return 9 * 60 <= minutes < 17 * 60 + 30
+
+    # Otros índices/exchanges europeos (París, Frankfurt, Euronext): 9:00-17:30 CET
+    if t in ("^FCHI", "^GDAXI", "^STOXX50E"):
+        madrid = now_utc.astimezone(ZoneInfo("Europe/Madrid"))
+        if madrid.weekday() >= 5:
+            return False
+        minutes = madrid.hour * 60 + madrid.minute
+        return 9 * 60 <= minutes < 17 * 60 + 30
+
+    # FTSE / LSE: 8:00-16:30 hora de Londres
+    if t == "^FTSE":
+        london = now_utc.astimezone(ZoneInfo("Europe/London"))
+        if london.weekday() >= 5:
+            return False
+        minutes = london.hour * 60 + london.minute
+        return 8 * 60 <= minutes < 16 * 60 + 30
+
+    # Por defecto: NYSE/NASDAQ — 9:30-16:00 hora de Nueva York
+    ny = now_utc.astimezone(ZoneInfo("America/New_York"))
+    if ny.weekday() >= 5:
+        return False
+    minutes = ny.hour * 60 + ny.minute
+    return 9 * 60 + 30 <= minutes < 16 * 60
+
+
 def _notional_value(ticker: str, price: Decimal) -> Decimal:
     """Get notional value per contract. Forex with >2 decimal precision
     gets multiplied by 10000 (e.g. EURUSD 1.16 → 11600)."""
@@ -298,28 +360,15 @@ def get_portfolio(db: Session, user_id: str) -> PortfolioResponse:
 def create_order(db: Session, user_id: str, body: OrderCreateRequest) -> OrderResponse:
     portfolio = get_or_create_portfolio(db, user_id)
 
-    # Check market state — block orders when market is closed.
-    # Si Yahoo no responde (503/timeout) tragamos el error y permitimos
-    # la orden (no bloqueamos por fallos de la fuente de datos). Solo
-    # bloqueamos si conseguimos confirmar que el mercado está cerrado.
+    # Check market state — DETERMINISTA por hora + exchange del ticker.
+    # No depende de Yahoo (antes era inconsistente: algunos tickers daban
+    # CLOSED y otros no, según el cache). Si está cerrado, bloquea TODO.
     ticker = body.ticker.upper()
-    try:
-        from .market_service import get_quote
-        quote_data = get_quote(ticker)
-        market_state = quote_data.market_state.upper()
-        if market_state in ("CLOSED", "PREPRE", "POSTPOST"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Mercado cerrado para {ticker}. Solo puedes operar en horario de mercado.",
-            )
-    except HTTPException as e:
-        # Solo re-lanzamos errores de "mercado cerrado" (400). Cualquier
-        # otro HTTPException (503 de Yahoo rate limit, 404, etc.) lo
-        # tragamos para no bloquear la orden por fallo de Yahoo.
-        if e.status_code == status.HTTP_400_BAD_REQUEST:
-            raise
-    except Exception:
-        pass  # If quote fails, allow order
+    if not _is_market_open(ticker):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mercado cerrado para {ticker}. Solo puedes operar en horario de mercado.",
+        )
 
     # Si la orden trae precio explícito (típico desde el simulador del
     # screener), úsalo y no llames a Yahoo. Solo consulta el precio

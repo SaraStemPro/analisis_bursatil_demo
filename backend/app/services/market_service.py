@@ -40,6 +40,39 @@ _VOLATILITY_TTL = 300  # 5 minutes
 _returns_cache: dict[str, tuple[float, dict[str, dict[str, float | None]]]] = {}
 _RETURNS_TTL = 1800  # 30 minutes — cambian poco
 
+# Yahoo limita los batch de yf.download a un nº de tickers que varía con la
+# carga del servicio. Para universos grandes (SP500 ~130) esto provoca que
+# el batch devuelva solo una parte. Hacerlo en chunks de tamaño moderado
+# evita el truncamiento.
+_BATCH_DOWNLOAD_CHUNK = 25
+
+
+def _batch_download(tickers: list[str], period: str, interval: str = "1d"):
+    """Wrapper de yf.download que parte la lista en chunks y concatena.
+    Devuelve un DataFrame con MultiIndex columns o None si todo falla.
+    Tolera fallos parciales (algunos chunks pueden caer y los demás siguen).
+    """
+    import pandas as pd
+    if not tickers:
+        return None
+    frames = []
+    for i in range(0, len(tickers), _BATCH_DOWNLOAD_CHUNK):
+        chunk = tickers[i:i + _BATCH_DOWNLOAD_CHUNK]
+        try:
+            df = yf.download(chunk, period=period, interval=interval, progress=False, threads=True)
+            if df is not None and not df.empty:
+                frames.append(df)
+        except Exception:
+            continue
+    if not frames:
+        return None
+    if len(frames) == 1:
+        return frames[0]
+    try:
+        return pd.concat(frames, axis=1)
+    except Exception:
+        return frames[0]
+
 _quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
 _QUOTE_TTL = 300  # 5 minutes
 
@@ -257,8 +290,8 @@ def _calculate_volatilities(tickers: list[str]) -> dict[str, float]:
 
     result: dict[str, float] = {}
     try:
-        df = yf.download(tickers, period="1y", interval="1d", progress=False, threads=True)
-        if df.empty:
+        df = _batch_download(tickers, period="1y", interval="1d") if len(tickers) > 1 else yf.download(tickers, period="1y", interval="1d", progress=False, threads=True)
+        if df is None or df.empty:
             return result
 
         if len(tickers) == 1:
@@ -302,8 +335,8 @@ def _calculate_returns_annualized(tickers: list[str]) -> dict[str, dict[str, flo
 
     result: dict[str, dict[str, float | None]] = {}
     try:
-        df = yf.download(tickers, period="3y", interval="1d", progress=False, threads=True)
-        if df.empty:
+        df = _batch_download(tickers, period="3y", interval="1d") if len(tickers) > 1 else yf.download(tickers, period="3y", interval="1d", progress=False, threads=True)
+        if df is None or df.empty:
             return result
 
         def _compute(series) -> dict[str, float | None]:
@@ -561,7 +594,7 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
     # .info como ENRIQUECIMIENTO opcional cuando esté disponible.
     base_prices: dict[str, dict[str, float]] = {}
     try:
-        df = yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)
+        df = _batch_download(tickers, period="5d", interval="1d") if len(tickers) > 1 else yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)
         if df is not None and not df.empty:
             close = df["Close"] if "Close" in df.columns else None
             if close is not None:
