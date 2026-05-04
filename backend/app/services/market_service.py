@@ -124,7 +124,7 @@ SP500_TICKERS = [
 ]
 
 IBEX35_TICKERS = [
-    "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "TEF.MC", "AMS.MC",
+    "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "ELE.MC", "TEF.MC", "AMS.MC",
     "CABK.MC", "FER.MC", "REP.MC", "GRF.MC", "ACS.MC", "MAP.MC",
     "ENG.MC", "RED.MC", "CLNX.MC", "IAG.MC", "SAB.MC", "BKT.MC",
     "MTS.MC", "ACX.MC", "MEL.MC", "COL.MC", "LOG.MC",

@@ -60,10 +60,33 @@ function validIntervals(period: string): string[] {
 const DRAWING_COLORS = ['#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#8b5cf6']
 const LINE_DEFAULT_COLOR = '#f59e0b' // Lines (trendline, hline, vline) always start orange
 
+const CHARTS_STATE_KEY = 'charts:state:v1'
+
+type StoredChartsState = {
+  ticker?: string
+  period?: string
+  interval?: string
+  chartType?: 'candle' | 'line'
+  logScale?: boolean
+  activeIndicators?: { id: string; name: string; params: Record<string, number | string> }[]
+  indicatorColors?: Record<string, string>
+  activePatterns?: string[]
+}
+
+function loadChartsState(): StoredChartsState {
+  try {
+    const raw = localStorage.getItem(CHARTS_STATE_KEY)
+    if (raw) return JSON.parse(raw) as StoredChartsState
+  } catch { /* */ }
+  return {}
+}
+
 export default function Charts() {
   const qc = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialTicker = searchParams.get('ticker')?.toUpperCase() || 'AAPL'
+  const stored = useMemo(() => loadChartsState(), [])
+  // Prioridad: query param > último estado guardado > AAPL
+  const initialTicker = searchParams.get('ticker')?.toUpperCase() || stored.ticker || 'AAPL'
 
   const navigate = useNavigate()
   const [ticker, setTicker] = useState(initialTicker)
@@ -75,12 +98,14 @@ export default function Charts() {
       setSearchParams({}, { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const [period, setPeriod] = useState('3mo')
-  const [interval, setInterval] = useState('1d')
+  const [period, setPeriod] = useState(stored.period || '3mo')
+  const [interval, setInterval] = useState(stored.interval || '1d')
   // Each active indicator has a unique id to allow multiple instances of SMA/EMA
   type ActiveIndicator = IndicatorRequest & { id: string }
-  const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>([])
-  const [indicatorColors, setIndicatorColors] = useState<Record<string, string>>({})
+  const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>(
+    (stored.activeIndicators as ActiveIndicator[]) || []
+  )
+  const [indicatorColors, setIndicatorColors] = useState<Record<string, string>>(stored.indicatorColors || {})
   const [editingIndicator, setEditingIndicator] = useState<string | null>(null)
 
   // Build request list for backend (strip id)
@@ -92,7 +117,9 @@ export default function Charts() {
   const [textInput, setTextInput] = useState<{ show: boolean; point: DrawingPoint | null }>({ show: false, point: null })
 
   // Feature 11: pattern selector — set of active pattern types
-  const [activePatterns, setActivePatterns] = useState<Set<PatternType>>(new Set())
+  const [activePatterns, setActivePatterns] = useState<Set<PatternType>>(
+    new Set((stored.activePatterns as PatternType[]) || [])
+  )
   const [showPatternSelector, setShowPatternSelector] = useState(false)
 
   // Strategy signals overlay — use ref to avoid chart recreation on signal update
@@ -104,13 +131,32 @@ export default function Charts() {
 
   // Chart type: candlestick or line (close prices)
   type ChartType = 'candle' | 'line'
-  const [chartType, setChartType] = useState<ChartType>('candle')
+  const [chartType, setChartType] = useState<ChartType>(stored.chartType || 'candle')
 
   // Feature 5: log scale
-  const [logScale, setLogScale] = useState(false)
+  const [logScale, setLogScale] = useState<boolean>(stored.logScale ?? false)
 
   // Feature 1: recent tickers
   const [recentTickers, setRecentTickers] = useState<string[]>(() => getRecentTickers())
+
+  // Persistencia de la sesión: ticker, periodo, intervalo, indicadores, etc.
+  // Al volver a la página después de irse a Demo/Backtest/etc., el chart
+  // arranca con la última configuración usada en lugar de resetear a AAPL.
+  useEffect(() => {
+    const snapshot: StoredChartsState = {
+      ticker,
+      period,
+      interval,
+      chartType,
+      logScale,
+      activeIndicators,
+      indicatorColors,
+      activePatterns: Array.from(activePatterns),
+    }
+    try {
+      localStorage.setItem(CHARTS_STATE_KEY, JSON.stringify(snapshot))
+    } catch { /* */ }
+  }, [ticker, period, interval, chartType, logScale, activeIndicators, indicatorColors, activePatterns])
 
   // Refs for oscillator sync
   const isSyncingRef = useRef(false)

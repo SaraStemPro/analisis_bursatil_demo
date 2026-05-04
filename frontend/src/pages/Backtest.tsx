@@ -23,8 +23,11 @@ export default function Backtest() {
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null)
   const [customRules, setCustomRules] = useState<StrategyRules | null>(null)
   const [ticker, setTicker] = useState('AAPL')
-  const [startDate, setStartDate] = useState('2024-01-01')
-  const [endDate, setEndDate] = useState('2025-01-01')
+  // Por defecto: último año hasta hoy. Aceptan ediciones manuales del usuario.
+  const _today = new Date().toISOString().slice(0, 10)
+  const _yearAgo = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().slice(0, 10) })()
+  const [startDate, setStartDate] = useState(_yearAgo)
+  const [endDate, setEndDate] = useState(_today)
   const [interval, setInterval] = useState('1d')
   const [activeRun, setActiveRun] = useState<BacktestRun | null>(null)
   const [activePortfolioRun, setActivePortfolioRun] = useState<PortfolioBacktestRun | null>(null)
