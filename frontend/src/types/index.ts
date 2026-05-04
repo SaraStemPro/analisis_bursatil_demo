@@ -340,7 +340,7 @@ export type StrategySide = 'long' | 'short' | 'both'
 
 export interface StrategyRules {
   entry: ConditionGroup
-  exit: ConditionGroup
+  exit?: ConditionGroup | null
   entry_short?: ConditionGroup | null
   exit_short?: ConditionGroup | null
   risk_management: RiskManagement

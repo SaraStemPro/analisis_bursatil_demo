@@ -310,6 +310,49 @@ function ConditionGroupEditor({ group, onChange, title, color }: ConditionGroupE
   )
 }
 
+// Wrapper de ConditionGroupEditor que permite "sin condiciones de salida"
+// (devuelve null al padre). Cuando se reactiva, vuelve al group por defecto.
+function OptionalGroupEditor({
+  group,
+  onChange,
+  title,
+  color,
+  defaultGroup,
+}: {
+  group: ConditionGroup | null
+  onChange: (g: ConditionGroup | null) => void
+  title: string
+  color: string
+  defaultGroup: ConditionGroup
+}) {
+  const disabled = group === null
+  return (
+    <div className={`border rounded-lg p-3 space-y-2 ${color}`}>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="font-medium text-sm">{title}</h4>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={disabled}
+            onChange={(e) => onChange(e.target.checked ? null : defaultGroup)}
+            className="w-3.5 h-3.5 accent-amber-500"
+          />
+          <span className={disabled ? 'text-amber-400 font-medium' : 'text-slate-400'}>
+            Sin salida señal · solo stop / take profit
+          </span>
+        </label>
+      </div>
+      {disabled ? (
+        <p className="text-xs text-slate-500 italic">
+          La posición sólo se cerrará por stop loss, take profit o trailing. Útil cuando confías plenamente en el stop dinámico.
+        </p>
+      ) : (
+        <ConditionGroupEditor group={group!} onChange={onChange} title="" color="" />
+      )}
+    </div>
+  )
+}
+
 interface Props {
   onClose: () => void
   editStrategy?: { id: string; name: string; description: string | null; rules: StrategyRules } | null
@@ -323,14 +366,15 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
   const [entry, setEntry] = useState<ConditionGroup>(
     editStrategy?.rules.entry || { operator: 'AND', conditions: [makeDefaultCondition()] }
   )
-  const [exit, setExit] = useState<ConditionGroup>(
-    editStrategy?.rules.exit || { operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }
+  // exit/exitShort pueden ser null = "no usar señal de salida, sólo stop/TP/trailing"
+  const [exit, setExit] = useState<ConditionGroup | null>(
+    editStrategy?.rules.exit !== undefined ? editStrategy.rules.exit : { operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }
   )
   const [entryShort, setEntryShort] = useState<ConditionGroup>(
     editStrategy?.rules.entry_short || { operator: 'AND', conditions: [makeDefaultCondition()] }
   )
-  const [exitShort, setExitShort] = useState<ConditionGroup>(
-    editStrategy?.rules.exit_short || { operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }
+  const [exitShort, setExitShort] = useState<ConditionGroup | null>(
+    editStrategy?.rules.exit_short !== undefined ? editStrategy.rules.exit_short : { operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }
   )
   const [risk, setRisk] = useState<RiskManagement>(
     editStrategy?.rules.risk_management || { stop_loss_pct: 5, stop_loss_type: 'fixed', take_profit_pct: 15, position_size_pct: 100, max_risk_pct: null }
@@ -340,9 +384,10 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
   const createMut = useMutation({
     mutationFn: () => {
       const rules: StrategyRules = {
-        entry, exit, risk_management: risk, side,
+        entry, risk_management: risk, side,
+        exit: exit as ConditionGroup,  // null se serializa como ausencia → backend interpreta None
         entry_short: side === 'both' ? entryShort : undefined,
-        exit_short: side === 'both' ? exitShort : undefined,
+        exit_short: side === 'both' ? (exitShort as ConditionGroup) : undefined,
       }
       if (editStrategy) {
         return backtest.updateStrategy(editStrategy.id, { name, description: description || undefined, rules })
@@ -417,13 +462,25 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
           <div className="border border-emerald-700/30 rounded-lg p-3 space-y-3">
             <h3 className="text-sm font-semibold text-emerald-400">Long</h3>
             <ConditionGroupEditor group={entry} onChange={setEntry} title="Entrada Long (cuándo abrir largo)" color="border-emerald-700/50" />
-            <ConditionGroupEditor group={exit} onChange={setExit} title="Salida Long (cuándo cerrar largo)" color="border-red-700/50" />
+            <OptionalGroupEditor
+              group={exit}
+              onChange={setExit}
+              title="Salida Long (cuándo cerrar largo)"
+              color="border-red-700/50"
+              defaultGroup={{ operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }}
+            />
           </div>
           {/* Short conditions */}
           <div className="border border-red-700/30 rounded-lg p-3 space-y-3">
             <h3 className="text-sm font-semibold text-red-400">Short</h3>
             <ConditionGroupEditor group={entryShort} onChange={setEntryShort} title="Entrada Short (cuándo abrir corto)" color="border-red-700/50" />
-            <ConditionGroupEditor group={exitShort} onChange={setExitShort} title="Salida Short (cuándo cerrar corto)" color="border-amber-700/50" />
+            <OptionalGroupEditor
+              group={exitShort}
+              onChange={setExitShort}
+              title="Salida Short (cuándo cerrar corto)"
+              color="border-amber-700/50"
+              defaultGroup={{ operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'less_than', right: { type: 'value', value: 30 } }] }}
+            />
           </div>
         </>
       ) : (
@@ -434,11 +491,12 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
             title={side === 'short' ? 'Condiciones de ENTRADA (cuándo abrir corto)' : 'Condiciones de ENTRADA (cuándo comprar)'}
             color="border-emerald-700/50"
           />
-          <ConditionGroupEditor
+          <OptionalGroupEditor
             group={exit}
             onChange={setExit}
             title={side === 'short' ? 'Condiciones de SALIDA (cuándo cerrar corto)' : 'Condiciones de SALIDA (cuándo vender)'}
             color="border-red-700/50"
+            defaultGroup={{ operator: 'AND', conditions: [{ left: { type: 'indicator', name: 'RSI', params: { length: 14 } }, comparator: 'greater_than', right: { type: 'value', value: 70 } }] }}
           />
         </>
       )}

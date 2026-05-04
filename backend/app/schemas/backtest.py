@@ -116,9 +116,12 @@ class RiskManagement(BaseModel):
 
 class StrategyRules(BaseModel):
     entry: ConditionGroup
-    exit: ConditionGroup
+    exit: ConditionGroup | None = Field(
+        default=None,
+        description="Condiciones de salida por señal. Si None, la posición solo se cierra por stop loss / take profit / trailing.",
+    )
     entry_short: ConditionGroup | None = Field(default=None, description="Condiciones de entrada short (solo para side='both')")
-    exit_short: ConditionGroup | None = Field(default=None, description="Condiciones de salida short (solo para side='both')")
+    exit_short: ConditionGroup | None = Field(default=None, description="Condiciones de salida short. Si None, sólo cierre por stop/TP.")
     risk_management: RiskManagement = Field(default_factory=RiskManagement)
     side: StrategySide = Field(default=StrategySide.long, description="'long', 'short' o 'both'")
 

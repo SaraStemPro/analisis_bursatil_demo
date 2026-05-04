@@ -749,15 +749,27 @@ function RulesDisplay({ customRules, updateOperandParam, updateOperandValue, upd
         <>
           <p className="text-xs text-emerald-400 font-medium">Long</p>
           <ConditionGroupDisplay group={customRules.entry} groupKey="entry" label="Entrada Long" borderColor="border-emerald-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
-          <ConditionGroupDisplay group={customRules.exit} groupKey="exit" label="Salida Long" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          {customRules.exit ? (
+            <ConditionGroupDisplay group={customRules.exit} groupKey="exit" label="Salida Long" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          ) : (
+            <p className="text-xs text-slate-500 italic">Salida Long: solo stop / take profit</p>
+          )}
           <p className="text-xs text-red-400 font-medium">Short</p>
           <ConditionGroupDisplay group={customRules.entry_short!} groupKey="entry_short" label="Entrada Short" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
-          <ConditionGroupDisplay group={customRules.exit_short!} groupKey="exit_short" label="Salida Short" borderColor="border-amber-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          {customRules.exit_short ? (
+            <ConditionGroupDisplay group={customRules.exit_short} groupKey="exit_short" label="Salida Short" borderColor="border-amber-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          ) : (
+            <p className="text-xs text-slate-500 italic">Salida Short: solo stop / take profit</p>
+          )}
         </>
       ) : (
         <>
           <ConditionGroupDisplay group={customRules.entry} groupKey="entry" label="Entrada" borderColor="border-emerald-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
-          <ConditionGroupDisplay group={customRules.exit} groupKey="exit" label="Salida" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          {customRules.exit ? (
+            <ConditionGroupDisplay group={customRules.exit} groupKey="exit" label="Salida" borderColor="border-red-700/40" updateOperandParam={updateOperandParam} updateOperandValue={updateOperandValue} />
+          ) : (
+            <p className="text-xs text-slate-500 italic">Salida: solo stop / take profit</p>
+          )}
         </>
       )}
 

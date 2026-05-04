@@ -689,7 +689,9 @@ def _compute_all_indicators(df: pd.DataFrame, rules: StrategyRules) -> dict[str,
     needs_patterns = False
     needs_fractals_for_stop = rules.risk_management.stop_loss_type == StopLossType.fractal
 
-    all_groups = [rules.entry, rules.exit]
+    all_groups = [rules.entry]
+    if rules.exit:
+        all_groups.append(rules.exit)
     if rules.entry_short:
         all_groups.append(rules.entry_short)
     if rules.exit_short:
@@ -890,7 +892,9 @@ def _find_last_fractal_resistance(indicator_data: dict, i: int, entry_price: flo
 def _calc_warmup(rules: StrategyRules) -> int:
     """Calcula las barras de warmup necesarias según los indicadores usados."""
     max_period = 50  # mínimo razonable
-    groups = [rules.entry, rules.exit]
+    groups = [rules.entry]
+    if rules.exit:
+        groups.append(rules.exit)
     if rules.entry_short:
         groups.append(rules.entry_short)
     if rules.exit_short:
@@ -1031,10 +1035,16 @@ def _simulate(
 
     side = rules.side
     is_both = side == StrategySide.both
-    # Independent short conditions for "both" mode
-    has_independent_short = is_both and rules.entry_short is not None and rules.exit_short is not None
+    # Independent short conditions for "both" mode (exit_short opcional)
+    has_independent_short = is_both and rules.entry_short is not None
     stop_loss_pct = rules.risk_management.stop_loss_pct
     take_profit_pct = rules.risk_management.take_profit_pct
+
+    def _eval_or_false(group, i):
+        """Evalúa un grupo, o devuelve False si es None."""
+        if group is None:
+            return False
+        return _evaluate_group(group, i, df, indicator_data, is_exit=True)
 
     for i in range(len(df)):
         current_date = df.index[i].to_pydatetime()
@@ -1061,7 +1071,7 @@ def _simulate(
                 else:
                     # Legacy: entry → Long, exit → Short
                     entry_signal = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
-                    exit_signal = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                    exit_signal = _eval_or_false(rules.exit, i)
                     if entry_signal:
                         position, capital = _open_position(
                             capital, close, False, rules, indicator_data, i,
@@ -1131,23 +1141,22 @@ def _simulate(
                 if pnl_pct_cur >= take_profit_pct:
                     exit_reason = "take_profit"
 
-            # Check signal exit
+            # Check signal exit (rules.exit / exit_short pueden ser None → no señal)
             if not exit_reason:
                 if is_both:
                     if has_independent_short:
-                        # Independent: long closes on exit, short closes on exit_short
                         if pos_is_short:
-                            signal_exit = _evaluate_group(rules.exit_short, i, df, indicator_data, is_exit=True)
+                            signal_exit = _eval_or_false(rules.exit_short, i)
                         else:
-                            signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                            signal_exit = _eval_or_false(rules.exit, i)
                     else:
                         # Legacy: long closes on exit signal, short closes on entry signal
                         if pos_is_short:
                             signal_exit = _evaluate_group(rules.entry, i, df, indicator_data, is_exit=False)
                         else:
-                            signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                            signal_exit = _eval_or_false(rules.exit, i)
                 else:
-                    signal_exit = _evaluate_group(rules.exit, i, df, indicator_data, is_exit=True)
+                    signal_exit = _eval_or_false(rules.exit, i)
                 if signal_exit:
                     exit_reason = "signal"
 
