@@ -21,10 +21,10 @@ export const auth = {
 // --- Market ---
 export const market = {
   search: (q: string) => api.get<TickerSearchResult[]>(`/market/search?q=${encodeURIComponent(q)}`),
-  quote: (ticker: string, force = false) => api.get<Quote>(`/market/quote/${ticker}${force ? '?force=true' : ''}`),
+  quote: (ticker: string, force = false) => api.get<Quote>(`/market/quote/${encodeURIComponent(ticker)}${force ? '?force=true' : ''}`),
   history: (ticker: string, period = '1mo', interval = '1d', force = false) =>
-    api.get<HistoryResponse>(`/market/history/${ticker}?period=${period}&interval=${interval}${force ? '&force=true' : ''}`),
-  detailedQuote: (ticker: string) => api.get<DetailedQuote>(`/market/detailed-quote/${ticker}`),
+    api.get<HistoryResponse>(`/market/history/${encodeURIComponent(ticker)}?period=${period}&interval=${interval}${force ? '&force=true' : ''}`),
+  detailedQuote: (ticker: string) => api.get<DetailedQuote>(`/market/detailed-quote/${encodeURIComponent(ticker)}`),
   screener: (filters: ScreenerFilters) => api.post<ScreenerResult>('/market/screener', filters),
   screenerSectors: (universe: string) => api.get<{ sectors: string[] }>(`/market/screener/sectors/${universe}`),
 }

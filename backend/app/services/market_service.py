@@ -502,6 +502,18 @@ def get_history(ticker: str, period: str, interval: str) -> HistoryResponse:
     # Filter rows with NaN OHLC values (e.g. dividend-only records)
     df = df.dropna(subset=["Open", "High", "Low", "Close"])
 
+    def _vol(v) -> int:
+        # Volume puede ser NaN para futuros / índices spot. Forzar 0.
+        try:
+            if v is None:
+                return 0
+            f = float(v)
+            if f != f or f < 0:  # NaN check + negativos
+                return 0
+            return int(f)
+        except (TypeError, ValueError):
+            return 0
+
     data = [
         OHLCV(
             date=index.to_pydatetime(),
@@ -509,7 +521,7 @@ def get_history(ticker: str, period: str, interval: str) -> HistoryResponse:
             high=round(row["High"], 4),
             low=round(row["Low"], 4),
             close=round(row["Close"], 4),
-            volume=int(row["Volume"]),
+            volume=_vol(row.get("Volume", 0)),
         )
         for index, row in df.iterrows()
     ]
