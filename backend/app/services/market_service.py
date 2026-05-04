@@ -286,6 +286,7 @@ def _coalesced_call(key: str, fn):
 # Background cache warmer — tracks which tickers users are viewing
 _active_tickers: set[str] = set()
 _warmer_running = False
+_info_prewarmer_running = False
 
 
 # Universe of tickers for screening
@@ -1044,6 +1045,82 @@ def start_cache_warmer():
     if _warmer_running:
         return
     t = threading.Thread(target=_cache_warmer_loop, daemon=True, name="cache-warmer")
+    t.start()
+
+
+# ============================================================================
+# Info prewarmer — pre-rellena _info_cache para todos los tickers de los
+# universos del screener.
+#
+# Por qué existe: desde el commit 73f4065 ("perf(screener): UNA llamada
+# Yahoo cada 30 min en vez de 3+ por request") el screener NO llama a
+# yf.Ticker(t).info en vivo (solo lee de _info_cache) para no saturar
+# Yahoo. Pero nada poblaba _info_cache para los universos completos, así
+# que tras cada reinicio el screener mostraba todos los tickers en la
+# rama "fallback" (precio + cambio OK, pero sin sector / market cap / PE
+# / dividend / beta / ROE / nombre real).
+#
+# Este thread llena _info_cache lentamente (1 ticker cada ~0.5s) en
+# background. Tras ~2-3 min desde el arranque, los 258 tickers de "all"
+# están enriquecidos. La cache _INFO_TTL es 30 min, así que el thread
+# refresca cuando una entrada está cerca de caducar (>50% TTL).
+# ============================================================================
+
+def _info_prewarmer_loop():
+    """Background loop that keeps _info_cache populated for all universe tickers."""
+    global _info_prewarmer_running
+    _info_prewarmer_running = True
+    logger.info("Info prewarmer started")
+
+    # Espera unos segundos antes del primer pase para no competir con el
+    # arranque (uvicorn + auto-create tablas + seed users).
+    time.sleep(10)
+
+    # Unión única de tickers de todos los universos (orden estable).
+    all_tickers: list[str] = []
+    seen: set[str] = set()
+    for universe_name, tickers in UNIVERSES.items():
+        if universe_name == "all":
+            continue  # "all" es la unión, no añade nada nuevo
+        for t in tickers:
+            if t not in seen:
+                seen.add(t)
+                all_tickers.append(t)
+
+    while _info_prewarmer_running:
+        try:
+            now = time.time()
+            warmed = 0
+            for t in all_tickers:
+                if not _info_prewarmer_running:
+                    break
+                cached = _info_cache.get(t)
+                # Si la entrada está fresca (<50% TTL consumido) saltar.
+                if cached and (now - cached[0]) < _INFO_TTL * 0.5:
+                    continue
+                try:
+                    _get_cached_info(t)  # rellena _info_cache si Yahoo responde
+                    warmed += 1
+                except Exception:
+                    pass
+                # Throttle agresivo: 0.5s entre llamadas para no rate-limit.
+                # Con 258 tickers ⇒ ~130s para un pase completo si todo está frío.
+                time.sleep(0.5)
+            if warmed:
+                logger.info(f"Info prewarmer: refreshed {warmed} tickers in this pass")
+            # Tras un pase completo, espera 60s antes de revisar de nuevo.
+            # La mayoría de tickers están dentro del 50% TTL y se saltarán.
+            time.sleep(60)
+        except Exception as e:
+            logger.warning(f"Info prewarmer error: {e}")
+            time.sleep(60)
+
+
+def start_info_prewarmer():
+    """Start the background info prewarmer thread (idempotent)."""
+    if _info_prewarmer_running:
+        return
+    t = threading.Thread(target=_info_prewarmer_loop, daemon=True, name="info-prewarmer")
     t.start()
 
 
