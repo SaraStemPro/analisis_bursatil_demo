@@ -192,7 +192,12 @@ COMMODITIES_TICKERS = [
 
 # Futuros sobre índices: cotizan ~23h/día (lun a vie casi continuo, parón
 # diario de 1h en CME). Permiten operar con horario más amplio que el spot.
+# Nota: Yahoo Finance tiene cobertura muy fiable de futuros US (CME) pero
+# pobre de europeos (Eurex/Euronext/ICE). Los símbolos europeos abajo son
+# best-effort: si Yahoo no devuelve datos, simplemente no aparecen en el
+# screener (los fallbacks lo manejan en silencio).
 INDEX_FUTURES_TICKERS = [
+    # — US (cobertura fiable, 24h CME) —
     "ES=F",   # S&P 500 E-mini
     "NQ=F",   # Nasdaq 100 E-mini
     "YM=F",   # Dow Jones E-mini
@@ -202,6 +207,27 @@ INDEX_FUTURES_TICKERS = [
     "MYM=F",  # Micro Dow Jones
     "M2K=F",  # Micro Russell 2000
     "VX=F",   # VIX futures
+    # — Europa (cobertura best-effort, Yahoo no siempre tiene datos) —
+    "FDAX=F",  # DAX 40 (Eurex)
+    "FESX=F",  # Euro Stoxx 50 (Eurex)
+    "Z=F",     # FTSE 100 (ICE)
+]
+
+# ETFs sobre índices europeos cotizados en NYSE/NASDAQ. Horario US
+# (15:30-22:00 CET) pero MUY fiables en Yahoo. Útiles para tener
+# exposición europea con datos consistentes cuando Yahoo no sirve los
+# futuros nativos.
+EUROPA_ETFS_TICKERS = [
+    "EWG",   # iShares MSCI Germany (proxy del DAX)
+    "EWQ",   # iShares MSCI France (proxy del CAC 40)
+    "EWU",   # iShares MSCI United Kingdom (proxy del FTSE 100)
+    "FEZ",   # SPDR Euro STOXX 50
+    "EWP",   # iShares MSCI Spain (proxy del IBEX 35)
+    "EWI",   # iShares MSCI Italy
+    "EWN",   # iShares MSCI Netherlands
+    "EWL",   # iShares MSCI Switzerland
+    "EWD",   # iShares MSCI Sweden
+    "VGK",   # Vanguard FTSE Europe (Europa global)
 ]
 
 UNIVERSES: dict[str, list[str]] = {
@@ -215,9 +241,10 @@ UNIVERSES: dict[str, list[str]] = {
     "consumer": CONSUMER_TICKERS,
     "indices": INDICES_TICKERS,
     "futures": INDEX_FUTURES_TICKERS,
+    "europa_etfs": EUROPA_ETFS_TICKERS,
     "currencies": CURRENCIES_TICKERS,
     "commodities": COMMODITIES_TICKERS,
-    "all": list(set(SP500_TICKERS + IBEX35_TICKERS + TECH_TICKERS + HEALTHCARE_TICKERS + FINANCE_TICKERS + ENERGY_TICKERS + INDUSTRIALS_TICKERS + CONSUMER_TICKERS + INDICES_TICKERS + INDEX_FUTURES_TICKERS + CURRENCIES_TICKERS + COMMODITIES_TICKERS)),
+    "all": list(set(SP500_TICKERS + IBEX35_TICKERS + TECH_TICKERS + HEALTHCARE_TICKERS + FINANCE_TICKERS + ENERGY_TICKERS + INDUSTRIALS_TICKERS + CONSUMER_TICKERS + INDICES_TICKERS + INDEX_FUTURES_TICKERS + EUROPA_ETFS_TICKERS + CURRENCIES_TICKERS + COMMODITIES_TICKERS)),
 }
 
 

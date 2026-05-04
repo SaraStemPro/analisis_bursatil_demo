@@ -25,6 +25,7 @@ const UNIVERSE_OPTIONS: { key: Universe; label: string }[] = [
   { key: 'consumer', label: 'Consumo' },
   { key: 'indices', label: 'Índices (spot)' },
   { key: 'futures', label: 'Futuros índices (24h)' },
+  { key: 'europa_etfs', label: 'ETFs Europa' },
   { key: 'currencies', label: 'Divisas' },
   { key: 'commodities', label: 'Materias Primas' },
   { key: 'all', label: 'Todos' },
