@@ -35,6 +35,40 @@ _SCREENER_TTL = 1800  # 30 minutes — el screener no necesita datos al segundo
 _info_cache: dict[str, tuple[float, dict]] = {}
 _INFO_TTL = 1800  # 30 minutes
 
+# Seed estático con .info para los tickers de los universos. Generado off-line
+# desde una IP residencial (donde Yahoo responde) y empaquetado en el repo.
+# Garantiza que el screener muestre TODOS los tickers enriquecidos (sector /
+# market cap / PE / dividend / beta / ROE / nombre) incluso cuando Yahoo
+# rate-limita al VPS y el prewarmer no consigue rellenar la cache. Los
+# precios del seed son antiguos pero `get_screener` los sobrescribe con los
+# del batch download cuando éste tiene éxito.
+import os, json
+_SEED_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "screener_info_seed.json")
+
+
+def _load_info_seed():
+    """Carga el seed estático en _info_cache. Idempotente (no pisa entradas
+    más recientes ya cacheadas). Llamar una vez al arrancar."""
+    try:
+        with open(_SEED_PATH, "r", encoding="utf-8") as f:
+            seed = json.load(f)
+    except FileNotFoundError:
+        logger.info("Info seed not found at %s — skipping", _SEED_PATH)
+        return
+    except Exception as e:
+        logger.warning("Failed to load info seed: %s", e)
+        return
+    # Timestamp 0 = la cache se considerará expirada y el prewarmer la
+    # refrescará en cuanto Yahoo coopere; pero mientras tanto el screener
+    # usa estos datos como fallback (lee la entrada aunque esté caducada).
+    seeded = 0
+    for t, info in seed.items():
+        if t not in _info_cache and info.get("regularMarketPrice"):
+            _info_cache[t] = (0.0, info)
+            seeded += 1
+    if seeded:
+        logger.info("Info seed loaded: %d tickers pre-cached", seeded)
+
 _volatility_cache: dict[str, tuple[float, dict[str, float]]] = {}
 _VOLATILITY_TTL = 1800  # 30 minutes (reducir martilleo a Yahoo)
 _returns_cache: dict[str, tuple[float, dict[str, dict[str, float | None]]]] = {}
@@ -731,28 +765,37 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
     stocks: list[DetailedQuoteResponse] = []
     for ticker in tickers:
         m = metrics.get(ticker)
-        if not m:
-            continue  # sin datos = no aparece (mejor que aparecer roto)
-        change_pct = ((m["price"] / m["prev"] - 1) * 100) if m.get("prev") else 0.0
-        # Si .info está cacheado, enriquece con sector/marketcap/PE/etc
         info = _info_from_cache_only(ticker)
+        seed_price = info.get("regularMarketPrice") or info.get("currentPrice") if info else None
+        # Si NI batch NI seed/cache tienen precio, no podemos mostrarlo.
+        if not m and not seed_price:
+            continue
+        if m:
+            price = m["price"]
+            change_pct = ((m["price"] / m["prev"] - 1) * 100) if m.get("prev") else 0.0
+        else:
+            # Fallback puro al seed/cache: precio antiguo pero el ticker aparece
+            # enriquecido con todos los fundamentales. Mejor que ocultarlo.
+            price = seed_price
+            seed_prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            change_pct = ((price / seed_prev - 1) * 100) if seed_prev else 0.0
         if info and info.get("regularMarketPrice"):
             stock = _info_to_detailed_quote(info, ticker)
-            # Sobrescribe precio/cambio con los del batch fresco (más fiables)
-            stock.price = round(m["price"], 4)
+            stock.price = round(price, 4)
             stock.change_percent = round(change_pct, 2)
         else:
             stock = DetailedQuoteResponse(
                 symbol=ticker,
                 name=ticker,
-                price=round(m["price"], 4),
+                price=round(price, 4),
                 change_percent=round(change_pct, 2),
             )
-        # Métricas calculadas (siempre desde el batch unificado)
-        stock.volatility = m.get("vol")
-        stock.return_1y = m.get("ret_1y")
-        stock.return_3y = m.get("ret_3y")
-        stock.max_drawdown = m.get("mdd")
+        # Métricas calculadas (solo si el batch las trajo)
+        if m:
+            stock.volatility = m.get("vol")
+            stock.return_1y = m.get("ret_1y")
+            stock.return_3y = m.get("ret_3y")
+            stock.max_drawdown = m.get("mdd")
         stocks.append(stock)
 
     # Stale fallback: si TODO falló (yf.download también) y hay cache previa
@@ -1067,53 +1110,73 @@ def start_cache_warmer():
 # ============================================================================
 
 def _info_prewarmer_loop():
-    """Background loop that keeps _info_cache populated for all universe tickers."""
+    """Background loop that keeps _info_cache populated for all universe tickers.
+
+    Diseño defensivo contra el rate-limit de Yahoo desde IPs de VPS:
+    - Carga el seed estático al inicio (datos completos antes del primer fetch).
+    - Pace conservador: 1 ticker cada 3 s (vs. los 0.5 s anteriores que
+      saturaban Yahoo en el VPS y devolvían YFRateLimitError en cascada).
+    - Backoff exponencial al detectar rate-limit (60 s → 120 s → 240 s, máx
+      300 s). Vuelve a 3 s tras una llamada exitosa.
+    - Espera 30 min entre pases completos (los datos de fundamentales
+      cambian poco; martillear no aporta).
+    - Espera inicial de 60 s para no competir con el batch del primer
+      `get_screener`, que es la prioridad.
+    """
     global _info_prewarmer_running
     _info_prewarmer_running = True
-    logger.info("Info prewarmer started")
 
-    # Espera unos segundos antes del primer pase para no competir con el
-    # arranque (uvicorn + auto-create tablas + seed users).
-    time.sleep(10)
+    # Carga del seed primero — independiente de Yahoo.
+    _load_info_seed()
+    logger.info("Info prewarmer started (slow mode: 1 ticker / 3s, backoff on 429)")
 
-    # Unión única de tickers de todos los universos (orden estable).
+    time.sleep(60)
+
     all_tickers: list[str] = []
     seen: set[str] = set()
     for universe_name, tickers in UNIVERSES.items():
         if universe_name == "all":
-            continue  # "all" es la unión, no añade nada nuevo
+            continue
         for t in tickers:
             if t not in seen:
                 seen.add(t)
                 all_tickers.append(t)
 
+    base_delay = 3.0
+    backoff = 0.0  # extra delay si Yahoo está rate-limitando
     while _info_prewarmer_running:
         try:
             now = time.time()
             warmed = 0
+            rate_limited = 0
             for t in all_tickers:
                 if not _info_prewarmer_running:
                     break
                 cached = _info_cache.get(t)
-                # Si la entrada está fresca (<50% TTL consumido) saltar.
-                if cached and (now - cached[0]) < _INFO_TTL * 0.5:
+                # Saltar si la entrada es real (timestamp > 0) y está fresca.
+                if cached and cached[0] > 0 and (now - cached[0]) < _INFO_TTL * 0.5:
                     continue
                 try:
-                    _get_cached_info(t)  # rellena _info_cache si Yahoo responde
-                    warmed += 1
-                except Exception:
-                    pass
-                # Throttle agresivo: 0.5s entre llamadas para no rate-limit.
-                # Con 258 tickers ⇒ ~130s para un pase completo si todo está frío.
-                time.sleep(0.5)
-            if warmed:
-                logger.info(f"Info prewarmer: refreshed {warmed} tickers in this pass")
-            # Tras un pase completo, espera 60s antes de revisar de nuevo.
-            # La mayoría de tickers están dentro del 50% TTL y se saltarán.
-            time.sleep(60)
+                    info = yf.Ticker(t).info or {}
+                    if info.get("regularMarketPrice"):
+                        _info_cache[t] = (time.time(), info)
+                        warmed += 1
+                        backoff = 0  # éxito: reseteamos backoff
+                except Exception as e:
+                    msg = str(e)
+                    if "RateLimit" in type(e).__name__ or "Too Many" in msg or "429" in msg:
+                        rate_limited += 1
+                        backoff = min(max(backoff * 2 if backoff else 60, 60), 300)
+                        time.sleep(backoff)
+                time.sleep(base_delay + (backoff if backoff else 0) * 0.1)
+            logger.info(
+                f"Info prewarmer pass: refreshed={warmed}, rate_limited={rate_limited}, cached_total={len(_info_cache)}"
+            )
+            # 30 min entre pases (los fundamentales no cambian al segundo).
+            time.sleep(1800)
         except Exception as e:
             logger.warning(f"Info prewarmer error: {e}")
-            time.sleep(60)
+            time.sleep(300)
 
 
 def start_info_prewarmer():
