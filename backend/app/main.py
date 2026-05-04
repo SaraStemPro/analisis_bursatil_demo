@@ -204,6 +204,53 @@ def _seed_db_templates():
 _seed_db_templates()
 
 
+# Migración idempotente: arregla Sistema Sara si tiene el bug donde una
+# condición compara directamente un patrón de vela con un indicador (siempre
+# falso para LONG porque 0/1 nunca es > precio, siempre verdadero para SHORT
+# porque 0/1 siempre es < precio → toneladas de shorts espurios).
+# Solo se aplica si detecta el patrón roto. Tras corregir, no toca nada más
+# por lo que las ediciones futuras del profesor se respetan.
+def _migrate_fix_sistema_sara():
+    from .models.strategy import Strategy
+    from .services.backtest_service import SEEDED_DB_TEMPLATES
+
+    db: Session = SessionLocal()
+    try:
+        sara = (
+            db.query(Strategy)
+            .filter(Strategy.name == "Sistema Sara · 20/20 + Bollinger", Strategy.is_template == True)  # noqa: E712
+            .first()
+        )
+        if not sara:
+            return
+
+        def _has_broken_pattern(group: dict | None) -> bool:
+            if not group:
+                return False
+            for c in group.get("conditions", []):
+                left = c.get("left") or {}
+                right = c.get("right") or {}
+                # patrón de vela comparado con un indicador → bug
+                if left.get("type") == "candle_pattern" and right.get("type") == "indicator":
+                    return True
+                if right.get("type") == "candle_pattern" and left.get("type") == "indicator":
+                    return True
+            return False
+
+        rules = sara.rules or {}
+        if _has_broken_pattern(rules.get("entry")) or _has_broken_pattern(rules.get("entry_short")):
+            for tpl in SEEDED_DB_TEMPLATES:
+                if tpl["name"] == sara.name:
+                    sara.rules = tpl["rules"]
+                    db.commit()
+                    break
+    finally:
+        db.close()
+
+
+_migrate_fix_sistema_sara()
+
+
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
