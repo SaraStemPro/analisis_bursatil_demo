@@ -73,6 +73,83 @@ def _batch_download(tickers: list[str], period: str, interval: str = "1d"):
     except Exception:
         return frames[0]
 
+
+def _batch_download_close(tickers: list[str], period: str, interval: str = "1d") -> dict:
+    """Descarga batch en chunks y devuelve dict {ticker: pd.Series de Close}.
+    Robusto contra los caprichos de yfinance: prueba múltiples accesos al
+    Close (MultiIndex con field arriba, ticker arriba, single-level, etc).
+    Skips silently los tickers para los que Yahoo no devuelve datos.
+    """
+    import pandas as pd
+    out: dict[str, pd.Series] = {}
+    if not tickers:
+        return out
+
+    def _extract_close(df, chunk_tickers):
+        if df is None or df.empty:
+            return
+        cols = df.columns
+        is_multi = isinstance(cols, pd.MultiIndex)
+        # Caso single-ticker (yf.download con 1 ticker → columnas 'Close', 'Open', ...)
+        if len(chunk_tickers) == 1:
+            t = chunk_tickers[0]
+            try:
+                if is_multi:
+                    # Sigue probando ambos órdenes
+                    series = None
+                    if ("Close", t) in cols:
+                        series = df[("Close", t)]
+                    elif (t, "Close") in cols:
+                        series = df[(t, "Close")]
+                    if series is not None:
+                        s = series.dropna()
+                        if len(s) > 0:
+                            out[t] = s
+                else:
+                    if "Close" in cols:
+                        s = df["Close"].dropna()
+                        if len(s) > 0:
+                            out[t] = s
+            except Exception:
+                pass
+            return
+        # Multi-ticker: intentar varios accesos
+        for t in chunk_tickers:
+            try:
+                series = None
+                if is_multi:
+                    if ("Close", t) in cols:
+                        series = df[("Close", t)]
+                    elif (t, "Close") in cols:
+                        series = df[(t, "Close")]
+                    else:
+                        # Último intento: slice cruzado por nombre
+                        try:
+                            series = df.xs("Close", axis=1, level=0)[t]
+                        except Exception:
+                            try:
+                                series = df.xs("Close", axis=1, level=1)[t]
+                            except Exception:
+                                series = None
+                else:
+                    # Estructura plana inesperada con varios tickers; salta
+                    pass
+                if series is not None:
+                    s = series.dropna()
+                    if len(s) > 0:
+                        out[t] = s
+            except Exception:
+                continue
+
+    for i in range(0, len(tickers), _BATCH_DOWNLOAD_CHUNK):
+        chunk = tickers[i:i + _BATCH_DOWNLOAD_CHUNK]
+        try:
+            df = yf.download(chunk, period=period, interval=interval, progress=False, threads=True)
+            _extract_close(df, chunk)
+        except Exception:
+            continue
+    return out
+
 _quote_cache: dict[str, tuple[float, QuoteResponse]] = {}
 _QUOTE_TTL = 300  # 5 minutes
 
@@ -290,28 +367,15 @@ def _calculate_volatilities(tickers: list[str]) -> dict[str, float]:
 
     result: dict[str, float] = {}
     try:
-        df = _batch_download(tickers, period="1y", interval="1d") if len(tickers) > 1 else yf.download(tickers, period="1y", interval="1d", progress=False, threads=True)
-        if df is None or df.empty:
-            return result
-
-        if len(tickers) == 1:
-            close = df["Close"].dropna()
-            if len(close) > 1:
-                log_returns = np.log(close / close.shift(1)).dropna()
-                vol = float(log_returns.std() * math.sqrt(252))
-                result[tickers[0]] = round(vol, 4)
-        else:
-            close = df["Close"] if "Close" in df.columns else df.get("Close")
-            if close is not None:
-                for ticker in tickers:
-                    try:
-                        series = close[ticker].dropna()
-                        if len(series) > 1:
-                            log_returns = np.log(series / series.shift(1)).dropna()
-                            vol = float(log_returns.std() * math.sqrt(252))
-                            result[ticker] = round(vol, 4)
-                    except (KeyError, TypeError):
-                        continue
+        closes = _batch_download_close(tickers, period="1y", interval="1d")
+        for ticker, series in closes.items():
+            try:
+                if len(series) > 1:
+                    log_returns = np.log(series / series.shift(1)).dropna()
+                    vol = float(log_returns.std() * math.sqrt(252))
+                    result[ticker] = round(vol, 4)
+            except Exception:
+                continue
     except Exception:
         pass
 
@@ -333,55 +397,38 @@ def _calculate_returns_annualized(tickers: list[str]) -> dict[str, dict[str, flo
         if now - cached_time < _RETURNS_TTL:
             return cached_data
 
+    def _compute(series) -> dict[str, float | None]:
+        series = series.dropna()
+        if len(series) < 2:
+            return {"ret_1y": None, "ret_3y": None, "mdd_3y": None}
+        ret_1y: float | None = None
+        ret_3y: float | None = None
+        mdd: float | None = None
+        if len(series) >= 252:
+            p_now = float(series.iloc[-1])
+            p_1y_ago = float(series.iloc[-252])
+            if p_1y_ago > 0:
+                ret_1y = round(p_now / p_1y_ago - 1, 4)
+        years = len(series) / 252
+        if years >= 0.5:
+            p_start = float(series.iloc[0])
+            p_end = float(series.iloc[-1])
+            if p_start > 0 and p_end > 0:
+                ret_3y = round((p_end / p_start) ** (1 / years) - 1, 4)
+        try:
+            running_max = series.cummax()
+            drawdown = (series - running_max) / running_max
+            worst = float(drawdown.min())
+            mdd = round(abs(worst), 4) if worst < 0 else 0.0
+        except Exception:
+            mdd = None
+        return {"ret_1y": ret_1y, "ret_3y": ret_3y, "mdd_3y": mdd}
+
     result: dict[str, dict[str, float | None]] = {}
     try:
-        df = _batch_download(tickers, period="3y", interval="1d") if len(tickers) > 1 else yf.download(tickers, period="3y", interval="1d", progress=False, threads=True)
-        if df is None or df.empty:
-            return result
-
-        def _compute(series) -> dict[str, float | None]:
-            series = series.dropna()
-            if len(series) < 2:
-                return {"ret_1y": None, "ret_3y": None, "mdd_3y": None}
-            ret_1y: float | None = None
-            ret_3y: float | None = None
-            mdd: float | None = None
-            if len(series) >= 252:
-                p_now = float(series.iloc[-1])
-                p_1y_ago = float(series.iloc[-252])
-                if p_1y_ago > 0:
-                    ret_1y = round(p_now / p_1y_ago - 1, 4)
-            years = len(series) / 252
-            if years >= 0.5:
-                p_start = float(series.iloc[0])
-                p_end = float(series.iloc[-1])
-                if p_start > 0 and p_end > 0:
-                    ret_3y = round((p_end / p_start) ** (1 / years) - 1, 4)
-            # Max drawdown: peor caida desde maximo previo (devuelto como decimal positivo)
-            try:
-                running_max = series.cummax()
-                drawdown = (series - running_max) / running_max
-                worst = float(drawdown.min())
-                if worst < 0:
-                    mdd = round(abs(worst), 4)
-                else:
-                    mdd = 0.0
-            except Exception:
-                mdd = None
-            return {"ret_1y": ret_1y, "ret_3y": ret_3y, "mdd_3y": mdd}
-
-        if len(tickers) == 1:
-            close = df["Close"] if "Close" in df.columns else df.get("Close")
-            if close is not None:
-                result[tickers[0]] = _compute(close)
-        else:
-            close = df["Close"] if "Close" in df.columns else df.get("Close")
-            if close is not None:
-                for ticker in tickers:
-                    try:
-                        result[ticker] = _compute(close[ticker])
-                    except (KeyError, TypeError):
-                        continue
+        closes = _batch_download_close(tickers, period="3y", interval="1d")
+        for ticker, series in closes.items():
+            result[ticker] = _compute(series)
     except Exception:
         pass
 
@@ -589,31 +636,19 @@ def get_screener(filters: ScreenerFilters) -> ScreenerResponse:
                 stocks=filtered,
             )
 
-    # Estrategia híbrida: yf.download como FUENTE PRIMARIA (1 sola
-    # llamada batch, más fiable cuando Yahoo rate-limita .info), y
-    # .info como ENRIQUECIMIENTO opcional cuando esté disponible.
+    # Estrategia híbrida: yf.download como FUENTE PRIMARIA (más fiable
+    # cuando Yahoo rate-limita .info), y .info como ENRIQUECIMIENTO
+    # opcional cuando esté disponible. Usamos _batch_download_close que
+    # devuelve un dict {ticker: serie_close} robusto contra los caprichos
+    # de yfinance (MultiIndex, single-ticker, concat).
     base_prices: dict[str, dict[str, float]] = {}
     try:
-        df = _batch_download(tickers, period="5d", interval="1d") if len(tickers) > 1 else yf.download(tickers, period="5d", interval="1d", progress=False, threads=True)
-        if df is not None and not df.empty:
-            close = df["Close"] if "Close" in df.columns else None
-            if close is not None:
-                if len(tickers) == 1:
-                    series = close.dropna()
-                    if len(series) >= 1:
-                        price = float(series.iloc[-1])
-                        prev = float(series.iloc[-2]) if len(series) >= 2 else price
-                        base_prices[tickers[0]] = {"price": price, "prev": prev}
-                else:
-                    for ticker in tickers:
-                        try:
-                            series = close[ticker].dropna()
-                            if len(series) >= 1:
-                                price = float(series.iloc[-1])
-                                prev = float(series.iloc[-2]) if len(series) >= 2 else price
-                                base_prices[ticker] = {"price": price, "prev": prev}
-                        except (KeyError, TypeError):
-                            continue
+        closes = _batch_download_close(tickers, period="5d", interval="1d")
+        for ticker, series in closes.items():
+            if len(series) >= 1:
+                price = float(series.iloc[-1])
+                prev = float(series.iloc[-2]) if len(series) >= 2 else price
+                base_prices[ticker] = {"price": price, "prev": prev}
     except Exception:
         pass
 
