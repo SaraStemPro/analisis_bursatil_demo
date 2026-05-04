@@ -192,12 +192,10 @@ COMMODITIES_TICKERS = [
 
 # Futuros sobre índices: cotizan ~23h/día (lun a vie casi continuo, parón
 # diario de 1h en CME). Permiten operar con horario más amplio que el spot.
-# Nota: Yahoo Finance tiene cobertura muy fiable de futuros US (CME) pero
-# pobre de europeos (Eurex/Euronext/ICE). Los símbolos europeos abajo son
-# best-effort: si Yahoo no devuelve datos, simplemente no aparecen en el
-# screener (los fallbacks lo manejan en silencio).
+# Nota: Yahoo Finance NO sirve futuros europeos (Eurex/Euronext/ICE) de
+# forma fiable. Para exposición europea con datos consistentes, ver el
+# universo "europa_etfs" (EWG, EWQ, EWU, FEZ, EWP, etc).
 INDEX_FUTURES_TICKERS = [
-    # — US (cobertura fiable, 24h CME) —
     "ES=F",   # S&P 500 E-mini
     "NQ=F",   # Nasdaq 100 E-mini
     "YM=F",   # Dow Jones E-mini
@@ -207,10 +205,6 @@ INDEX_FUTURES_TICKERS = [
     "MYM=F",  # Micro Dow Jones
     "M2K=F",  # Micro Russell 2000
     "VX=F",   # VIX futures
-    # — Europa (cobertura best-effort, Yahoo no siempre tiene datos) —
-    "FDAX=F",  # DAX 40 (Eurex)
-    "FESX=F",  # Euro Stoxx 50 (Eurex)
-    "Z=F",     # FTSE 100 (ICE)
 ]
 
 # ETFs sobre índices europeos cotizados en NYSE/NASDAQ. Horario US
