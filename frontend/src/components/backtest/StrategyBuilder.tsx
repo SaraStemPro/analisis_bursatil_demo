@@ -161,6 +161,22 @@ function OperandEditor({ operand, onChange, label }: OperandEditorProps) {
           {CANDLE_PATTERNS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
       )}
+
+      {/* Offset por operando: permite comparar barras distintas (ej. close[t-1] < close[t-2]) */}
+      <div className="flex items-center gap-1.5 pt-1">
+        <span className="text-[10px] text-slate-500 whitespace-nowrap">Velas atrás:</span>
+        <input
+          type="number"
+          min="0"
+          max="20"
+          value={operand.offset ?? 0}
+          onChange={(e) => onChange({ ...operand, offset: Number(e.target.value) })}
+          className="w-12 px-1 py-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] text-white text-center"
+        />
+        {(operand.offset ?? 0) > 0 && (
+          <span className="text-[10px] text-amber-400">t−{operand.offset}</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -335,6 +351,7 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['strategies'] })
+      qc.invalidateQueries({ queryKey: ['templates'] })
       onClose()
     },
   })
@@ -509,6 +526,49 @@ export default function StrategyBuilder({ onClose, editStrategy }: Props) {
             />
             <p className="text-xs text-slate-500 mt-1">Ajusta el tamaño de posición para no arriesgar más de este % del capital (ej: 2%)</p>
           </div>
+        </div>
+
+        {/* Trailing stop a banda media de Bollinger */}
+        <div className="border-t border-amber-700/30 pt-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!risk.bbands_trailing_stop}
+              onChange={(e) => setRisk({ ...risk, bbands_trailing_stop: e.target.checked })}
+              className="w-4 h-4 accent-amber-500"
+            />
+            <span className="font-medium">Trailing stop a banda media de Bollinger</span>
+          </label>
+          <p className="text-xs text-slate-500 ml-6">
+            Cuando el precio cierra fuera de la banda superior (long) o inferior (short), el stop se mueve dinámicamente a la banda media. Solo en dirección favorable.
+          </p>
+          {risk.bbands_trailing_stop && (
+            <div className="grid grid-cols-2 gap-3 ml-6">
+              <div>
+                <label className="text-xs text-slate-400">Período</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="200"
+                  value={risk.bbands_trailing_length ?? 20}
+                  onChange={(e) => setRisk({ ...risk, bbands_trailing_length: Number(e.target.value) })}
+                  className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Desv. estándar (σ)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.5"
+                  max="5"
+                  value={risk.bbands_trailing_std ?? 2}
+                  onChange={(e) => setRisk({ ...risk, bbands_trailing_std: Number(e.target.value) })}
+                  className="block mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

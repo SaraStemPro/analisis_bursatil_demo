@@ -162,6 +162,7 @@ export default function Backtest() {
     mutationFn: (id: string) => backtest.deleteStrategy(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['strategies'] })
+      qc.invalidateQueries({ queryKey: ['templates'] })
       if (selectedStrategy && selectedStrategy.id === deleteStratMut.variables) {
         setSelectedStrategy(null)
       }
