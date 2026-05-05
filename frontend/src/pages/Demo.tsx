@@ -73,11 +73,13 @@ export default function Demo() {
   const closeAllMut = useMutation({
     mutationFn: () => demo.closeAll(),
     onSuccess: invalidateAll,
+    onError: (err: Error) => alert(`No se pudo cerrar las posiciones: ${err.message}`),
   })
 
   const closeCarteraMut = useMutation({
     mutationFn: (name: string) => demo.closeCartera(name),
     onSuccess: invalidateAll,
+    onError: (err: Error) => alert(`No se pudo cerrar la cartera: ${err.message}`),
   })
 
   // Separate cartera positions from individual positions

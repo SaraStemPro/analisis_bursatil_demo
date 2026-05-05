@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backtest } from '../api'
 import type { Strategy, BacktestRun, BacktestRunSummary, StrategyRules, ConditionOperand, RiskManagement, StopLossType, StrategySide, PortfolioBacktestRun, PortfolioRunSummary } from '../types'
@@ -15,32 +15,58 @@ const COMP_LABELS: Record<string, string> = {
 
 type BacktestMode = 'single' | 'portfolio'
 
+const BACKTEST_STATE_KEY = 'backtest:state:v1'
+
+interface StoredBacktestState {
+  mode?: BacktestMode
+  ticker?: string
+  startDate?: string
+  endDate?: string
+  interval?: string
+  selectedStrategyId?: string | null
+  customRules?: StrategyRules | null
+  portfolioTickers?: string[]
+  selectedUniverse?: string
+  tickerSource?: 'manual' | 'universe'
+  allocMode?: 'equal' | 'custom'
+  customAllocations?: Record<string, number>
+}
+
+function loadBacktestState(): StoredBacktestState {
+  try {
+    const raw = localStorage.getItem(BACKTEST_STATE_KEY)
+    if (raw) return JSON.parse(raw) as StoredBacktestState
+  } catch { /* */ }
+  return {}
+}
+
 export default function Backtest() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const isProfessor = user?.role === 'professor' || user?.role === 'admin'
-  const [mode, setMode] = useState<BacktestMode>('single')
+  const stored = useMemo(() => loadBacktestState(), [])
+  const [mode, setMode] = useState<BacktestMode>(stored.mode || 'single')
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null)
-  const [customRules, setCustomRules] = useState<StrategyRules | null>(null)
-  const [ticker, setTicker] = useState('AAPL')
+  const [customRules, setCustomRules] = useState<StrategyRules | null>(stored.customRules || null)
+  const [ticker, setTicker] = useState(stored.ticker || 'AAPL')
   // Por defecto: último año hasta hoy. Aceptan ediciones manuales del usuario.
   const _today = new Date().toISOString().slice(0, 10)
   const _yearAgo = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().slice(0, 10) })()
-  const [startDate, setStartDate] = useState(_yearAgo)
-  const [endDate, setEndDate] = useState(_today)
-  const [interval, setInterval] = useState('1d')
+  const [startDate, setStartDate] = useState(stored.startDate || _yearAgo)
+  const [endDate, setEndDate] = useState(stored.endDate || _today)
+  const [interval, setInterval] = useState(stored.interval || '1d')
   const [activeRun, setActiveRun] = useState<BacktestRun | null>(null)
   const [activePortfolioRun, setActivePortfolioRun] = useState<PortfolioBacktestRun | null>(null)
   const [showBuilder, setShowBuilder] = useState(false)
   const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null)
 
   // Portfolio mode state
-  const [portfolioTickers, setPortfolioTickers] = useState<string[]>([])
+  const [portfolioTickers, setPortfolioTickers] = useState<string[]>(stored.portfolioTickers || [])
   const [tickerToAdd, setTickerToAdd] = useState('')
-  const [selectedUniverse, setSelectedUniverse] = useState<string>('')
-  const [tickerSource, setTickerSource] = useState<'manual' | 'universe'>('manual')
-  const [allocMode, setAllocMode] = useState<'equal' | 'custom'>('equal')
-  const [customAllocations, setCustomAllocations] = useState<Record<string, number>>({})
+  const [selectedUniverse, setSelectedUniverse] = useState<string>(stored.selectedUniverse || '')
+  const [tickerSource, setTickerSource] = useState<'manual' | 'universe'>(stored.tickerSource || 'manual')
+  const [allocMode, setAllocMode] = useState<'equal' | 'custom'>(stored.allocMode || 'equal')
+  const [customAllocations, setCustomAllocations] = useState<Record<string, number>>(stored.customAllocations || {})
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null)
   const [expandedRunData, setExpandedRunData] = useState<BacktestRun | null>(null)
 
@@ -50,13 +76,48 @@ export default function Backtest() {
   const { data: portfolioRuns } = useQuery({ queryKey: ['portfolio-runs'], queryFn: backtest.portfolioRuns })
   const { data: universes } = useQuery({ queryKey: ['universes'], queryFn: backtest.universes })
 
+  // Hidratar estrategia seleccionada desde localStorage cuando templates+strategies estén listos.
+  // El customRules persistido se respeta (no se sobrescribe con strategy.rules).
+  const skipNextRulesResetRef = useRef(false)
+  const didRestoreStrategyRef = useRef(false)
   useEffect(() => {
+    if (didRestoreStrategyRef.current) return
+    if (!stored.selectedStrategyId) { didRestoreStrategyRef.current = true; return }
+    if (!templates && !strategies) return
+    const all: Strategy[] = [
+      ...(templates || []),
+      ...(strategies || []),
+    ]
+    const found = all.find((s) => s.id === stored.selectedStrategyId)
+    if (found) {
+      skipNextRulesResetRef.current = true  // evita que el siguiente effect resetee customRules
+      setSelectedStrategy(found)
+    }
+    didRestoreStrategyRef.current = true
+  }, [templates, strategies, stored.selectedStrategyId])
+
+  useEffect(() => {
+    if (skipNextRulesResetRef.current) {
+      skipNextRulesResetRef.current = false
+      return
+    }
     if (selectedStrategy) {
       setCustomRules(JSON.parse(JSON.stringify(selectedStrategy.rules)))
     } else {
       setCustomRules(null)
     }
   }, [selectedStrategy])
+
+  // Persistir estado en localStorage (al estilo de Charts/Screener)
+  useEffect(() => {
+    const snapshot: StoredBacktestState = {
+      mode, ticker, startDate, endDate, interval,
+      selectedStrategyId: selectedStrategy?.id || null,
+      customRules,
+      portfolioTickers, selectedUniverse, tickerSource, allocMode, customAllocations,
+    }
+    try { localStorage.setItem(BACKTEST_STATE_KEY, JSON.stringify(snapshot)) } catch { /* */ }
+  }, [mode, ticker, startDate, endDate, interval, selectedStrategy, customRules, portfolioTickers, selectedUniverse, tickerSource, allocMode, customAllocations])
 
   // Single-ticker run
   const runMut = useMutation({

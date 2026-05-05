@@ -546,7 +546,12 @@ def close_position(db: Session, user_id: str, body: ClosePositionRequest) -> Ord
 
 
 def close_all_positions(db: Session, user_id: str) -> list[OrderResponse]:
-    """Close all open positions at market price."""
+    """Close all open positions at market price.
+
+    Bulk close con confirmación explícita del alumno: NO comprueba market_state
+    y tolera fallos de precio por ticker (Yahoo rate-limit) usando el precio de
+    entrada como fallback en lugar de romper el bucle entero.
+    """
     portfolio = get_or_create_portfolio(db, user_id)
     open_orders = (
         db.query(Order)
@@ -560,16 +565,24 @@ def close_all_positions(db: Session, user_id: str) -> list[OrderResponse]:
             detail="No hay posiciones abiertas",
         )
 
-    # Cache prices per ticker
+    # Cache prices per ticker (con fallback a entry_price si Yahoo falla)
     price_cache: dict[str, Decimal] = {}
     results = []
     for o in open_orders:
         if o.ticker not in price_cache:
-            price_cache[o.ticker] = Decimal(str(_get_current_price(o.ticker)))
+            try:
+                price_cache[o.ticker] = Decimal(str(_get_current_price(o.ticker)))
+            except Exception:
+                # fallback: cierra al precio de entrada (PnL = 0 para esa orden)
+                price_cache[o.ticker] = o.price
         current_price = price_cache[o.ticker]
         exec_price = _apply_spread(current_price, is_buy=True) if o.side == "short" else current_price
-        close_order = _close_order_internal(db, portfolio, o, o.quantity, exec_price)
-        results.append(_order_to_response(close_order))
+        try:
+            close_order = _close_order_internal(db, portfolio, o, o.quantity, exec_price)
+            results.append(_order_to_response(close_order))
+        except Exception:
+            # ningún error por orden debe abortar el cierre del resto
+            continue
 
     db.commit()
     db.refresh(portfolio)
@@ -838,23 +851,47 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
 
 
 def close_cartera(db: Session, user_id: str, cartera_name: str) -> list[OrderResponse]:
-    """Close all open positions in a named cartera."""
-    portfolio = get_or_create_portfolio(db, user_id)
-    positions = _calculate_positions(db, portfolio)
+    """Close all open positions in a named cartera.
 
-    cartera_positions = [p for p in positions if p.portfolio_group == cartera_name]
-    if not cartera_positions:
+    Bulk close con confirmación explícita: bypassea el check de market_state que
+    tiene `close_position` y tolera fallos de precio por ticker (mismo criterio
+    que `close_all_positions`).
+    """
+    portfolio = get_or_create_portfolio(db, user_id)
+    open_orders = (
+        db.query(Order)
+        .filter(
+            Order.portfolio_id == portfolio.id,
+            Order.status == "open",
+            Order.portfolio_group == cartera_name,
+        )
+        .all()
+    )
+
+    if not open_orders:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No hay posiciones abiertas en la cartera '{cartera_name}'",
         )
 
+    price_cache: dict[str, Decimal] = {}
     results = []
-    for p in cartera_positions:
-        body = ClosePositionRequest(order_id=p.order_id, quantity=p.quantity)
-        result = close_position(db, user_id, body)
-        results.append(result)
+    for o in open_orders:
+        if o.ticker not in price_cache:
+            try:
+                price_cache[o.ticker] = Decimal(str(_get_current_price(o.ticker)))
+            except Exception:
+                price_cache[o.ticker] = o.price
+        current_price = price_cache[o.ticker]
+        exec_price = _apply_spread(current_price, is_buy=True) if o.side == "short" else current_price
+        try:
+            close_order = _close_order_internal(db, portfolio, o, o.quantity, exec_price)
+            results.append(_order_to_response(close_order))
+        except Exception:
+            continue
 
+    db.commit()
+    db.refresh(portfolio)
     return results
 
 

@@ -233,6 +233,12 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime() Madrid 
 - Long y short del mismo ticker pueden coexistir.
 - `_close_order_internal()`: lógica única para cerrar (manual, SL, TP, close-all, close-cartera).
 
+**Cierres masivos resilientes** (`close_all_positions`, `close_cartera`):
+- Bypassean `market_state` (son acciones explícitas con confirmación del alumno; el check de mercado solo aplica a cierres unitarios desde el dropdown).
+- Tolerantes a fallos por ticker: si Yahoo rate-limita `_get_current_price`, usan `order.price` (entry) como fallback en vez de romper el bucle. Si `_close_order_internal` lanza, saltan a la siguiente.
+- `close_cartera` ya NO pasa por `close_position` (era el origen del bug "te sale el pop-up pero no cierra nada"): hace su propio bucle directo sobre `_close_order_internal`.
+- Frontend: `closeAllMut` y `closeCarteraMut` tienen `onError` con `alert()` → los fallos dejan de tragarse en silencio.
+
 **Stop Loss / Take Profit automático**:
 - Hilo daemon `_stop_loss_monitor_loop()` cada 2 minutos. Comprueba TODAS las órdenes abiertas con SL/TP, esté o no conectado el alumno.
 - Long: SL si precio ≤ stop_loss, TP si precio ≥ take_profit.
@@ -404,6 +410,8 @@ backend/app/services/backtest_service.py ← motor + métricas
 backend/app/schemas/backtest.py          ← schemas Pydantic
 backend/app/schemas/common.py            ← enums
 ```
+
+**Persistencia (localStorage)**: clave `backtest:state:v1`. Snapshot en cada cambio de mode/ticker/fechas/intervalo/estrategia/customRules/portfolioTickers/universe/alloc. La estrategia se persiste por `id` y se rehidrata cuando llegan templates+strategies (con un `skipNextRulesResetRef` para que el `customRules` editado no sea pisado por el effect que resetea reglas al cambiar `selectedStrategy`). Mismo patrón que Charts (`charts:state:v1`) y Screener (`screener:filters:v1` + `screener:simulator:v1`).
 
 ### Lección interactiva (`pages/Clase.jsx` + `pages/AdminClase.tsx`)
 
