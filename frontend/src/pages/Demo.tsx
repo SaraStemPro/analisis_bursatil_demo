@@ -4,11 +4,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { demo } from '../api'
 import type { Position } from '../types'
 import { RotateCcw, X, ExternalLink, XCircle, Briefcase, Pencil, Plus } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 import type { Cartera } from '../types'
 import OrderForm from '../components/demo/OrderForm'
 import ClosePositionDialog from '../components/demo/ClosePositionDialog'
 import PortfolioSummaryPanel from '../components/demo/PortfolioSummaryPanel'
 import OrderHistory from '../components/demo/OrderHistory'
+
+const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#a855f7']
+const CASH_COLOR = '#475569'
 
 // Smart price formatting: 5 decimals for small prices (forex), 2 for normal stocks
 function fmtPrice(val: number): string {
@@ -143,7 +147,7 @@ export default function Demo() {
                       <th className="px-3 py-2 text-right">P&L</th>
                       <th className="px-3 py-2 text-right">%</th>
                       <th className="px-3 py-2 text-right">Invertido</th>
-                      <th className="px-3 py-2 text-right">% cap.</th>
+                      <th className="px-3 py-2 text-right" title="Peso de la posición sobre el capital total (saldo + posiciones)">Peso</th>
                       <th className="px-3 py-2 text-right">Stop Loss</th>
                       <th className="px-3 py-2 text-right">Riesgo</th>
                       <th className="px-3 py-2 text-right">Riesgo FX</th>
@@ -256,6 +260,76 @@ export default function Demo() {
               </div>
             </div>
           )}
+
+          {/* Distribución del capital — pie chart */}
+          {portfolio.positions.length > 0 && (() => {
+            const byTicker = new Map<string, number>()
+            for (const p of portfolio.positions) {
+              if (p.invested_value == null) continue
+              byTicker.set(p.ticker, (byTicker.get(p.ticker) || 0) + Number(p.invested_value))
+            }
+            const totalValue = Number(portfolio.total_value)
+            const slices = Array.from(byTicker.entries())
+              .map(([ticker, value]) => ({ name: ticker, value }))
+              .sort((a, b) => b.value - a.value)
+            const balance = Number(portfolio.balance)
+            if (balance > 0.01) slices.push({ name: 'Saldo libre', value: balance })
+            return (
+              <div className="mt-5 pt-4 border-t border-slate-700">
+                <h3 className="text-sm font-medium text-slate-400 mb-2">Distribución del capital</h3>
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                  <div className="w-full md:w-72 h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={slices}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={90}
+                          innerRadius={45}
+                          paddingAngle={1}
+                          stroke="#0f172a"
+                          strokeWidth={2}
+                        >
+                          {slices.map((s, i) => (
+                            <Cell
+                              key={s.name}
+                              fill={s.name === 'Saldo libre' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <RTooltip
+                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 6, fontSize: 12 }}
+                          formatter={(value) => {
+                            const v = Number(value) || 0
+                            return [
+                              `${v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€ (${(v / totalValue * 100).toFixed(1)}%)`,
+                              '',
+                            ]
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
+                    {slices.map((s, i) => {
+                      const pct = totalValue > 0 ? (s.value / totalValue * 100) : 0
+                      const color = s.name === 'Saldo libre' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]
+                      return (
+                        <div key={s.name} className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
+                          <span className="truncate text-slate-300">{s.name}</span>
+                          <span className="ml-auto text-slate-400 tabular-nums">{pct.toFixed(1)}%</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -301,6 +375,7 @@ export default function Demo() {
                   <th className="px-3 py-1.5 text-right">P. cierre</th>
                   <th className="px-3 py-1.5 text-right">P&L</th>
                   <th className="px-3 py-1.5 text-right">%</th>
+                  <th className="px-3 py-1.5 text-right" title="Peso de la posición sobre el capital total (saldo + posiciones)">Peso</th>
                   <th className="px-3 py-1.5 text-right">Riesgo FX</th>
                   <th className="px-3 py-1.5 w-8"></th>
                 </tr>
@@ -323,6 +398,11 @@ export default function Demo() {
                       </td>
                       <td className={`px-3 py-1.5 text-right ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isProfit ? '+' : ''}{p.pnl_pct.toFixed(2)}%
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-slate-400">
+                        {p.invested_value != null && portfolio && Number(portfolio.total_value) > 0
+                          ? `${(Number(p.invested_value) / Number(portfolio.total_value) * 100).toFixed(1)}%`
+                          : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         {p.fx_pnl != null ? (
