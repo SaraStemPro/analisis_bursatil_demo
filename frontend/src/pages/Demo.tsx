@@ -313,15 +313,15 @@ export default function Demo() {
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
+                  <div className="flex-1 max-w-xs flex flex-col gap-1 text-xs">
                     {slices.map((s, i) => {
                       const pct = totalValue > 0 ? (s.value / totalValue * 100) : 0
                       const color = s.name === 'Liquidez' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]
                       return (
                         <div key={s.name} className="flex items-center gap-2 min-w-0">
                           <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                          <span className="truncate text-slate-300">{s.name}</span>
-                          <span className="ml-auto text-slate-400 tabular-nums">{pct.toFixed(1)}%</span>
+                          <span className="truncate text-slate-300 flex-1">{s.name}</span>
+                          <span className="text-slate-400 tabular-nums">{pct.toFixed(1)}%</span>
                         </div>
                       )
                     })}
