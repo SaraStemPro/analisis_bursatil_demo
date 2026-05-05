@@ -272,8 +272,8 @@ export default function Demo() {
             const slices = Array.from(byTicker.entries())
               .map(([ticker, value]) => ({ name: ticker, value }))
               .sort((a, b) => b.value - a.value)
-            const balance = Number(portfolio.balance)
-            if (balance > 0.01) slices.push({ name: 'Saldo libre', value: balance })
+            const balance = Math.max(0, Number(portfolio.balance))
+            if (balance > 0) slices.push({ name: 'Liquidez', value: balance })
             return (
               <div className="mt-5 pt-4 border-t border-slate-700">
                 <h3 className="text-sm font-medium text-slate-400 mb-2">Distribución del capital</h3>
@@ -296,7 +296,7 @@ export default function Demo() {
                           {slices.map((s, i) => (
                             <Cell
                               key={s.name}
-                              fill={s.name === 'Saldo libre' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]}
+                              fill={s.name === 'Liquidez' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]}
                             />
                           ))}
                         </Pie>
@@ -316,7 +316,7 @@ export default function Demo() {
                   <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
                     {slices.map((s, i) => {
                       const pct = totalValue > 0 ? (s.value / totalValue * 100) : 0
-                      const color = s.name === 'Saldo libre' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]
+                      const color = s.name === 'Liquidez' ? CASH_COLOR : PIE_COLORS[i % PIE_COLORS.length]
                       return (
                         <div key={s.name} className="flex items-center gap-2 min-w-0">
                           <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />

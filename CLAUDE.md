@@ -282,7 +282,7 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime() Madrid 
 
 **Distribución del capital (UI)**:
 - Tabla de posiciones individuales y tabla de cada cartera tienen columna **"Peso"** = `invested_value / portfolio.total_value × 100` (tooltip aclara: capital total = saldo + posiciones).
-- Pie chart **"Distribución del capital"** dentro del panel Portfolio (debajo de la tabla, antes de las carteras): agrupa por ticker TODAS las posiciones abiertas (individuales + carteras) y añade slice "Saldo libre" para sumar 100%. Recharts (`PieChart`+`Pie`+`Cell`); paleta `PIE_COLORS` + `CASH_COLOR` definidas en `Demo.tsx`.
+- Pie chart **"Distribución del capital"** dentro del panel Portfolio (debajo de la tabla, antes de las carteras): agrupa por ticker TODAS las posiciones abiertas (individuales + carteras) y añade slice **"Liquidez"** (= `portfolio.balance`) para sumar 100% del capital. Recharts (`PieChart`+`Pie`+`Cell`); paleta `PIE_COLORS` + `CASH_COLOR` definidas en `Demo.tsx`.
 
 **Archivos**:
 ```
