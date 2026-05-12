@@ -131,64 +131,65 @@ def _seed():
 _seed()
 
 
-# Migration: mark old buy/sell orders as closed if they have been fully closed
-# In the old system, original orders stayed status="open" forever.
-# The new system uses status="open"/"closed" on the original order itself.
-def _migrate_close_order_status():
+# --- ELIMINADA: _migrate_close_order_status ---
+# Esta migración corría en cada arranque y sumaba TODAS las órdenes `type=close`
+# por (portfolio_id, ticker, side) sin importar fecha ni portfolio_group, luego
+# consumía esa cantidad de las órdenes `buy/sell` abiertas marcándolas como
+# `closed`. El bug: si una alumna había cerrado en el pasado N unidades de un
+# ticker y luego abría una posición nueva del mismo ticker (típicamente dentro
+# de una cartera nueva), el siguiente reinicio del backend ejecutaba la
+# migración y machacaba la posición nueva consumiéndola contra los cierres
+# históricos. Era un timebomb que estallaba en cada deploy/restart.
+#
+# El sistema actual mantiene `status` correctamente en `_close_order_internal`
+# (cierres reales) y vía `close_all_positions` / `close_cartera`, así que la
+# migración ya no aporta nada. Se elimina por completo.
+
+
+def _restore_migration_victims():
+    """One-shot restoration: reabre las órdenes que la migración rota cerró
+    incorrectamente.
+
+    Heurística para identificar víctimas (todas las condiciones a la vez):
+    - type IN ('buy', 'sell')
+    - status = 'closed'
+    - pnl IS NULL  → la migración no calculaba PnL; los cierres legítimos sí
+    - closed_at = created_at  → la migración fallback ponía closed_at=created_at;
+                                los cierres reales ponen closed_at=datetime.now()
+                                que siempre es posterior al created_at
+
+    Esto es idempotente: una vez reabierto, status='open' y la heurística ya no
+    matcheará (closed_at='open' es None tras el reset). Seguro de dejar en cada
+    arranque por si en el futuro se restaura un dump antiguo.
+    """
     from .models.order import Order
 
     db: Session = SessionLocal()
     try:
-        # For each portfolio, process close orders and consume from oldest open orders (FIFO)
-        close_orders = (
+        victims = (
             db.query(Order)
-            .filter(Order.type == "close")
-            .order_by(Order.created_at)
+            .filter(
+                Order.type.in_(["buy", "sell"]),
+                Order.status == "closed",
+                Order.pnl.is_(None),
+                Order.closed_at == Order.created_at,
+            )
             .all()
         )
-        if not close_orders:
+        if not victims:
             db.close()
             return
-
-        # Group closes by (portfolio_id, ticker, side)
-        from collections import defaultdict
-        closes_by_key: dict[tuple, int] = defaultdict(int)
-        for co in close_orders:
-            key = (co.portfolio_id, co.ticker, co.side)
-            closes_by_key[key] += co.quantity
-
-        for (pid, ticker, side), closed_qty in closes_by_key.items():
-            order_type = "buy" if side == "long" else "sell"
-            open_orders = (
-                db.query(Order)
-                .filter(
-                    Order.portfolio_id == pid,
-                    Order.ticker == ticker,
-                    Order.type == order_type,
-                    Order.status == "open",
-                )
-                .order_by(Order.created_at)
-                .all()
-            )
-            remaining = closed_qty
-            for o in open_orders:
-                if remaining <= 0:
-                    break
-                if remaining >= o.quantity:
-                    remaining -= o.quantity
-                    o.status = "closed"
-                    o.closed_at = o.closed_at or o.created_at
-                else:
-                    # Partial close: reduce quantity
-                    o.quantity -= remaining
-                    remaining = 0
-
+        for o in victims:
+            o.status = "open"
+            o.closed_at = None
+            o.pnl = None
         db.commit()
+        print(f"[restore] Reabiertas {len(victims)} órdenes víctimas de la migración rota.")
     finally:
         db.close()
 
 
-_migrate_close_order_status()
+_restore_migration_victims()
 
 
 # Seed plantillas DB compartidas (Sistema Sara y futuras editables por profesor)
