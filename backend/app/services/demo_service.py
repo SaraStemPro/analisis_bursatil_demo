@@ -817,6 +817,38 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
                 entropy_score * position_penalty * sector_penalty * concentration_penalty * 100, 1
             )
 
+        # Stats de operaciones cerradas pertenecientes a esta cartera.
+        # Usamos las órdenes originales con status='closed' y portfolio_group=name
+        # (cubre cierres totales; los parciales no se contabilizan aquí porque la
+        # close order no hereda portfolio_group — limitación conocida).
+        closed_in_cartera = (
+            db.query(Order)
+            .filter(
+                Order.portfolio_id == portfolio.id,
+                Order.portfolio_group == name,
+                Order.status == "closed",
+                Order.type.in_(["buy", "sell"]),
+                Order.pnl.isnot(None),
+            )
+            .order_by(Order.closed_at)
+            .all()
+        )
+        closed_pnls = [float(o.pnl) for o in closed_in_cartera if o.pnl is not None]
+        cartera_stats = _calculate_trade_stats(closed_pnls)
+
+        # Drawdown sobre PnL acumulado de cierres de esta cartera
+        cumulative = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        for p in closed_pnls:
+            cumulative += p
+            if cumulative > peak:
+                peak = cumulative
+            dd = peak - cumulative
+            if dd > max_dd:
+                max_dd = dd
+        closed_return = sum(closed_pnls)
+
         result.append({
             "name": name,
             "positions": [
@@ -845,6 +877,21 @@ def get_carteras(db: Session, user_id: str) -> list[dict]:
             "total_pnl_pct": round(total_pnl / total_invested * 100, 2) if total_invested > 0 else 0,
             "sectors": n_sectors,
             "diversity_score": diversity_score,
+            "stats": {
+                "closed_return": round(closed_return, 2),
+                "max_drawdown": round(max_dd, 2),
+                "total_trades": cartera_stats["total_trades"],
+                "profitable_trades": cartera_stats["profitable_trades"],
+                "losing_trades": cartera_stats["losing_trades"],
+                "win_rate": cartera_stats["win_rate"],
+                "loss_rate": cartera_stats["loss_rate"],
+                "avg_win": cartera_stats["avg_win"],
+                "avg_loss": cartera_stats["avg_loss"],
+                "expected_value": cartera_stats["expected_value"],
+                "risk_reward_ratio": cartera_stats["risk_reward_ratio"],
+                "best_trade_pnl": cartera_stats["best_trade_pnl"],
+                "worst_trade_pnl": cartera_stats["worst_trade_pnl"],
+            },
         })
 
     return sorted(result, key=lambda x: x["name"])

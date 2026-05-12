@@ -233,6 +233,10 @@ lib/chartUtils.ts                         ← CHART_THEME, toChartTime() Madrid 
 - Long y short del mismo ticker pueden coexistir.
 - `_close_order_internal()`: lógica única para cerrar (manual, SL, TP, close-all, close-cartera).
 
+**Stats por cartera** (`get_carteras` → `stats`): mismas métricas que el `/demo/performance` global (closed_return, max_drawdown, win_rate, loss_rate, avg_win, avg_loss, expected_value, R/R, best/worst trade, totales) pero filtradas por `portfolio_group`. Se usan las órdenes ORIGINALES con `status='closed' AND portfolio_group=name AND pnl IS NOT NULL` (las close orders no heredan `portfolio_group`, así que cierres parciales no entran en estas stats — limitación conocida y aceptada). Frontend `Demo.tsx` muestra una mini-sección "Rendimiento · {name}" debajo de la tabla de cada cartera cuando `stats.total_trades > 0`.
+
+**Stop loss editable en cartera**: `update_stop_loss` ya soportaba `order_id` (preciso por orden), pero el router lo ignoraba. Ahora el body acepta `{ticker, side, stop_loss, order_id?}` y se propaga. La tabla de cartera tiene columna Stop Loss editable (mismo patrón que individuales). El monitor `_stop_loss_monitor_loop` ya cierra cartera positions automáticamente (cada 2 min, comprueba TODAS las open orders con SL/TP — no distingue cartera).
+
 **Cierres masivos resilientes** (`close_all_positions`, `close_cartera`):
 - Bypassean `market_state` (son acciones explícitas con confirmación del alumno; el check de mercado solo aplica a cierres unitarios desde el dropdown).
 - Tolerantes a fallos por ticker: si Yahoo rate-limita `_get_current_price`, usan `order.price` (entry) como fallback en vez de romper el bucle. Si `_close_order_internal` lanza, saltan a la siguiente.

@@ -156,6 +156,22 @@ export interface Order {
   closed_at: string | null
 }
 
+export interface CarteraStats {
+  closed_return: number
+  max_drawdown: number
+  total_trades: number
+  profitable_trades: number
+  losing_trades: number
+  win_rate: number
+  loss_rate: number
+  avg_win: number | null
+  avg_loss: number | null
+  expected_value: number | null
+  risk_reward_ratio: number | null
+  best_trade_pnl: number | null
+  worst_trade_pnl: number | null
+}
+
 export interface Cartera {
   name: string
   positions: { order_id: string; ticker: string; quantity: number; entry_price: number; current_price: number; pnl: number; pnl_pct: number; side: string; currency: string; fx_pnl: number | null; stop_loss?: number | null; take_profit?: number | null; invested_value?: number | null; notes?: string | null; created_at?: string | null }[]
@@ -165,6 +181,7 @@ export interface Cartera {
   total_pnl_pct: number
   sectors: number
   diversity_score: number
+  stats?: CarteraStats
 }
 
 export interface SectorAllocation {

@@ -62,12 +62,17 @@ export default function Demo() {
     onSuccess: invalidateAll,
   })
 
-  const [editingSL, setEditingSL] = useState<{ ticker: string; side: string } | null>(null)
+  const [editingSL, setEditingSL] = useState<{ order_id: string } | null>(null)
   const [editingSLValue, setEditingSLValue] = useState('')
 
   const updateSLMut = useMutation({
-    mutationFn: (data: { ticker: string; side: string; stop_loss: number | null }) => demo.updateStopLoss(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['portfolio'] }); setEditingSL(null) },
+    mutationFn: (data: { ticker: string; side: string; stop_loss: number | null; order_id?: string }) => demo.updateStopLoss(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portfolio'] })
+      qc.invalidateQueries({ queryKey: ['carteras'] })
+      setEditingSL(null)
+    },
+    onError: (err: Error) => alert(`No se pudo actualizar el stop loss: ${err.message}`),
   })
 
   const closeAllMut = useMutation({
@@ -194,20 +199,20 @@ export default function Demo() {
                             {p.invested_value != null && portfolio ? `${(Number(p.invested_value) / Number(portfolio.total_value) * 100).toFixed(1)}%` : '—'}
                           </td>
                           <td className="px-3 py-2 text-right">
-                            {editingSL?.ticker === p.ticker && editingSL?.side === p.side ? (
+                            {editingSL?.order_id === p.order_id ? (
                               <input
                                 autoFocus
                                 type="number"
                                 step="any"
                                 value={editingSLValue}
                                 onChange={(e) => setEditingSLValue(e.target.value)}
-                                onBlur={() => { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null }); }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null }); } if (e.key === 'Escape') setEditingSL(null) }}
+                                onBlur={() => { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null, order_id: p.order_id }); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null, order_id: p.order_id }); } if (e.key === 'Escape') setEditingSL(null) }}
                                 className="w-20 px-1 py-0.5 bg-slate-800 border border-amber-500 rounded text-amber-400 text-xs text-right focus:outline-none"
                               />
                             ) : (
                               <button
-                                onClick={() => { setEditingSL({ ticker: p.ticker, side: p.side }); setEditingSLValue(p.stop_loss ? String(p.stop_loss) : '') }}
+                                onClick={() => { setEditingSL({ order_id: p.order_id }); setEditingSLValue(p.stop_loss ? String(p.stop_loss) : '') }}
                                 className="inline-flex items-center gap-1 hover:text-amber-300 transition-colors"
                                 title="Editar stop loss"
                               >
@@ -378,6 +383,7 @@ export default function Demo() {
                   <th className="px-3 py-1.5 text-right">P&L</th>
                   <th className="px-3 py-1.5 text-right">%</th>
                   <th className="px-3 py-1.5 text-right" title="Peso de la posición sobre el capital total (saldo + posiciones)">Peso</th>
+                  <th className="px-3 py-1.5 text-right">Stop Loss</th>
                   <th className="px-3 py-1.5 text-right">Riesgo FX</th>
                   <th className="px-3 py-1.5 w-8"></th>
                 </tr>
@@ -407,6 +413,31 @@ export default function Demo() {
                           : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right">
+                        {editingSL?.order_id === p.order_id ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            step="any"
+                            value={editingSLValue}
+                            onChange={(e) => setEditingSLValue(e.target.value)}
+                            onBlur={() => { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null, order_id: p.order_id }) }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { updateSLMut.mutate({ ticker: p.ticker, side: p.side, stop_loss: editingSLValue ? Number(editingSLValue) : null, order_id: p.order_id }) } if (e.key === 'Escape') setEditingSL(null) }}
+                            className="w-20 px-1 py-0.5 bg-slate-800 border border-amber-500 rounded text-amber-400 text-xs text-right focus:outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => { setEditingSL({ order_id: p.order_id }); setEditingSLValue(p.stop_loss ? String(p.stop_loss) : '') }}
+                            className="inline-flex items-center gap-1 hover:text-amber-300 transition-colors"
+                            title="Editar stop loss"
+                          >
+                            {p.stop_loss ? (
+                              <span className="text-amber-400">{fmtPrice(p.stop_loss)}</span>
+                            ) : <span className="text-slate-600">—</span>}
+                            <Pencil size={10} className="text-slate-600" />
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
                         {p.fx_pnl != null ? (
                           <span className={`text-xs ${Number(p.fx_pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {Number(p.fx_pnl) >= 0 ? '+' : ''}{Number(p.fx_pnl).toFixed(2)}€
@@ -430,6 +461,70 @@ export default function Demo() {
               </tbody>
             </table>
           </div>
+
+          {/* Rendimiento de la cartera */}
+          {c.stats && c.stats.total_trades > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-700">
+              <div className="flex items-baseline justify-between mb-2">
+                <h3 className="text-sm font-semibold text-amber-300">Rendimiento · {c.name}</h3>
+                <span className="text-[10px] text-slate-500">
+                  sobre {c.stats.total_trades} operacion{c.stats.total_trades === 1 ? '' : 'es'} cerrada{c.stats.total_trades === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                <div>
+                  <p className="text-slate-400 text-xs">Retorno cerrado</p>
+                  <p className={`font-medium ${c.stats.closed_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {c.stats.closed_return >= 0 ? '+' : ''}{c.stats.closed_return.toFixed(2)}€
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">Max drawdown</p>
+                  <p className="font-medium text-red-400">{c.stats.max_drawdown.toFixed(2)}€</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">Trades</p>
+                  <p className="font-medium">{c.stats.total_trades} ({c.stats.profitable_trades}W / {c.stats.losing_trades}L)</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">Mejor / Peor</p>
+                  <p className="font-medium text-xs">
+                    <span className="text-emerald-400">+{c.stats.best_trade_pnl?.toFixed(0) ?? '—'}€</span>
+                    {' / '}
+                    <span className="text-red-400">{c.stats.worst_trade_pnl?.toFixed(0) ?? '—'}€</span>
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                <div>
+                  <p className="text-slate-400 text-xs">Win rate</p>
+                  <p className="font-medium text-emerald-400">{c.stats.win_rate.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">Loss rate</p>
+                  <p className="font-medium text-red-400">{c.stats.loss_rate.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">Ganancia media</p>
+                  <p className="font-medium text-emerald-400">{c.stats.avg_win != null ? `+${c.stats.avg_win.toFixed(2)} €` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">Pérdida media</p>
+                  <p className="font-medium text-red-400">{c.stats.avg_loss != null ? `−${c.stats.avg_loss.toFixed(2)} €` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs">R/R</p>
+                  <p className="font-medium text-amber-300">{c.stats.risk_reward_ratio != null ? c.stats.risk_reward_ratio.toFixed(2) : '—'}</p>
+                </div>
+              </div>
+              {c.stats.expected_value != null && (
+                <div className={`mt-2 px-3 py-2 rounded font-mono text-xs border ${c.stats.expected_value >= 0 ? 'bg-emerald-900/30 border-emerald-700 text-emerald-300' : 'bg-red-900/30 border-red-700 text-red-300'}`}>
+                  E = ({(c.stats.win_rate / 100).toFixed(2)} × {c.stats.avg_win?.toFixed(2) ?? 0}) − ({(c.stats.loss_rate / 100).toFixed(2)} × {c.stats.avg_loss?.toFixed(2) ?? 0}) = <strong>{c.stats.expected_value >= 0 ? '+' : ''}{c.stats.expected_value.toFixed(2)} €</strong> esperados por operación en esta cartera.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Add position to cartera */}
           {addingToCartera === c.name ? (
             <OrderForm

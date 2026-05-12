@@ -66,7 +66,11 @@ def update_stop_loss(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return demo_service.update_stop_loss(db, current_user.id, body["ticker"], body["side"], body.get("stop_loss"))
+    return demo_service.update_stop_loss(
+        db, current_user.id,
+        body["ticker"], body["side"], body.get("stop_loss"),
+        order_id=body.get("order_id"),
+    )
 
 
 @router.post("/close-all", response_model=list[OrderResponse], status_code=201)
